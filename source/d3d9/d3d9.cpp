@@ -9,6 +9,7 @@
 #include "dll_log.hpp" // Include late to get HRESULT log overloads
 #include "ini_file.hpp"
 #include "hook_manager.hpp"
+#include <d3d9on12.h>
 
 // These are defined in d3d9.h, but are used as function names below
 #undef IDirect3D9_CreateDevice
@@ -392,6 +393,27 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 		return reshade::hooks::call(Direct3DCreate9)(SDKVersion);
 
 	LOG(INFO) << "Redirecting " << "Direct3DCreate9" << '(' << "SDKVersion = " << SDKVersion << ')' << " ...";
+
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "ForceD3D9On12"))
+	{
+		D3D9ON12_ARGS args[] = {
+			TRUE,
+			NULL,
+			NULL,
+			0,
+			0
+		};
+
+		IDirect3D9 *const res = Direct3DCreate9On12(SDKVersion, args, 1);
+		if (res == nullptr)
+		{
+			LOG(WARN) << "Direct3DCreate9On12" << " failed.";
+			return nullptr;
+		}
+
+		return res;
+	}
 
 	assert(!g_in_dxgi_runtime);
 	g_in_d3d9_runtime = g_in_dxgi_runtime = true;
