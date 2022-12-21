@@ -2,6 +2,9 @@
 #include <reshade.hpp>
 #include "state_tracking.hpp"
 
+//ray tracing includes
+#include "CompiledShaders\Raytracing.hlsl.h"
+
 
 using namespace reshade::api;
 

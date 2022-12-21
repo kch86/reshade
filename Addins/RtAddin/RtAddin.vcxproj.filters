@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{593298e1-2659-4c62-99e1-4d1288b4499c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -26,5 +29,16 @@
     <ClInclude Include="state_tracking.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="Shaders\RayTracingHlslCompat.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="Shaders\HlslCompat.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\Raytracing.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
