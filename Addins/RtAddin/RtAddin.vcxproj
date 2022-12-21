@@ -155,6 +155,7 @@
     <ClCompile Include="state_tracking.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="d3dx12.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />
     <ClInclude Include="Shaders\RayTracingHlslCompat.h" />
     <ClInclude Include="state_tracking.hpp" />

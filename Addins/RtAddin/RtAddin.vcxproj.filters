@@ -35,6 +35,9 @@
     <ClInclude Include="Shaders\HlslCompat.h">
       <Filter>Shaders</Filter>
     </ClInclude>
+    <ClInclude Include="d3dx12.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Raytracing.hlsl">

@@ -15,12 +15,13 @@
 #ifdef HLSL
 #include "HlslCompat.h"
 #else
-using namespace DirectX;
+//using namespace DirectX;
 
 // Shader will use byte encoding to access indices.
 typedef UINT16 Index;
 #endif
 
+#ifdef HLSL
 struct SceneConstantBuffer
 {
     XMMATRIX projectionToWorld;
@@ -40,5 +41,6 @@ struct Vertex
     XMFLOAT3 position;
     XMFLOAT3 normal;
 };
+#endif
 
 #endif // RAYTRACINGHLSLCOMPAT_H
