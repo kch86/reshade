@@ -269,7 +269,11 @@ inline void PrintStateObjectDesc(const D3D12_STATE_OBJECT_DESC *desc)
 bool g_createPso = true;
 void compilePso(reshade::api::device *device)
 {
-	//if(g_createPso)
+	if (!g_createPso)
+	{
+		return;
+	}
+
 	const wchar_t *c_hitGroupName = L"MyHitGroup";
 	const wchar_t *c_raygenShaderName = L"MyRaygenShader";
 	const wchar_t *c_closestHitShaderName = L"MyClosestHitShader";
@@ -283,19 +287,19 @@ void compilePso(reshade::api::device *device)
 	const wchar_t *c_pipelineConfigName = L"MyPipelineConfig";
 
 	// Create library and use the library subobject defined in the library in the RTPSO:
-  // Subobjects need to be associated with DXIL shaders exports either by way of default or explicit associations.
-  // Default association applies to every exported shader entrypoint that doesn't have any of the same type of subobject associated with it.
-  // This simple sample utilizes default shader association except for local root signature subobject
-  // which has an explicit association specified purely for demonstration purposes.
-  //
-  // Following subobjects are defined with the library itself. We can export and rename the subobjects from the 
-  // DXIL library in a similar way we export shaders. 
-  // 1 - Triangle hit group
-  // 1 - Shader config
-  // 2 - Local root signature and association
-  // 1 - Global root signature
-  // 1 - Pipeline config
-  // 1 - Subobject to export association
+	// Subobjects need to be associated with DXIL shaders exports either by way of default or explicit associations.
+	// Default association applies to every exported shader entrypoint that doesn't have any of the same type of subobject associated with it.
+	// This simple sample utilizes default shader association except for local root signature subobject
+	// which has an explicit association specified purely for demonstration purposes.
+	//
+	// Following subobjects are defined with the library itself. We can export and rename the subobjects from the 
+	// DXIL library in a similar way we export shaders. 
+	// 1 - Triangle hit group
+	// 1 - Shader config
+	// 2 - Local root signature and association
+	// 1 - Global root signature
+	// 1 - Pipeline config
+	// 1 - Subobject to export association
 	CD3DX12_STATE_OBJECT_DESC raytracingPipeline{ D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE };
 
 
@@ -327,42 +331,19 @@ void compilePso(reshade::api::device *device)
 
 	PrintStateObjectDesc(raytracingPipeline);
 
-	//Direct3DDevice9* d3d9Device = (Direct3DDevice9*)device;
-
 	if (device->get_api() == device_api::d3d12)
 	{
-		//ComPtr<ID3D12Device> d3d12_device;
-		//IDirect3DDevice9On12 *d3d9On12Device = reinterpret_cast<IDirect3DDevice9On12 *>(device->get_native());
-		//d3d9On12Device->GetD3D12Device(IID_PPV_ARGS(&d3d12_device));
-
 		ID3D12Device*d3d12_device = reinterpret_cast<ID3D12Device*>(device->get_native());
 
 		ComPtr<ID3D12Device5> dxrDevice;
 
 		ThrowIfFailed(d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice)), L"Couldn't get DirectX Raytracing interface for the device.\n");
-		//d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice));
 
 		ComPtr<ID3D12StateObject> m_dxrStateObject;
 		ThrowIfFailed(dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&m_dxrStateObject)), L"Couldn't create DirectX Raytracing state object.\n");
-		//dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&m_dxrStateObject));
 	}
-	else if (false && device->get_api() == device_api::d3d9)
-	{
-		ComPtr<ID3D12Device> d3d12_device;
-		IDirect3DDevice9On12 *d3d9On12Device = reinterpret_cast<IDirect3DDevice9On12 *>(device->get_native());
-		d3d9On12Device->GetD3D12Device(IID_PPV_ARGS(&d3d12_device));
 
-		ComPtr<ID3D12Device5> dxrDevice;
-
-		ThrowIfFailed(d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice)), L"Couldn't get DirectX Raytracing interface for the device.\n");
-		//d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice));
-
-
-		ComPtr<ID3D12StateObject> m_dxrStateObject;
-		ThrowIfFailed(dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&m_dxrStateObject)), L"Couldn't create DirectX Raytracing state object.\n");
-		//dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&m_dxrStateObject));
-	}
-	
+	g_createPso = false;
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
