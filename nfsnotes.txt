@@ -1,4 +1,10 @@
 nfs notes:
-vertex shader uniform structure:
-float4: color
-float4: view projection matrix?
+vertex shader uniform structures:
+
+24 float4s:
+// 18 float4s that are constant
+// sh in the 1st 5?
+float4  : color 		// ambient color?
+float4x4: 				// ??
+float4x4: 
+float4x4:
