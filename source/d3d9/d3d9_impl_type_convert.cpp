@@ -923,6 +923,9 @@ std::vector<reshade::api::input_element> reshade::d3d9::convert_input_layout_des
 		case D3DDECLUSAGE_POSITION:
 			element.semantic = "POSITION";
 			break;
+		case D3DDECLUSAGE_POSITIONT:
+			element.semantic = "POSITIONSCREEN";
+			break;
 		case D3DDECLUSAGE_BLENDWEIGHT:
 			element.semantic = "BLENDWEIGHT";
 			break;
@@ -959,6 +962,9 @@ std::vector<reshade::api::input_element> reshade::d3d9::convert_input_layout_des
 		case D3DDECLUSAGE_TEXCOORD:
 			element.semantic = "TEXCOORD";
 			break;
+		default:
+			assert(false);
+			// unhandled usage
 		}
 
 		element.semantic_index = internal_element.UsageIndex;
