@@ -270,6 +270,11 @@ namespace
 	}
 }
 
+static bool do_capture()
+{
+	return s_do_capture && (drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
+}
+
 static void on_init_swapchain(swapchain *swapchain)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -340,7 +345,7 @@ static void on_destroy_resource_view(device *device, resource_view handle)
 	assert(s_resource_views.find(handle.handle) != s_resource_views.end());
 	s_resource_views.erase(handle.handle);
 }
-static void on_init_pipeline(device *device, pipeline_layout, uint32_t, const pipeline_subobject *, pipeline handle)
+static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObjectCount, const pipeline_subobject* subObjects, pipeline handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
@@ -356,7 +361,7 @@ static void on_destroy_pipeline(device *device, pipeline handle)
 
 static void on_barrier(command_list *, uint32_t num_resources, const resource *resources, const resource_usage *old_states, const resource_usage *new_states)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -376,7 +381,7 @@ static void on_barrier(command_list *, uint32_t num_resources, const resource *r
 
 static void on_begin_render_pass(command_list *, uint32_t count, const render_pass_render_target_desc *rts, const render_pass_depth_stencil_desc *ds)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -389,7 +394,7 @@ static void on_begin_render_pass(command_list *, uint32_t count, const render_pa
 }
 static void on_end_render_pass(command_list *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -399,7 +404,7 @@ static void on_end_render_pass(command_list *)
 }
 static void on_bind_render_targets_and_depth_stencil(command_list *, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -422,7 +427,7 @@ static void on_bind_render_targets_and_depth_stencil(command_list *, uint32_t co
 
 static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipeline)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -439,7 +444,7 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 }
 static void on_bind_pipeline_states(command_list *, uint32_t count, const dynamic_state *states, const uint32_t *values)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -450,7 +455,7 @@ static void on_bind_pipeline_states(command_list *, uint32_t count, const dynami
 }
 static void on_bind_viewports(command_list *, uint32_t first, uint32_t count, const viewport *viewports)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -460,7 +465,7 @@ static void on_bind_viewports(command_list *, uint32_t first, uint32_t count, co
 }
 static void on_bind_scissor_rects(command_list *, uint32_t first, uint32_t count, const rect *rects)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -473,7 +478,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
 	if (filter)
 		return;
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -505,7 +510,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 }
 static void on_push_descriptors(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -543,7 +548,7 @@ static void on_push_descriptors(command_list *, shader_stage stages, pipeline_la
 }
 static void on_bind_descriptor_sets(command_list *, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set *sets)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 	std::stringstream s;
@@ -554,7 +559,7 @@ static void on_bind_descriptor_sets(command_list *, shader_stage stages, pipelin
 }
 static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offset, uint32_t index_size)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -571,7 +576,7 @@ static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offse
 }
 static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
@@ -591,7 +596,7 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 
 static bool on_draw(command_list *, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return ui_filterDraws;
 
 	std::stringstream s;
@@ -609,7 +614,7 @@ static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances
 	if (filter)
 		return true;
 
-	if (!s_do_capture)
+	if (!do_capture())
 		return filter;
 
 	std::stringstream s;
@@ -621,7 +626,7 @@ static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances
 }
 static bool on_dispatch(command_list *, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 	std::stringstream s;
@@ -633,7 +638,7 @@ static bool on_dispatch(command_list *, uint32_t group_count_x, uint32_t group_c
 }
 static bool on_draw_or_dispatch_indirect(command_list *, indirect_command type, resource buffer, uint64_t offset, uint32_t draw_count, uint32_t stride)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 	std::stringstream s;
@@ -660,7 +665,7 @@ static bool on_draw_or_dispatch_indirect(command_list *, indirect_command type, 
 
 static bool on_copy_resource(command_list *, resource src, resource dst)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -680,7 +685,7 @@ static bool on_copy_resource(command_list *, resource src, resource dst)
 }
 static bool on_copy_buffer_region(command_list *, resource src, uint64_t src_offset, resource dst, uint64_t dst_offset, uint64_t size)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -700,7 +705,7 @@ static bool on_copy_buffer_region(command_list *, resource src, uint64_t src_off
 }
 static bool on_copy_buffer_to_texture(command_list *, resource src, uint64_t src_offset, uint32_t row_length, uint32_t slice_height, resource dst, uint32_t dst_subresource, const subresource_box *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -720,7 +725,7 @@ static bool on_copy_buffer_to_texture(command_list *, resource src, uint64_t src
 }
 static bool on_copy_texture_region(command_list *, resource src, uint32_t src_subresource, const subresource_box *, resource dst, uint32_t dst_subresource, const subresource_box *, filter_mode filter)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -740,7 +745,7 @@ static bool on_copy_texture_region(command_list *, resource src, uint32_t src_su
 }
 static bool on_copy_texture_to_buffer(command_list *, resource src, uint32_t src_subresource, const subresource_box *, resource dst, uint64_t dst_offset, uint32_t row_length, uint32_t slice_height)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -760,7 +765,7 @@ static bool on_copy_texture_to_buffer(command_list *, resource src, uint32_t src
 }
 static bool on_resolve_texture_region(command_list *, resource src, uint32_t src_subresource, const subresource_box *, resource dst, uint32_t dst_subresource, int32_t dst_x, int32_t dst_y, int32_t dst_z, format format)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -781,7 +786,7 @@ static bool on_resolve_texture_region(command_list *, resource src, uint32_t src
 
 static bool on_clear_depth_stencil_view(command_list *, resource_view dsv, const float *depth, const uint8_t *stencil, uint32_t, const rect *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -800,7 +805,7 @@ static bool on_clear_depth_stencil_view(command_list *, resource_view dsv, const
 }
 static bool on_clear_render_target_view(command_list *, resource_view rtv, const float color[4], uint32_t, const rect *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -819,7 +824,7 @@ static bool on_clear_render_target_view(command_list *, resource_view rtv, const
 }
 static bool on_clear_unordered_access_view_uint(command_list *, resource_view uav, const uint32_t values[4], uint32_t, const rect *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -838,7 +843,7 @@ static bool on_clear_unordered_access_view_uint(command_list *, resource_view ua
 }
 static bool on_clear_unordered_access_view_float(command_list *, resource_view uav, const float values[4], uint32_t, const rect *)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -858,7 +863,7 @@ static bool on_clear_unordered_access_view_float(command_list *, resource_view u
 
 static bool on_generate_mipmaps(command_list *, resource_view srv)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
@@ -878,7 +883,7 @@ static bool on_generate_mipmaps(command_list *, resource_view srv)
 
 static bool on_begin_query(command_list *cmd_list, query_pool pool, query_type type, uint32_t index)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 	std::stringstream s;
@@ -890,7 +895,7 @@ static bool on_begin_query(command_list *cmd_list, query_pool pool, query_type t
 }
 static bool on_end_query(command_list *cmd_list, query_pool pool, query_type type, uint32_t index)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 	std::stringstream s;
@@ -902,7 +907,7 @@ static bool on_end_query(command_list *cmd_list, query_pool pool, query_type typ
 }
 static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, query_type type, uint32_t first, uint32_t count, resource dest, uint64_t dest_offset, uint32_t stride)
 {
-	if (!s_do_capture)
+	if (!do_capture())
 		return false;
 
 #ifndef NDEBUG
