@@ -2,11 +2,16 @@
 #include <reshade.hpp>
 #include "state_tracking.hpp"
 
-// dx12
+// std
+#include <assert.h>
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
 #include <iosfwd>
+#include <shared_mutex>
+#include <unordered_set>
+
+// dx12
 #include <d3d12.h>
 #include <d3d9on12.h>
 #include "d3dx12.h"
@@ -18,6 +23,20 @@
 
 using namespace reshade::api;
 using namespace Microsoft::WRL;
+
+namespace
+{
+	struct PosStreamInfo
+	{
+		int streamIndex;
+		int stride;
+		int offset;
+		format format;
+	};
+
+	std::shared_mutex s_mutex;
+	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
+}
 
 
 void compilePso(reshade::api::device *device);
@@ -81,6 +100,65 @@ static void on_init_command_list(command_list *cmd_list)
 static void on_destroy_command_list(command_list *cmd_list)
 {
 	cmd_list->destroy_private_data<command_list_data>();
+}
+
+static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObjectCount, const pipeline_subobject *subObjects, pipeline handle)
+{
+#if 1
+	for (uint32_t i = 0; i < subObjectCount; i++)
+	{
+		const pipeline_subobject &object = subObjects[i];
+		if (object.type == pipeline_subobject_type::input_layout)
+		{
+			PosStreamInfo info;
+			info.stride = 0;
+			info.format = format::unknown;
+			uint32_t posElemIndex = 0;
+
+			for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
+			{
+				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
+	
+				if (strstr(elem.semantic, "POSITION") != nullptr)
+				{
+					assert(info.format == format::unknown);
+					info.format = elem.format;
+					info.offset = elem.offset;
+					info.streamIndex = elem.buffer_binding;
+					posElemIndex = elemIdx;
+					break;
+				}
+			}
+
+			if (info.format != format::unknown)
+			{
+				// found our position stream, calculate the stride and offset
+				for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
+				{
+					const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
+
+					if (elem.buffer_binding == info.streamIndex)
+					{
+						if (elemIdx < posElemIndex)
+						{
+							info.offset += format_size(elem.format);
+						}
+						info.stride += format_size(elem.format);
+					}
+				}
+
+				const std::unique_lock<std::shared_mutex> lock(s_mutex);
+				// this is hitting.... is memory getting re-used inside the target app?
+				/*if (s_inputLayoutPipelines.find(handle.handle) != s_inputLayoutPipelines.end())
+				{
+					assert(false);
+				}*/
+				s_inputLayoutPipelines[handle.handle] = info;
+				return;
+			}			
+		}
+	}
+#endif
 }
 
 static void on_init_effect_runtime(effect_runtime *runtime)
@@ -360,6 +438,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
 		reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
+		reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_effect_runtime);
 		reshade::register_event<reshade::addon_event::destroy_effect_runtime>(on_destroy_effect_runtime);
 		reshade::register_event<reshade::addon_event::draw>(on_draw);
