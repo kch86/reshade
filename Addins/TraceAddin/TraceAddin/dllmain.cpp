@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: BSD-3-Clause OR MIT
  */
 
+#include <imgui.h>
 #include <reshade.hpp>
 #include <cassert>
 #include <sstream>
@@ -14,6 +15,11 @@ using namespace reshade::api;
 namespace
 {
 	bool s_do_capture = false;
+	bool ui_filterDraws = false;
+	bool ui_filterDrawIndexes = false;
+	int ui_drawCallBegin = -1;
+	int ui_drawCallEnd = -1;
+	int drawCallCount = 0;
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_samplers;
 	std::unordered_set<uint64_t> s_resources;
@@ -464,14 +470,36 @@ static void on_bind_scissor_rects(command_list *, uint32_t first, uint32_t count
 }
 static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
 {
+	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
+	if (filter)
+		return;
 	if (!s_do_capture)
 		return;
 
 	std::stringstream s;
-	s << "push_constants(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index << ", " << first << ", " << count << ", { ";
-	for (uint32_t i = 0; i < count; ++i)
-		s << std::hex << values[i] << std::dec << ", ";
-	s << " })";
+	if (stages == shader_stage::vertex)
+	{
+		float *floats = (float *)values;
+		s << "push_constants(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index << ", " << first << ", " << count << ", { ";
+		s << "\n";
+		for (uint32_t i = 0; i < count * 4; i += 4)
+		{
+			s << "\t{ ";
+			s << floats[i + 0] << ", ";
+			s << floats[i + 1] << ", ";
+			s << floats[i + 2] << ", ";
+			s << floats[i + 3] << " },\n";
+		}	
+		s << " })";
+	}
+	else
+	{
+		s << "push_constants(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index << ", " << first << ", " << count << ", { ";
+		for (uint32_t i = 0; i < count * 4; ++i)
+			s << std::hex << values[i] << std::dec << ", ";
+		s << " })";
+	}
+	
 
 	reshade::log_message(3, s.str().c_str());
 }
@@ -564,26 +592,32 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 static bool on_draw(command_list *, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
 	if (!s_do_capture)
-		return false;
+		return ui_filterDraws;
 
 	std::stringstream s;
 	s << "draw(" << vertices << ", " << instances << ", " << first_vertex << ", " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
-	return false;
+	return ui_filterDraws;
 }
 static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
 {
+	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
+	drawCallCount++;
+
+	if (filter)
+		return true;
+
 	if (!s_do_capture)
-		return false;
+		return filter;
 
 	std::stringstream s;
 	s << "draw_indexed(" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
-	return false;
+	return filter;
 }
 static bool on_dispatch(command_list *, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z)
 {
@@ -903,6 +937,16 @@ static void on_present(effect_runtime *runtime)
 			reshade::log_message(3, "--- Frame ---");
 		}
 	}
+
+	drawCallCount = 0;
+}
+
+static void draw_ui(reshade::api::effect_runtime *)
+{
+	ImGui::Checkbox("FilterDraws", &ui_filterDraws);
+	ImGui::Value("DrawIndexCount: ", drawCallCount);
+	ImGui::SliderInt("DrawCallBegin: ", &ui_drawCallBegin, 0, drawCallCount);
+	ImGui::SliderInt("DrawCallEnd: ", &ui_drawCallEnd, 0, drawCallCount);
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "API Trace";
@@ -960,6 +1004,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::copy_query_pool_results>(on_copy_query_pool_results);
 
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
+		reshade::register_overlay(nullptr, draw_ui);
 		break;
 	case DLL_PROCESS_DETACH:
 		reshade::unregister_addon(hModule);

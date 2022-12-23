@@ -1,0 +1,4 @@
+nfs notes:
+vertex shader uniform structure:
+float4: color
+float4: view projection matrix?
