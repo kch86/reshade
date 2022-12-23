@@ -414,6 +414,48 @@ namespace reshade::api
 		}
 	}
 
+	inline const uint32_t format_size(format value)
+	{
+		switch (value)
+		{
+		default:
+			//assert(false); //unimplemented format
+			return 0;
+		case format::unknown:
+			return 0;
+		case format::r32g32b32a32_float:
+			return sizeof(float) * 4;
+		case format::r32g32b32_float:
+			return sizeof(float) * 3;
+		case format::r32g32_float:
+			return sizeof(float) * 2;
+		case format::r32_float:
+			return sizeof(float);
+		case format::r16g16b16a16_float: [[fallthrough]];
+		case format::r16g16b16a16_snorm: [[fallthrough]];
+		case format::r16g16b16a16_unorm: [[fallthrough]];
+		case format::r16g16b16a16_sint:
+			return sizeof(short) * 4;
+		case format::r16g16_float: [[fallthrough]];
+		case format::r16g16_snorm: [[fallthrough]];
+		case format::r16g16_unorm: [[fallthrough]];
+		case format::r16g16_sint:
+			return sizeof(short) * 2;
+		case format::r16_float: [[fallthrough]];
+		case format::r16_snorm: [[fallthrough]];
+		case format::r16_unorm: [[fallthrough]];
+		case format::r16_sint:
+			return sizeof(short);
+		case format::r8g8b8a8_uint:  [[fallthrough]];
+		case format::r8g8b8a8_unorm: [[fallthrough]];
+		case format::b8g8r8a8_unorm:
+			return sizeof(char) * 4;
+		case format::r10g10b10a2_uint: [[fallthrough]];
+		case format::r10g10b10a2_unorm:
+			return sizeof(uint32_t);
+		}
+	}
+
 	/// <summary>
 	/// Gets the number of bytes a texture row of the specified format <paramref name="value"/> occupies.
 	/// </summary>
