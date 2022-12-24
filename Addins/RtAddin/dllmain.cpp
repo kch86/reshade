@@ -288,6 +288,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.res = s_currentVB.vb.handle,
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
 			.count = vertex_count,
+			.stride = s_currentVB.stride,
 			.fmt = s_currentVB.fmt
 		},
 		.ib = {
@@ -298,7 +299,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	};
 
-	buildBvh(cmd_list, desc);
+	buildBvh(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
 
 	// should I reset the vb/ib data now?
 	// there could be multiple draws with the same vb/ib data

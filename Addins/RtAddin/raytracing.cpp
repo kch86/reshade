@@ -1,6 +1,8 @@
 #include "dxhelpers.h"
 
 #include <reshade.hpp>
+#include <d3d9/d3d9_device.hpp>
+#include <d3d9/d3d9on12_device.hpp>
 
 #include "Shaders\RaytracingHlslCompat.h"
 #include "CompiledShaders\Raytracing.hlsl.h"
@@ -217,8 +219,9 @@ void testCompilePso(device *device)
 	g_createPso = false;
 }
 
-inline void allocateUAVBuffer(ID3D12Device *pDevice, UINT64 bufferSize, ID3D12Resource **ppResource, const wchar_t *resourceName = nullptr)
+inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
 {
+#if 0
 	auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 	auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 	ThrowIfFailed(pDevice->CreateCommittedResource(
@@ -232,15 +235,137 @@ inline void allocateUAVBuffer(ID3D12Device *pDevice, UINT64 bufferSize, ID3D12Re
 	{
 		(*ppResource)->SetName(resourceName);
 	}
+#else
+	resource_desc desc(bufferSize, memory_heap::gpu_only, resource_usage::unordered_access);
+
+	resource res;
+	ThrowIfFailed(d->create_resource(desc, nullptr, resource_usage::unordered_access, &res));
+
+	return scopedresource(d, res);
+#endif
 }
 
-AsBuffers buildBvh(command_list *cmdlist, const BvhBuildDesc &desc)
+resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)
 {
-	device *reshade_device = cmdlist->get_device();
+	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
+	ID3D12CommandQueue *d3d12queue = reinterpret_cast<ID3D12CommandQueue *>(cmdqueue->get_native());
 
-	DxrDevicedata &data = reshade_device->create_private_data<DxrDevicedata>();
+	ID3D12Resource *d3d12res = nullptr;
+	//device->UnwrapUnderlyingResource(d3d9res, d3d12queue, IID_PPV_ARGS(&d3d12res));
 
-	ComPtr<ID3D12Device5> dxrDevice = data.dxrDevice;
+	IDirect3DDevice9On12 *d3d9on12 = device->_orig;
+	ThrowIfFailed(d3d9on12->UnwrapUnderlyingResource(d3d9res, d3d12queue, IID_PPV_ARGS(&d3d12res)));
+
+	return { uint64_t(d3d12res) };
+}
+
+struct AccelerationStructureBuffers
+{
+	ID3D12Resource* pScratch;
+	ID3D12Resource* pResult;
+	ID3D12Resource* pInstanceDesc;    // Used only for top-level AS
+};
+
+ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES initState, const D3D12_HEAP_PROPERTIES &heapProps)
+{
+	D3D12_RESOURCE_DESC bufDesc = {};
+	bufDesc.Alignment = 0;
+	bufDesc.DepthOrArraySize = 1;
+	bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	bufDesc.Flags = flags;
+	bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+	bufDesc.Height = 1;
+	bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	bufDesc.MipLevels = 1;
+	bufDesc.SampleDesc.Count = 1;
+	bufDesc.SampleDesc.Quality = 0;
+	bufDesc.Width = size;
+
+	ID3D12Resource* pBuffer;
+	ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, initState, nullptr, IID_PPV_ARGS(&pBuffer)));
+	return pBuffer;
+}
+
+AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12GraphicsCommandList4* pCmdList, const BvhBuildDesc &desc, ID3D12Resource* vb, ID3D12Resource* ib)
+{
+	static const D3D12_HEAP_PROPERTIES kDefaultHeapProps =
+	{
+		D3D12_HEAP_TYPE_DEFAULT,
+		D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+		D3D12_MEMORY_POOL_UNKNOWN,
+		0,
+		0
+	};
+
+	D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+	geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+	geomDesc.Triangles.VertexBuffer.StartAddress = vb->GetGPUVirtualAddress() + desc.vb.offset;
+	geomDesc.Triangles.VertexBuffer.StrideInBytes = desc.vb.stride;
+	geomDesc.Triangles.VertexFormat = to_native_d3d12(desc.vb.fmt);
+	geomDesc.Triangles.VertexCount = desc.vb.count;
+	geomDesc.Triangles.IndexBuffer = ib->GetGPUVirtualAddress() + desc.ib.offset;
+	geomDesc.Triangles.IndexCount = desc.ib.count;
+	geomDesc.Triangles.IndexFormat = to_native_d3d12(desc.ib.fmt);
+	geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+
+	// Get the size requirements for the scratch and AS buffers
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+	inputs.NumDescs = 1;
+	inputs.pGeometryDescs = &geomDesc;
+	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
+	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+
+	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
+	AccelerationStructureBuffers buffers;
+	buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
+	buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+
+	// Create the bottom-level AS
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
+	asDesc.Inputs = inputs;
+	asDesc.DestAccelerationStructureData = buffers.pResult->GetGPUVirtualAddress();
+	asDesc.ScratchAccelerationStructureData = buffers.pScratch->GetGPUVirtualAddress();
+
+	pCmdList->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+
+	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
+	D3D12_RESOURCE_BARRIER uavBarrier = {};
+	uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	uavBarrier.UAV.pResource = buffers.pResult;
+	pCmdList->ResourceBarrier(1, &uavBarrier);
+
+	return buffers;
+}
+
+AsBuffers buildBvh(device* device9,
+				   command_list *cmdlist,
+				   command_queue *cmdqueue,
+				   const BvhBuildDesc &desc)
+{
+	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;
+	assert(d3d9on12);
+
+	ID3D12Resource* vb = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.vb.res).handle);
+	ID3D12Resource* ib = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.ib.res).handle);
+
+	device *device12 = cmdlist->get_device();
+
+	ID3D12Device5 *nativeDevice = reinterpret_cast<ID3D12Device5 *>(device12->get_native());
+	ID3D12GraphicsCommandList4 *nativeCmdlist = reinterpret_cast<ID3D12GraphicsCommandList4 *>(cmdlist->get_native());
+
+	build_bvh_native(nativeDevice, nativeCmdlist, desc, vb, ib);
 
 	return AsBuffers();
+}
+
+scopedresource::~scopedresource()
+{
+	if (handle)
+	{
+		_device->destroy_resource(*this);
+	}
 }

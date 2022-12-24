@@ -34,4 +34,14 @@ inline void ThrowIfFailed(HRESULT hr, const wchar_t *msg = nullptr)
 	}
 }
 
+inline void ThrowIfFailed(bool succeed, const wchar_t *msg = nullptr)
+{
+	if (!succeed)
+	{
+		if (msg)
+			OutputDebugString(msg);
+		throw HrException(S_FALSE);
+	}
+}
+
 
