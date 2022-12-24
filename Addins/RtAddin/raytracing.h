@@ -6,6 +6,7 @@ namespace reshade::api
 {
 	struct device;
 	struct command_list;
+	enum class format : uint32_t;
 }
 
 void createDxrDevice(reshade::api::device *device);
@@ -18,7 +19,7 @@ struct BvhBuildDesc
 		uint64_t res;
 		uint32_t offset;
 		uint32_t count;
-		uint32_t stride;
+		reshade::api::format fmt;
 	} vb;
 
 	struct
@@ -26,7 +27,7 @@ struct BvhBuildDesc
 		uint64_t res;
 		uint32_t offset;
 		uint32_t count;
-		uint32_t stride;
+		reshade::api::format fmt;
 	} ib;
 };
 

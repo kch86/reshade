@@ -21,25 +21,27 @@ namespace
 {
 	struct PosStreamInfo
 	{
-		int streamIndex;
-		int stride;
-		int offset;
+		uint32_t streamIndex;
+		uint32_t stride;
+		uint32_t offset;
 		format format;
 	};
 
 	struct IndexData
 	{
-		resource ib;
-		uint32_t offset;
-		uint32_t count;
+		resource ib = {};
+		uint32_t offset = 0;
+		uint32_t stride = 0;
+		format fmt = format::unknown;
 	};
 
 	struct VertexData
 	{
-		resource vb;
-		uint32_t offset;
-		uint32_t count;
-		uint32_t stride;
+		resource vb = {};
+		uint32_t offset = 0;
+		uint32_t count = 0;
+		uint32_t stride = 0;
+		format fmt = format::unknown;
 	};
 
 	std::shared_mutex s_mutex;
@@ -48,6 +50,10 @@ namespace
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
 	VertexData s_currentVB;
+
+	device* s_d3d12device = nullptr;
+	command_list *s_d3d12cmdlist = nullptr;
+	command_queue *s_d3d12cmdqueue = nullptr;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -81,10 +87,28 @@ static void on_destroy_device(device *device)
 static void on_init_command_list(command_list *cmd_list)
 {
 	cmd_list->create_private_data<command_list_data>();
+
+	if (cmd_list->get_device()->get_api() == device_api::d3d12)
+	{
+		s_d3d12cmdlist = cmd_list;
+	}
 }
 static void on_destroy_command_list(command_list *cmd_list)
 {
 	cmd_list->destroy_private_data<command_list_data>();
+}
+
+static void on_init_command_queue(command_queue *cmd_queue)
+{
+	if (cmd_queue->get_device()->get_api() == device_api::d3d12)
+	{
+		if((cmd_queue->get_type() & command_queue_type::graphics) != 0)
+			s_d3d12cmdqueue = cmd_queue;
+	}
+}
+static void on_destroy_command_queue(command_queue *cmd_list)
+{
+
 }
 
 static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObjectCount, const pipeline_subobject *subObjects, pipeline handle)
@@ -202,18 +226,22 @@ static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offse
 {
 	s_currentIB.ib = buffer;
 	s_currentIB.offset = (uint32_t)offset;
-	s_currentIB.count = index_size;
+	s_currentIB.stride = index_size;
+	s_currentIB.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
 }
 static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
 	const PosStreamInfo &posStreamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
 
-	assert((int)count > posStreamInfo.streamIndex);
-
-	s_currentVB.vb = buffers[posStreamInfo.streamIndex];
-	s_currentVB.offset = (uint32_t)offsets[posStreamInfo.streamIndex];
-	s_currentVB.count = count;
-	s_currentVB.stride = strides[posStreamInfo.streamIndex];
+	//assert((int)count > posStreamInfo.streamIndex);
+	if (first <= posStreamInfo.streamIndex && count > (posStreamInfo.streamIndex - first))
+	{
+		s_currentVB.vb = buffers[posStreamInfo.streamIndex];
+		s_currentVB.offset = (uint32_t)offsets[posStreamInfo.streamIndex];
+		s_currentVB.count = 0;
+		s_currentVB.stride = strides[posStreamInfo.streamIndex];
+		s_currentVB.fmt = posStreamInfo.format;
+	}	
 }
 
 bool g_drawBeforeUi = false;
@@ -252,24 +280,28 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	return false;
 }
-static bool on_draw_indexed(command_list * cmd_list, uint32_t indices, uint32_t instances, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
+	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
 	BvhBuildDesc desc = {
 		.vb = {
 			.res = s_currentVB.vb.handle,
-			.offset = s_currentVB.offset,
-			.count = s_currentVB.count,
-			.stride = s_currentVB.stride
+			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
+			.count = vertex_count,
+			.fmt = s_currentVB.fmt
 		},
 		.ib = {
 			.res = s_currentIB.ib.handle,
-			.offset = s_currentIB.offset,
-			.count = s_currentIB.count,
-			.stride = sizeof(int)
+			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
+			.count = index_count,
+			.fmt = s_currentIB.fmt
 		}
 	};
 
 	buildBvh(cmd_list, desc);
+
+	// should I reset the vb/ib data now?
+	// there could be multiple draws with the same vb/ib data
 	return false;
 }
 
@@ -295,6 +327,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
 		reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
+		reshade::register_event<reshade::addon_event::init_command_queue>(on_init_command_queue);
+		reshade::register_event<reshade::addon_event::destroy_command_queue>(on_destroy_command_queue);
 		reshade::register_event<reshade::addon_event::init_resource>(on_init_resource);
 		reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
 		reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);

@@ -217,7 +217,30 @@ void testCompilePso(device *device)
 	g_createPso = false;
 }
 
+inline void allocateUAVBuffer(ID3D12Device *pDevice, UINT64 bufferSize, ID3D12Resource **ppResource, const wchar_t *resourceName = nullptr)
+{
+	auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	ThrowIfFailed(pDevice->CreateCommittedResource(
+		&uploadHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferDesc,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		nullptr,
+		IID_PPV_ARGS(ppResource)));
+	if (resourceName)
+	{
+		(*ppResource)->SetName(resourceName);
+	}
+}
+
 AsBuffers buildBvh(command_list *cmdlist, const BvhBuildDesc &desc)
 {
+	device *reshade_device = cmdlist->get_device();
+
+	DxrDevicedata &data = reshade_device->create_private_data<DxrDevicedata>();
+
+	ComPtr<ID3D12Device5> dxrDevice = data.dxrDevice;
+
 	return AsBuffers();
 }

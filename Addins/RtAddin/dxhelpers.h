@@ -24,11 +24,12 @@ private:
 	const HRESULT m_hr;
 };
 
-inline void ThrowIfFailed(HRESULT hr, const wchar_t *msg)
+inline void ThrowIfFailed(HRESULT hr, const wchar_t *msg = nullptr)
 {
 	if (FAILED(hr))
 	{
-		OutputDebugString(msg);
+		if(msg)
+			OutputDebugString(msg);
 		throw HrException(hr);
 	}
 }
