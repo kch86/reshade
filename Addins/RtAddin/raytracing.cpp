@@ -4,9 +4,9 @@
 
 #include "Shaders\RaytracingHlslCompat.h"
 #include "CompiledShaders\Raytracing.hlsl.h"
+#include "raytracing.h"
 
 using namespace reshade::api;
-using namespace Microsoft::WRL;
 
 // Pretty-print a state object tree.
 inline void PrintStateObjectDesc(const D3D12_STATE_OBJECT_DESC *desc)
@@ -120,8 +120,27 @@ inline void PrintStateObjectDesc(const D3D12_STATE_OBJECT_DESC *desc)
 	OutputDebugStringW(wstr.str().c_str());
 }
 
+struct __declspec(uuid("A655CE6C-2404-4C64-80F9-A48BF3F1DE6C")) DxrDevicedata
+{
+	ComPtr<ID3D12Device5> dxrDevice;
+};
 bool g_createPso = true;
-void compilePso(reshade::api::device *device)
+void createDxrDevice(device *device)
+{
+	if (device->get_api() != device_api::d3d12)
+		return;
+
+	ID3D12Device *d3d12_device = reinterpret_cast<ID3D12Device *>(device->get_native());
+
+	ComPtr<ID3D12Device5> dxrDevice;
+
+	ThrowIfFailed(d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice)), L"Couldn't get DirectX Raytracing interface for the device.\n");
+
+	DxrDevicedata& data = device->create_private_data<DxrDevicedata>();
+	data.dxrDevice = dxrDevice;
+}
+
+void testCompilePso(device *device)
 {
 	if (!g_createPso)
 	{
@@ -187,15 +206,18 @@ void compilePso(reshade::api::device *device)
 
 	if (device->get_api() == device_api::d3d12)
 	{
-		ID3D12Device *d3d12_device = reinterpret_cast<ID3D12Device *>(device->get_native());
+		DxrDevicedata &data = device->get_private_data<DxrDevicedata>();
 
-		ComPtr<ID3D12Device5> dxrDevice;
-
-		ThrowIfFailed(d3d12_device->QueryInterface(IID_PPV_ARGS(&dxrDevice)), L"Couldn't get DirectX Raytracing interface for the device.\n");
+		ComPtr<ID3D12Device5> dxrDevice = data.dxrDevice;
 
 		ComPtr<ID3D12StateObject> m_dxrStateObject;
 		ThrowIfFailed(dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&m_dxrStateObject)), L"Couldn't create DirectX Raytracing state object.\n");
 	}
 
 	g_createPso = false;
+}
+
+AsBuffers buildBvh(command_list *cmdlist, const BvhBuildDesc &desc)
+{
+	return AsBuffers();
 }

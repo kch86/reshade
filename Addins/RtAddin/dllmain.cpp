@@ -27,9 +27,27 @@ namespace
 		format format;
 	};
 
+	struct IndexData
+	{
+		resource ib;
+		uint32_t offset;
+		uint32_t count;
+	};
+
+	struct VertexData
+	{
+		resource vb;
+		uint32_t offset;
+		uint32_t count;
+		uint32_t stride;
+	};
+
 	std::shared_mutex s_mutex;
+	std::unordered_set<uint64_t> s_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
 	pipeline s_currentInputLayout;
+	IndexData s_currentIB;
+	VertexData s_currentVB;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -52,7 +70,8 @@ static void on_init_device(device *device)
 {
 	device->create_private_data<device_data>();
 
-	compilePso(device);
+	createDxrDevice(device);
+	testCompilePso(device);
 }
 static void on_destroy_device(device *device)
 {
@@ -126,6 +145,13 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 	}
 #endif
 }
+static void on_destroy_pipeline(device *device, pipeline handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	assert(s_inputLayoutPipelines.find(handle.handle) != s_inputLayoutPipelines.end());
+	s_inputLayoutPipelines.erase(handle.handle);
+}
 static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipeline)
 {
 	if (type == pipeline_stage::input_assembler)
@@ -147,6 +173,19 @@ static void on_destroy_effect_runtime(effect_runtime *runtime)
 		dev_data.main_runtime = nullptr;
 }
 
+static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage, resource handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	s_resources.emplace(handle.handle);
+}
+static void on_destroy_resource(device *device, resource handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	assert(s_resources.find(handle.handle) != s_resources.end());
+	s_resources.erase(handle.handle);
+}
 static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
 	auto &data = cmd_list->get_private_data<command_list_data>();
@@ -158,6 +197,23 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 	data.has_multiple_rtvs = count > 1;
 	data.current_main_rtv = new_main_rtv;
 	data.current_dsv = dsv;
+}
+static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offset, uint32_t index_size)
+{
+	s_currentIB.ib = buffer;
+	s_currentIB.offset = (uint32_t)offset;
+	s_currentIB.count = index_size;
+}
+static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
+{
+	const PosStreamInfo &posStreamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
+
+	assert((int)count > posStreamInfo.streamIndex);
+
+	s_currentVB.vb = buffers[posStreamInfo.streamIndex];
+	s_currentVB.offset = (uint32_t)offsets[posStreamInfo.streamIndex];
+	s_currentVB.count = count;
+	s_currentVB.stride = strides[posStreamInfo.streamIndex];
 }
 
 bool g_drawBeforeUi = false;
@@ -196,6 +252,26 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	return false;
 }
+static bool on_draw_indexed(command_list * cmd_list, uint32_t indices, uint32_t instances, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+{
+	BvhBuildDesc desc = {
+		.vb = {
+			.res = s_currentVB.vb.handle,
+			.offset = s_currentVB.offset,
+			.count = s_currentVB.count,
+			.stride = s_currentVB.stride
+		},
+		.ib = {
+			.res = s_currentIB.ib.handle,
+			.offset = s_currentIB.offset,
+			.count = s_currentIB.count,
+			.stride = sizeof(int)
+		}
+	};
+
+	buildBvh(cmd_list, desc);
+	return false;
+}
 
 static void on_present(effect_runtime *runtime)
 {
@@ -219,10 +295,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
 		reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
+		reshade::register_event<reshade::addon_event::init_resource>(on_init_resource);
+		reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
 		reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
+		reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_effect_runtime);
 		reshade::register_event<reshade::addon_event::destroy_effect_runtime>(on_destroy_effect_runtime);
 		reshade::register_event<reshade::addon_event::draw>(on_draw);
+		reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+		reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+		reshade::register_event<reshade::addon_event::bind_index_buffer>(on_bind_index_buffer);
+		reshade::register_event<reshade::addon_event::bind_vertex_buffers>(on_bind_vertex_buffers);
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		register_state_tracking();

@@ -7,6 +7,8 @@
 
 #include "d3dx12.h"
 
+using namespace Microsoft::WRL;
+
 class HrException : public std::runtime_error
 {
 	inline std::string HrToString(HRESULT hr)
