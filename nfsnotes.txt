@@ -1,4 +1,10 @@
 nfs notes:
+todo:
+- get blas building working
+- get tlas building workinng
+- do I want to use kickStartRT? 
+-- all i have is final image....
+
 vertex shader uniform structures:
 
 24 float4s:

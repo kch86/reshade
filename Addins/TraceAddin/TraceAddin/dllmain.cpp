@@ -17,7 +17,7 @@ namespace
 	bool s_do_capture = false;
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
-	int ui_drawCallBegin = -1;
+	int ui_drawCallBegin = 0;
 	int ui_drawCallEnd = -1;
 	int drawCallCount = 0;
 	std::shared_mutex s_mutex;
@@ -475,9 +475,6 @@ static void on_bind_scissor_rects(command_list *, uint32_t first, uint32_t count
 }
 static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
 {
-	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
-	if (filter)
-		return;
 	if (!do_capture())
 		return;
 
