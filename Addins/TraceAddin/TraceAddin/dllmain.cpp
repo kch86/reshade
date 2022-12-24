@@ -18,7 +18,7 @@ namespace
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
 	int ui_drawCallBegin = 0;
-	int ui_drawCallEnd = -1;
+	int ui_drawCallEnd = 4095;
 	int drawCallCount = 0;
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_samplers;
