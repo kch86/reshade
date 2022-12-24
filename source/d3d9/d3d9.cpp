@@ -10,6 +10,9 @@
 #include "ini_file.hpp"
 #include "hook_manager.hpp"
 #include <d3d9on12.h>
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <wrl.h>
 
 // These are defined in d3d9.h, but are used as function names below
 #undef IDirect3D9_CreateDevice
@@ -387,6 +390,105 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 	return hr;
 }
 
+using namespace Microsoft::WRL;
+void getHardwareAdapter(
+	IDXGIFactory1 *pFactory,
+	IDXGIAdapter1 **ppAdapter,
+	bool requestHighPerformanceAdapter)
+{
+	*ppAdapter = nullptr;
+
+	ComPtr<IDXGIAdapter1> adapter;
+
+	ComPtr<IDXGIFactory6> factory6;
+	if (SUCCEEDED(pFactory->QueryInterface(IID_PPV_ARGS(&factory6))))
+	{
+		for (
+			UINT adapterIndex = 0;
+			SUCCEEDED(factory6->EnumAdapterByGpuPreference(
+			adapterIndex,
+			requestHighPerformanceAdapter == true ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED,
+			IID_PPV_ARGS(&adapter)));
+			++adapterIndex)
+		{
+			DXGI_ADAPTER_DESC1 desc;
+			adapter->GetDesc1(&desc);
+
+			if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+			{
+				// Don't select the Basic Render Driver adapter.
+				// If you want a software adapter, pass in "/warp" on the command line.
+				continue;
+			}
+
+			// Check to see whether the adapter supports Direct3D 12, but don't create the
+			// actual device yet.
+			if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device), nullptr)))
+			{
+				break;
+			}
+		}
+	}
+
+	if (adapter.Get() == nullptr)
+	{
+		for (UINT adapterIndex = 0; SUCCEEDED(pFactory->EnumAdapters1(adapterIndex, &adapter)); ++adapterIndex)
+		{
+			DXGI_ADAPTER_DESC1 desc;
+			adapter->GetDesc1(&desc);
+
+			if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+			{
+				// Don't select the Basic Render Driver adapter.
+				// If you want a software adapter, pass in "/warp" on the command line.
+				continue;
+			}
+
+			// Check to see whether the adapter supports Direct3D 12, but don't create the
+			// actual device yet.
+			if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device), nullptr)))
+			{
+				break;
+			}
+		}
+	}
+
+	*ppAdapter = adapter.Detach();
+}
+
+std::pair<ComPtr<ID3D12Device>, ComPtr<ID3D12CommandQueue>> createDevice()
+{
+	ComPtr<ID3D12Debug> debugController;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+	{
+		debugController->EnableDebugLayer();
+	}
+	ComPtr<IDXGIFactory4> factory;
+	HRESULT hr1(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+	assert(SUCCEEDED(hr1));
+
+	ComPtr<IDXGIAdapter1> hardwareAdapter;
+	getHardwareAdapter(factory.Get(), &hardwareAdapter, true);
+
+	ComPtr<ID3D12Device> device;
+	HRESULT hr2(D3D12CreateDevice(
+		hardwareAdapter.Get(),
+		D3D_FEATURE_LEVEL_12_1,
+		IID_PPV_ARGS(&device)
+	));
+	assert(SUCCEEDED(hr2));
+
+	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+	ComPtr<ID3D12CommandQueue> queue;
+	HRESULT hr3(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
+	assert(SUCCEEDED(hr3));
+	//NAME_D3D12_OBJECT(queue);
+
+	return { device, queue };
+}
 extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 {
 	if (g_in_d3d9_runtime)
@@ -397,15 +499,30 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 	ini_file &config = reshade::global_config();
 	if (config.get("APP", "ForceD3D9On12"))
 	{
-		D3D9ON12_ARGS args[] = {
-			TRUE,
-			NULL,
-			NULL,
-			0,
-			0
-		};
+		// explicitly create the device and command queue
+		ID3D12Device *device = nullptr;
+		ID3D12CommandQueue *queue = nullptr;
+		if (config.get("APP", "D3D9On12ExplicitDevice"))
+		{
+			const auto dxgi_module = LoadLibraryW(L"dxgi.dll");
+			const auto d3d12_module = LoadLibraryW(L"d3d12.dll");
 
-		IDirect3D9 *const res = Direct3DCreate9On12(SDKVersion, args, 1);
+			auto [deviceptr, queueptr] = createDevice();
+
+			device = deviceptr.Get();
+			queue = queueptr.Get();
+
+			device->AddRef();
+			queue->AddRef();
+		}
+		D3D9ON12_ARGS args{};
+		args.Enable9On12 = TRUE;
+		args.pD3D12Device = device;
+		args.ppD3D12Queues[0] = queue;
+		args.NumQueues = 1;
+		args.NodeMask = 0;
+
+		IDirect3D9 *const res = Direct3DCreate9On12(SDKVersion, &args, 1);
 		if (res == nullptr)
 		{
 			LOG(WARN) << "Direct3DCreate9On12" << " failed.";
