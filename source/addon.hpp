@@ -35,6 +35,51 @@ struct temp_mem
 	T *p, stack[STACK_ELEMENTS];
 };
 
+template <typename T, size_t STACK_ELEMENTS = 16>
+struct temp_mem_dyn
+{
+	explicit temp_mem_dyn(size_t elements)
+	{
+		count = elements;
+		if (count > STACK_ELEMENTS)
+		{
+			p = new T[count];
+			stackalloc = false;
+		}
+		else
+		{
+			p = new(_malloca(sizeof(T) * count)) T[count];
+		}
+			
+	}
+	~temp_mem_dyn()
+	{
+		if (p && !stackalloc)
+			delete[] p;
+	}
+
+	T &operator[](size_t element)
+	{
+		assert(element < count);
+
+		return p[element];
+	}
+
+	operator T *()
+	{
+		return p;
+	}
+
+	operator T*() const
+	{
+		return p;
+	}
+
+	T *p;
+	bool stackalloc = true;
+	uint32_t count;
+};
+
 namespace reshade::api
 {
 	template <typename T, typename... api_object_base>
