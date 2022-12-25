@@ -349,15 +349,23 @@ AsBuffers buildBvh(device* device9,
 	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;
 	assert(d3d9on12);
 
-	ID3D12Resource* vb = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.vb.res).handle);
-	ID3D12Resource* ib = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.ib.res).handle);
+	//ID3D12Resource* vb = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.vb.res).handle);
+	//ID3D12Resource* ib = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.ib.res).handle);
+	ID3D12Resource *vb = reinterpret_cast<ID3D12Resource *>(desc.vb.res);
+	ID3D12Resource *ib = reinterpret_cast<ID3D12Resource *>(desc.ib.res);
 
 	device *device12 = cmdlist->get_device();
 
-	ID3D12Device5 *nativeDevice = reinterpret_cast<ID3D12Device5 *>(device12->get_native());
-	ID3D12GraphicsCommandList4 *nativeCmdlist = reinterpret_cast<ID3D12GraphicsCommandList4 *>(cmdlist->get_native());
+	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(device12->get_native());
+	ID3D12GraphicsCommandList *nativeCmdlist = reinterpret_cast<ID3D12GraphicsCommandList *>(cmdlist->get_native());
 
-	build_bvh_native(nativeDevice, nativeCmdlist, desc, vb, ib);
+	ID3D12Device5 *nativeDevice5 = nullptr;
+	nativeDevice->QueryInterface(IID_PPV_ARGS(&nativeDevice5));
+
+	ID3D12GraphicsCommandList4 *nativeCmdlist4 = nullptr;
+	nativeCmdlist->QueryInterface(IID_PPV_ARGS(&nativeCmdlist4));
+
+	build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib);
 
 	return AsBuffers();
 }

@@ -45,7 +45,9 @@ namespace
 	};
 
 	std::shared_mutex s_mutex;
-	std::unordered_set<uint64_t> s_resources;
+	std::unordered_map<uint64_t, resource_desc> s_resources;
+	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
+	std::unordered_map<uint64_t, void *> s_mapped_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
@@ -76,6 +78,17 @@ static void on_init_device(device *device)
 {
 	device->create_private_data<device_data>();
 
+	if (device->get_api() == device_api::d3d9)
+	{
+		ID3D12CommandQueue* d3d12queue = (ID3D12CommandQueue * )s_d3d12cmdqueue->get_native();
+		//resource->SetPrivateData(__uuidof(device_proxy), &device_proxy, sizeof(device_proxy), 0);
+		device->set_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), (uint64_t)d3d12queue);
+	}
+	else if (device->get_api() == device_api::d3d12)
+	{
+		s_d3d12device = device;
+	}
+
 	createDxrDevice(device);
 	testCompilePso(device);
 }
@@ -100,11 +113,11 @@ static void on_destroy_command_list(command_list *cmd_list)
 
 static void on_init_command_queue(command_queue *cmd_queue)
 {
-	if (cmd_queue->get_device()->get_api() == device_api::d3d12)
-	{
-		if((cmd_queue->get_type() & command_queue_type::graphics) != 0)
-			s_d3d12cmdqueue = cmd_queue;
-	}
+if (cmd_queue->get_device()->get_api() == device_api::d3d12)
+{
+	if ((cmd_queue->get_type() & command_queue_type::graphics) != 0)
+		s_d3d12cmdqueue = cmd_queue;
+}
 }
 static void on_destroy_command_queue(command_queue *cmd_list)
 {
@@ -127,7 +140,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 			for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
 			{
 				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
-	
+
 				if (strstr(elem.semantic, "POSITION") != nullptr)
 				{
 					assert(info.format == format::unknown);
@@ -164,7 +177,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				}*/
 				s_inputLayoutPipelines[handle.handle] = info;
 				return;
-			}			
+			}
 		}
 	}
 #endif
@@ -197,19 +210,66 @@ static void on_destroy_effect_runtime(effect_runtime *runtime)
 		dev_data.main_runtime = nullptr;
 }
 
-static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage, resource handle)
+static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage usage, resource handle)
 {
+	if (!(desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer))
+	{
+		return;
+	}
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
-	s_resources.emplace(handle.handle);
+	assert(s_resources.find(handle.handle) == s_resources.end());
+	s_resources[handle.handle] = desc;
 }
 static void on_destroy_resource(device *device, resource handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
-	assert(s_resources.find(handle.handle) != s_resources.end());
+	//assert(s_resources.find(handle.handle) != s_resources.end());
 	s_resources.erase(handle.handle);
 }
+
+void on_map_buffer_region(device *device, resource resource, uint64_t offset, uint64_t size, map_access access, void **data)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (s_resources.find(resource.handle) != s_resources.end())
+	{
+		s_mapped_resources[resource.handle] = *data;
+	}	
+}
+
+void on_unmap_buffer_region(device *device, resource handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	//create shadow copy
+	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
+	{
+		void *data = s_mapped_resources[handle.handle];
+
+		const resource_desc& desc = s_resources[handle.handle];
+
+		subresource_data srd = {
+			.data = data,
+			.row_pitch = (uint32_t)desc.buffer.size,
+		};
+
+		resource d3d12res;
+		s_d3d12device->create_resource(
+			resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
+			nullptr, resource_usage::cpu_access, &d3d12res);
+
+		void *ptr;
+		s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
+		memcpy(ptr, data, (size_t)desc.buffer.size);
+		s_d3d12device->unmap_buffer_region(d3d12res);
+
+		s_shadow_resources[handle.handle] = d3d12res.handle;
+		s_mapped_resources.erase(handle.handle);
+	}
+}
+
 static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
 	auto &data = cmd_list->get_private_data<command_list_data>();
@@ -283,16 +343,19 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
+	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
+	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
+
 	BvhBuildDesc desc = {
 		.vb = {
-			.res = s_currentVB.vb.handle,
+			.res = s_shadow_resources[s_currentVB.vb.handle],
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
 			.count = vertex_count,
 			.stride = s_currentVB.stride,
 			.fmt = s_currentVB.fmt
 		},
 		.ib = {
-			.res = s_currentIB.ib.handle,
+			.res = s_shadow_resources[s_currentIB.ib.handle],
 			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
 			.count = index_count,
 			.fmt = s_currentIB.fmt
@@ -332,6 +395,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_command_queue>(on_destroy_command_queue);
 		reshade::register_event<reshade::addon_event::init_resource>(on_init_resource);
 		reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
+		reshade::register_event<reshade::addon_event::map_buffer_region>(on_map_buffer_region);
+		reshade::register_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer_region);
 		reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
 		reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_effect_runtime);
