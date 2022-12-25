@@ -11,7 +11,7 @@ namespace reshade::api
 	enum class format : uint32_t;
 }
 
-struct scopedresource : reshade::api::resource
+struct scopedresource : public reshade::api::resource
 {
 	using base = reshade::api::resource;
 	scopedresource(reshade::api::device *d, base res)
