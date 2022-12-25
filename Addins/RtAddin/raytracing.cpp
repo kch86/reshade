@@ -249,6 +249,7 @@ resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, 
 {
 	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
 	ID3D12CommandQueue *d3d12queue = reinterpret_cast<ID3D12CommandQueue *>(cmdqueue->get_native());
+	//ID3D12CommandQueue *d3d12queue =(D3D12CommandQueue*)cmdqueue;// reinterpret_cast<ID3D12CommandQueue *>(cmdqueue->get_native());
 
 	ID3D12Resource *d3d12res = nullptr;
 	//device->UnwrapUnderlyingResource(d3d9res, d3d12queue, IID_PPV_ARGS(&d3d12res));
@@ -346,15 +347,16 @@ scopedresource buildBvh(device* device9,
 				   command_queue *cmdqueue,
 				   const BvhBuildDesc &desc)
 {
-	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;
+	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;// ->_orig;
 	assert(d3d9on12);
 
+	device *device12 = cmdlist->get_device();
+
+#if 0
 	//ID3D12Resource* vb = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.vb.res).handle);
 	//ID3D12Resource* ib = reinterpret_cast<ID3D12Resource*>(getd3d12resource(d3d9on12, cmdqueue, (resource)desc.ib.res).handle);
 	ID3D12Resource *vb = reinterpret_cast<ID3D12Resource *>(desc.vb.res);
 	ID3D12Resource *ib = reinterpret_cast<ID3D12Resource *>(desc.ib.res);
-
-	device *device12 = cmdlist->get_device();
 
 	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(device12->get_native());
 	ID3D12GraphicsCommandList *nativeCmdlist = reinterpret_cast<ID3D12GraphicsCommandList *>(cmdlist->get_native());
@@ -368,12 +370,63 @@ scopedresource buildBvh(device* device9,
 	ID3D12Resource* bvh = build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib).pResult;
 
 	scopedresource res(device12, (resource)uint64_t(bvh));
+#else
+	rt_geometry_desc geomDesc = {};
+	geomDesc.Type = rt_geometry_type::triangles;
+	geomDesc.Triangles.VertexBuffer = {
+		.buffer = desc.vb.res,
+		.offset = desc.vb.offset,
+		.stride = desc.vb.stride,
+	};
+	geomDesc.Triangles.VertexFormat = desc.vb.fmt;
+	geomDesc.Triangles.VertexCount = desc.vb.count;
+	geomDesc.Triangles.IndexBuffer = {
+		.buffer = desc.ib.res,
+		.offset = desc.ib.offset,
+	};
+	geomDesc.Triangles.IndexCount = desc.ib.count;
+	geomDesc.Triangles.IndexFormat = desc.ib.fmt;
+	geomDesc.Flags = rt_geometry_flags::opaque;
+
+	// Get the size requirements for the scratch and AS buffers
+	rt_build_acceleration_structure_inputs inputs = {};
+	inputs.DescsLayout = rt_elements_layout::array;
+	inputs.Flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
+	inputs.NumDescs = 1;
+	inputs.pGeometryDescs = &geomDesc;
+	inputs.Type = rt_acceleration_structure_type::bottom_level;
+
+	rt_acceleration_structure_prebuild_info info = {};
+	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
+
+	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
+	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
+	scopedresource res = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
+
+	// Create the bottom-level AS
+	rt_build_acceleration_structure_desc asDesc = {};
+	asDesc.Inputs = inputs;
+	asDesc.DestData = { .buffer = res };
+	asDesc.ScratchData = { .buffer = scratch };
+
+	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
+
+	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
+	/*D3D12_RESOURCE_BARRIER uavBarrier = {};
+	uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	uavBarrier.UAV.pResource = buffers.pResult;
+	pCmdList->ResourceBarrier(1, &uavBarrier);*/
+
+	//scratch will go out of scope here, prevent auto-deletion
+	scratch.handle = 0;
+#endif
 
 	return res;
 }
 
 scopedresource::~scopedresource()
 {
+	// TODO: put this into a deferred queue
 	if (handle)
 	{
 		_device->destroy_resource(*this);
