@@ -1399,6 +1399,8 @@ void reshade::d3d12::device_impl::get_rt_acceleration_structure_prebuild_info(
 		geomDesc.Triangles.IndexCount = triangle.IndexCount;
 		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
 		geomDesc.Flags = to_native(desc.Flags);
+
+		geomDescs[i] = geomDesc;
 	}
 
 	// todo: support different layouts
