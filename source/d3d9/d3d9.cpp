@@ -522,7 +522,18 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 		args.NumQueues = 1;
 		args.NodeMask = 0;
 
-		IDirect3D9 *const res = Direct3DCreate9On12(SDKVersion, &args, 1);
+		IDirect3D9 *res = nullptr;
+		if (config.get("APP", "ForceD3D9Ex"))
+		{
+			IDirect3D9Ex *resEx = nullptr;
+			HRESULT hr = Direct3DCreate9On12Ex(SDKVersion, &args, 1, &resEx);
+			res = resEx;
+		}
+		else
+		{
+			res = Direct3DCreate9On12(SDKVersion, &args, 1);
+		}
+
 		if (res == nullptr)
 		{
 			LOG(WARN) << "Direct3DCreate9On12" << " failed.";
@@ -534,7 +545,21 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 
 	assert(!g_in_dxgi_runtime);
 	g_in_d3d9_runtime = g_in_dxgi_runtime = true;
-	IDirect3D9 *const res = reshade::hooks::call(Direct3DCreate9)(SDKVersion);
+
+	IDirect3D9* res = nullptr;
+	if (config.get("APP", "ForceD3D9Ex"))
+	{
+		IDirect3D9Ex *resEx = nullptr;
+		HRESULT hr = reshade::hooks::call(Direct3DCreate9Ex)(SDKVersion, &resEx);
+		assert(SUCCEEDED(hr));
+
+		res = resEx;
+	}
+	else
+	{
+		res = reshade::hooks::call(Direct3DCreate9)(SDKVersion);
+	}
+
 	g_in_d3d9_runtime = g_in_dxgi_runtime = false;
 	if (res == nullptr)
 	{

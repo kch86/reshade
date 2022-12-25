@@ -9,6 +9,7 @@
 #include "d3d9on12_device.hpp"
 #include "d3d9_impl_type_convert.hpp"
 #include "dll_log.hpp" // Include late to get HRESULT log overloads
+#include "ini_file.hpp"
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
 
@@ -775,6 +776,7 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 
 #if RESHADE_ADDON
 		const auto resource = *ppVertexBuffer;
+		LOG_INFO() << "VERTEX CREATE: " << std::hex << to_handle(resource).handle << ", usage: " << std::hex << Usage << ", fvf: " << std::hex << FVF << ", pool: " << Pool;
 
 #  if !RESHADE_ADDON_LITE
 		const auto device_proxy = this;
@@ -810,6 +812,15 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 		Usage |= D3DUSAGE_SOFTWAREPROCESSING;
 
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+		}
+	}
+
 	D3DINDEXBUFFER_DESC internal_desc = { Format, D3DRTYPE_INDEXBUFFER, Usage, Pool, Length };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, pSharedHandle != nullptr);
 
