@@ -12,6 +12,7 @@
 #include "ini_file.hpp"
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
+#include <d3d12/d3d12_command_queue.hpp>
 
 using reshade::d3d9::to_handle;
 
@@ -760,6 +761,15 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 		Usage |= D3DUSAGE_SOFTWAREPROCESSING;
 
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+		}
+	}
+
 	D3DVERTEXBUFFER_DESC internal_desc = { D3DFMT_UNKNOWN, D3DRTYPE_VERTEXBUFFER, Usage, Pool, Length, FVF };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, pSharedHandle != nullptr);
 
@@ -776,7 +786,7 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 
 #if RESHADE_ADDON
 		const auto resource = *ppVertexBuffer;
-		LOG_INFO() << "VERTEX CREATE: " << std::hex << to_handle(resource).handle << ", usage: " << std::hex << Usage << ", fvf: " << std::hex << FVF << ", pool: " << Pool;
+		//LOG_INFO() << "VERTEX CREATE: " << std::hex << to_handle(resource).handle << ", usage: " << std::hex << Usage << ", fvf: " << std::hex << FVF << ", pool: " << Pool;
 
 #  if !RESHADE_ADDON_LITE
 		const auto device_proxy = this;
@@ -837,6 +847,22 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 
 #if RESHADE_ADDON
 		const auto resource = *ppIndexBuffer;
+
+#if 0
+		D3D12CommandQueue *d3d12queue = nullptr;
+		uint64_t handle;
+		//resource->SetPrivateData(__uuidof(device_proxy), &device_proxy, sizeof(device_proxy), 0);
+		get_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), &handle);
+		d3d12queue = (D3D12CommandQueue *)handle;
+
+		Direct3DDevice9On12 *d3d9on12 = this->_d3d9on12_device;// ->_orig;
+		ID3D12Resource *d3d12res = nullptr;
+		HRESULT hres = d3d9on12->UnwrapUnderlyingResource(resource, d3d12queue, IID_PPV_ARGS(&d3d12res));
+		if (FAILED(hres))
+		{
+			LOG_ERROR() << "failed to unwrap resource";
+		}
+#endif
 
 #  if !RESHADE_ADDON_LITE
 		const auto device_proxy = this;
