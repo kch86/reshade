@@ -14,7 +14,8 @@ using namespace reshade::api;
 
 namespace
 {
-	bool s_do_capture = false;
+	bool s_do_capture = true;
+	bool s_capture_continuous = true;
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
 	int ui_drawCallBegin = 0;
@@ -102,6 +103,24 @@ namespace
 			return "constant_buffer";
 		default:
 			return "unknown";
+		}
+	}
+	inline auto to_string(resource_type type)
+	{
+		switch (type)
+		{
+		case resource_type::buffer:
+			return "buffer";
+		case resource_type::texture_1d:
+			return "texture1d";
+		case resource_type::texture_2d:
+			return "texture2d";
+		case resource_type::texture_3d:
+			return "texture3d";
+		case resource_type::surface:
+			return "surface";
+		default:
+			return "unkown";
 		}
 	}
 	inline auto to_string(dynamic_state value)
@@ -199,50 +218,44 @@ namespace
 			return "back_stencil_depth_fail_op";
 		}
 	}
-	inline auto to_string(resource_usage value)
+	inline auto to_string(resource_usage usage)
 	{
-		switch (value)
-		{
-		default:
-		case resource_usage::undefined:
-			return "undefined";
-		case resource_usage::index_buffer:
-			return "index_buffer";
-		case resource_usage::vertex_buffer:
-			return "vertex_buffer";
-		case resource_usage::constant_buffer:
-			return "constant_buffer";
-		case resource_usage::stream_output:
-			return "stream_output";
-		case resource_usage::indirect_argument:
-			return "indirect_argument";
-		case resource_usage::depth_stencil:
-		case resource_usage::depth_stencil_read:
-		case resource_usage::depth_stencil_write:
-			return "depth_stencil";
-		case resource_usage::render_target:
-			return "render_target";
-		case resource_usage::shader_resource:
-		case resource_usage::shader_resource_pixel:
-		case resource_usage::shader_resource_non_pixel:
-			return "shader_resource";
-		case resource_usage::unordered_access:
-			return "unordered_access";
-		case resource_usage::copy_dest:
-			return "copy_dest";
-		case resource_usage::copy_source:
-			return "copy_source";
-		case resource_usage::resolve_dest:
-			return "resolve_dest";
-		case resource_usage::resolve_source:
-			return "resolve_source";
-		case resource_usage::general:
-			return "general";
-		case resource_usage::present:
-			return "present";
-		case resource_usage::cpu_access:
-			return "cpu_access";
-		}
+		std::stringstream s;
+		
+		if( (usage & resource_usage::index_buffer) != 0)
+			s << "index_buffer | ";
+		if( (usage & resource_usage::vertex_buffer) != 0)
+			s << "vertex_buffer | ";
+		if( (usage & resource_usage::constant_buffer) != 0)
+			s << "constant_buffer | ";
+		if( (usage & resource_usage::stream_output) != 0)
+			s << "stream_output | ";
+		if( (usage & resource_usage::indirect_argument) != 0)
+			s << "indirect_argument | ";
+		if( (usage & resource_usage::depth_stencil|resource_usage::depth_stencil_read|resource_usage::depth_stencil_write) != 0)
+			s << "depth_stencil | ";
+		if( (usage & resource_usage::render_target) != 0)
+			s << "render_target | ";
+		if( (usage & resource_usage::shader_resource|resource_usage::shader_resource_pixel|resource_usage::shader_resource_non_pixel) != 0)
+			s << "shader_resource | ";
+		if( (usage & resource_usage::unordered_access) != 0)
+			s << "unordered_access | ";
+		if( (usage & resource_usage::copy_dest) != 0)
+			s << "copy_dest | ";
+		if( (usage & resource_usage::copy_source) != 0)
+			s << "copy_source | ";
+		if( (usage & resource_usage::resolve_dest) != 0)
+			s << "resolve_dest | ";
+		if( (usage & resource_usage::resolve_source) != 0)
+			s << "resolve_source | ";
+		if( (usage & resource_usage::general) != 0)
+			s << "general | ";
+		if( (usage & resource_usage::present) != 0)
+			s << "present | ";
+		if( (usage & resource_usage::cpu_access) != 0)
+			s << "cpu_access | ";
+
+		return s.str();
 	}
 	inline auto to_string(query_type value)
 	{
@@ -272,7 +285,7 @@ namespace
 
 static bool do_capture()
 {
-	return s_do_capture && (drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
+	return s_do_capture;// && (drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
 }
 
 static void on_init_swapchain(swapchain *swapchain)
@@ -317,6 +330,14 @@ static void on_destroy_sampler(device *device, sampler handle)
 
 	assert(s_samplers.find(handle.handle) != s_samplers.end());
 	s_samplers.erase(handle.handle);
+}
+static bool on_create_resource(device *device, resource_desc& desc, subresource_data *initial_data, resource_usage initial_state)
+{
+	std::stringstream s;
+	s << "on_create_resource: type: " << to_string(desc.type) << ", usage: " << to_string(desc.usage);
+	reshade::log_message(3, s.str().c_str());
+
+	return false;
 }
 static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage, resource handle)
 {
@@ -425,6 +446,7 @@ static void on_bind_render_targets_and_depth_stencil(command_list *, uint32_t co
 	reshade::log_message(3, s.str().c_str());
 }
 
+int s_count = 0;
 static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipeline)
 {
 	if (!do_capture())
@@ -438,7 +460,8 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 #endif
 
 	std::stringstream s;
-	s << "bind_pipeline(" << to_string(type) << ", " << (void *)pipeline.handle << ")";
+	s << "bind_pipeline(" << to_string(type) << ", " << (void *)pipeline.handle << ")" << ", count: " << s_count;
+	s_count++;
 
 	reshade::log_message(3, s.str().c_str());
 }
@@ -928,7 +951,8 @@ static void on_present(effect_runtime *runtime)
 	{
 		reshade::log_message(3, "present()");
 		reshade::log_message(3, "--- End Frame ---");
-		s_do_capture = false;
+		if(!s_capture_continuous)
+			s_do_capture = false;
 	}
 	else
 	{
@@ -936,6 +960,9 @@ static void on_present(effect_runtime *runtime)
 		if (runtime->is_key_pressed(VK_F10))
 		{
 			s_do_capture = true;
+		}
+		if (s_do_capture)
+		{
 			reshade::log_message(3, "--- Frame ---");
 		}
 	}
@@ -966,6 +993,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_swapchain>(on_destroy_swapchain);
 		reshade::register_event<reshade::addon_event::init_sampler>(on_init_sampler);
 		reshade::register_event<reshade::addon_event::destroy_sampler>(on_destroy_sampler);
+		reshade::register_event<reshade::addon_event::create_resource>(on_create_resource);
 		reshade::register_event<reshade::addon_event::init_resource>(on_init_resource);
 		reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
 		reshade::register_event<reshade::addon_event::init_resource_view>(on_init_resource_view);
