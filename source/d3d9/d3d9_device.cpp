@@ -464,6 +464,16 @@ void    STDMETHODCALLTYPE Direct3DDevice9::GetGammaRamp(UINT iSwapChain, D3DGAMM
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9 **ppTexture, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
+		}
+	}
+
 	D3DSURFACE_DESC internal_desc = { Format, D3DRTYPE_TEXTURE, Usage, Pool, D3DMULTISAMPLE_NONE, 0, Width, Height };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, Levels, FALSE, _caps, pSharedHandle != nullptr);
 
@@ -480,6 +490,22 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 
 #if RESHADE_ADDON
 		const auto resource = *ppTexture;
+
+
+#if 0
+		ID3D12CommandQueue *d3d12queue = nullptr;
+		uint64_t handle;
+		get_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), &handle);
+		d3d12queue = (D3D12CommandQueue *)handle;
+
+		IDirect3DDevice9On12 *d3d9on12 = this->_d3d9on12_device->_orig;
+		ID3D12Resource *d3d12res = nullptr;
+		HRESULT hres = d3d9on12->UnwrapUnderlyingResource(resource, d3d12queue, IID_PPV_ARGS(&d3d12res));
+		if (FAILED(hres))
+		{
+			LOG_ERROR() << "failed to unwrap resource";
+		}
+#endif
 
 #  if !RESHADE_ADDON_LITE
 		const auto device_proxy = this;
@@ -568,6 +594,16 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVolumeTexture(UINT Width, UINT Height, UINT Depth, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DVolumeTexture9 **ppVolumeTexture, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
+		}
+	}
+
 	D3DVOLUME_DESC internal_desc { Format, D3DRTYPE_VOLUMETEXTURE, Usage, Pool, Width, Height, Depth };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, Levels, pSharedHandle != nullptr);
 
@@ -647,6 +683,16 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVolumeTexture(UINT Width, UINT 
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateCubeTexture(UINT EdgeLength, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DCubeTexture9 **ppCubeTexture, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
+		}
+	}
+
 	D3DSURFACE_DESC internal_desc { Format, D3DRTYPE_CUBETEXTURE, Usage, Pool, D3DMULTISAMPLE_NONE, 0, EdgeLength, EdgeLength };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, Levels, FALSE, _caps, pSharedHandle != nullptr);
 
@@ -767,6 +813,7 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 		if (Pool == D3DPOOL_MANAGED)
 		{
 			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
 		}
 	}
 
@@ -828,6 +875,7 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 		if (Pool == D3DPOOL_MANAGED)
 		{
 			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
 		}
 	}
 
@@ -849,13 +897,13 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 		const auto resource = *ppIndexBuffer;
 
 #if 0
-		D3D12CommandQueue *d3d12queue = nullptr;
+		//D3D12CommandQueue *d3d12queue = nullptr;
+		ID3D12CommandQueue *d3d12queue = nullptr;
 		uint64_t handle;
-		//resource->SetPrivateData(__uuidof(device_proxy), &device_proxy, sizeof(device_proxy), 0);
 		get_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), &handle);
 		d3d12queue = (D3D12CommandQueue *)handle;
 
-		Direct3DDevice9On12 *d3d9on12 = this->_d3d9on12_device;// ->_orig;
+		IDirect3DDevice9On12 *d3d9on12 = this->_d3d9on12_device->_orig;
 		ID3D12Resource *d3d12res = nullptr;
 		HRESULT hres = d3d9on12->UnwrapUnderlyingResource(resource, d3d12queue, IID_PPV_ARGS(&d3d12res));
 		if (FAILED(hres))
@@ -1171,6 +1219,15 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::ColorFill(IDirect3DSurface9 *pSurface
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateOffscreenPlainSurface(UINT Width, UINT Height, D3DFORMAT Format, D3DPOOL Pool, IDirect3DSurface9 **ppSurface, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+		}
+	}
+
 	D3DSURFACE_DESC internal_desc = { Format, D3DRTYPE_SURFACE, 0, Pool, D3DMULTISAMPLE_NONE, 0, Width, Height };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, 1, FALSE, _caps, pSharedHandle != nullptr);
 
@@ -2316,6 +2373,16 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateOffscreenPlainSurfaceEx(UINT Wi
 	assert(_extended_interface);
 
 #if RESHADE_ADDON
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "NoManagedPool"))
+	{
+		if (Pool == D3DPOOL_MANAGED)
+		{
+			Pool = D3DPOOL_DEFAULT;
+			Usage |= D3DUSAGE_DYNAMIC;
+		}
+	}
+
 	D3DSURFACE_DESC internal_desc = { Format, D3DRTYPE_SURFACE, Usage, Pool, D3DMULTISAMPLE_NONE, 0, Width, Height };
 	auto desc = reshade::d3d9::convert_resource_desc(internal_desc, 1, FALSE, _caps, pSharedHandle != nullptr);
 
