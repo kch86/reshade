@@ -1038,5 +1038,7 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 	asDesc.ScratchAccelerationStructureData = to_native_gpu(desc->ScratchData.buffer) + desc->ScratchData.offset;
 
 	// TODO: support the info descs
+	(void)post_build_info_count;
+	(void)info_descs;
 	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
 }

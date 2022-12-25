@@ -482,7 +482,11 @@ namespace reshade::api
 		virtual void get_rt_acceleration_structure_prebuild_info(
 			const rt_build_acceleration_structure_inputs *pDesc,
 			rt_acceleration_structure_prebuild_info *pInfo
-		) {}
+		)
+		{
+			(void)pDesc;
+			(void)pInfo;
+		}
 	};
 
 	/// <summary>
@@ -903,7 +907,12 @@ namespace reshade::api
 
 		virtual void build_acceleration_structure(rt_build_acceleration_structure_desc *desc,
 			uint32_t post_build_info_count,
-			rt_acceleration_structure_postbuild_info_desc *info_descs) {}
+			rt_acceleration_structure_postbuild_info_desc *info_descs)
+		{
+			(void)desc;
+			(void)post_build_info_count;
+			(void)info_descs;
+		}
 	};
 
 	/// <summary>
