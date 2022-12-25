@@ -776,6 +776,28 @@ namespace reshade::api
 	};
 
 	/// <summary>
+	/// A constant buffer resource descriptor.
+	/// </summary>
+	struct buffer_stride
+	{
+		/// <summary>
+		/// Constant buffer resource.
+		/// </summary>
+		resource buffer = { 0 };
+		/// <summary>
+		/// Offset from the start of the buffer resource (in bytes).
+		/// </summary>
+		uint64_t offset = 0;
+		/// <summary>
+		/// Number of elements this range covers in the buffer resource (in bytes).
+		/// Set to -1 (UINT64_MAX) to indicate that the whole buffer should be used.
+		/// </summary>
+		uint64_t size = UINT64_MAX;
+
+		uint32_t stride = 0;
+	};
+
+	/// <summary>
 	/// A combined sampler and resource view descriptor.
 	/// </summary>
 	struct sampler_with_resource_view
@@ -980,5 +1002,122 @@ namespace reshade::api
 		float height = 0.0f;
 		float min_depth = 0.0f;
 		float max_depth = 1.0f;
+	};
+
+	struct rt_geometry_triangle_desc
+	{
+		buffer_stride Transform3x4;
+		format IndexFormat;
+		format VertexFormat;
+		uint32_t IndexCount;
+		uint32_t VertexCount;
+		buffer_stride IndexBuffer;
+		buffer_stride VertexBuffer;
+	};
+
+	struct rt_aabb
+	{
+		float MinX;
+		float MinY;
+		float MinZ;
+		float MaxX;
+		float MaxY;
+		float MaxZ;
+	};
+
+	struct rt_geometry_aabb_desc
+	{
+		uint64_t AABBCount;
+		resource AABBs;
+	};
+
+	enum class rt_geometry_type : uint32_t
+	{
+		triangles = 0,
+		procedural = (triangles + 1)
+	};
+
+	enum class rt_geometry_flags : uint32_t
+	{
+		none = 0,
+		opaque = 0x1,
+		no_duplicate_anyhit_invocation = 0x2
+	};
+
+	struct rt_geometry_desc
+	{
+		rt_geometry_type Type;
+		rt_geometry_flags Flags;
+		union
+		{
+			rt_geometry_triangle_desc Triangles;
+			rt_geometry_aabb_desc AABBs;
+		};
+	};
+
+	enum class rt_acceleration_structure_type : uint32_t
+	{
+		top_level = 0,
+		bottom_level = 0x1
+	};
+
+	enum class rt_acceleration_structure_build_flags : uint32_t
+	{
+		none = 0,
+		allow_update = 0x1,
+		allow_compaction = 0x2,
+		prefer_fast_trace = 0x4,
+		prefer_fast_build = 0x8,
+		minimize_memory = 0x10,
+		perform_update = 0x20
+	};
+
+	enum class rt_elements_layout : uint32_t
+	{
+		array = 0,
+		arrayofpointers = 0x1
+	};
+
+	struct rt_build_acceleration_structure_inputs
+	{
+		rt_acceleration_structure_type Type;
+		rt_acceleration_structure_build_flags Flags;
+		uint32_t NumDescs;
+		rt_elements_layout DescsLayout;
+		union
+		{
+			resource InstanceDescs;
+			const rt_geometry_desc *pGeometryDescs;
+			const rt_geometry_desc *const *ppGeometryDescs;
+		};
+	};
+
+	struct rt_build_acceleration_structure_desc
+	{
+		resource DestData;
+		rt_build_acceleration_structure_inputs Inputs;
+		resource SourceData;
+		resource ScratchData;
+	};
+
+	struct rt_acceleration_structure_prebuild_info
+	{
+		uint64_t ResultDataMaxSizeInBytes;
+		uint64_t ScratchDataSizeInBytes;
+		uint64_t UpdateScratchDataSizeInBytes;
+	};
+
+	enum class rt_acceleration_structure_postbuild_info_type : uint32_t
+	{
+		compacted_size = 0,
+		tools_visualization = 0x1,
+		serialization = 0x2,
+		current_size = 0x3
+	};
+
+	struct rt_acceleration_structure_postbuild_info_desc
+	{
+		resource DestBuffer;
+		rt_acceleration_structure_postbuild_info_type InfoType;
 	};
 }

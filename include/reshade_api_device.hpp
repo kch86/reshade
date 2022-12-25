@@ -478,6 +478,11 @@ namespace reshade::api
 		/// <param name="handle">Resource view to associate a name with.</param>
 		/// <param name="name">Null-terminated name string.</param>
 		virtual void set_resource_view_name(resource_view handle, const char *name) = 0;
+
+		virtual void get_rt_acceleration_structure_prebuild_info(
+			const rt_build_acceleration_structure_inputs *pDesc,
+			rt_acceleration_structure_prebuild_info *pInfo
+		) {}
 	};
 
 	/// <summary>
@@ -895,6 +900,10 @@ namespace reshade::api
 		/// <param name="label">Null-terminated string containing the label of the debug marker.</param>
 		/// <param name="color">Optional RGBA color value associated with the debug marker.</param>
 		virtual void insert_debug_marker(const char *label, const float color[4] = nullptr) = 0;
+
+		virtual void build_acceleration_structure(rt_build_acceleration_structure_desc *desc,
+			uint32_t post_build_info_count,
+			rt_acceleration_structure_postbuild_info_desc *info_descs) {}
 	};
 
 	/// <summary>

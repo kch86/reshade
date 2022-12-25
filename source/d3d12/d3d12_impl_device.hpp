@@ -80,6 +80,11 @@ namespace reshade::d3d12
 		void set_resource_name(api::resource handle, const char *name) final;
 		void set_resource_view_name(api::resource_view, const char * ) final {}
 
+		void get_rt_acceleration_structure_prebuild_info(
+			const api::rt_build_acceleration_structure_inputs *pDesc,
+			api::rt_acceleration_structure_prebuild_info *pInfo
+		) final;
+
 		command_list_immediate_impl *get_first_immediate_command_list();
 
 #if RESHADE_ADDON && !RESHADE_ADDON_LITE

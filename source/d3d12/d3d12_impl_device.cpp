@@ -21,6 +21,39 @@ constexpr size_t heap_index_start = 28;
 constexpr size_t heap_index_start = 24;
 #endif
 
+namespace reshade::d3d12
+{
+	D3D12_ELEMENTS_LAYOUT to_native(api::rt_elements_layout layout)
+	{
+		return (D3D12_ELEMENTS_LAYOUT)layout;
+	}
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS to_native(api::rt_acceleration_structure_build_flags flags)
+	{
+		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS)flags;
+	}
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE to_native(api::rt_acceleration_structure_type type)
+	{
+		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE)type;
+	}
+
+	DXGI_FORMAT to_native(reshade::api::format value)
+	{
+		return static_cast<DXGI_FORMAT>(value);
+	}
+
+	D3D12_RAYTRACING_GEOMETRY_TYPE to_native(api::rt_geometry_type type)
+	{
+		return (D3D12_RAYTRACING_GEOMETRY_TYPE)type;
+	}
+
+	D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags)
+	{
+		return (D3D12_RAYTRACING_GEOMETRY_FLAGS)flags;
+	}
+}
+
 reshade::d3d12::device_impl::device_impl(ID3D12Device *device) :
 	api_object_impl(device),
 	_view_heaps {
@@ -1335,6 +1368,51 @@ void reshade::d3d12::device_impl::unregister_resource(ID3D12Resource *resource)
 			++it;
 	}
 #endif
+}
+
+void reshade::d3d12::device_impl::get_rt_acceleration_structure_prebuild_info(
+	const api::rt_build_acceleration_structure_inputs *pDesc,
+	api::rt_acceleration_structure_prebuild_info *pInfo)
+{
+	ID3D12Device5 *device5 = nullptr;
+	if (FAILED(_orig->QueryInterface(IID_PPV_ARGS(&device5))))
+	{
+		LOG_ERROR() << "get_rt_acceleration_structure_prebuild_info failed, no ID3D12Device5 available";
+		return;
+	}
+
+	temp_mem_dyn< D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(pDesc->NumDescs);
+	for (uint32_t i = 0; i < pDesc->NumDescs; i++)
+	{
+		//TODO: support different types
+
+		const api::rt_geometry_desc &desc = pDesc->pGeometryDescs[i];
+		const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
+
+		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+		geomDesc.Type = to_native(desc.Type);
+		geomDesc.Triangles.VertexBuffer.StartAddress = triangle.VertexBuffer.buffer.handle + triangle.VertexBuffer.offset;
+		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
+		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
+		geomDesc.Triangles.VertexCount = triangle.VertexCount;
+		geomDesc.Triangles.IndexBuffer = triangle.IndexBuffer.buffer.handle + triangle.IndexBuffer.offset;
+		geomDesc.Triangles.IndexCount = triangle.IndexCount;
+		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
+		geomDesc.Flags = to_native(desc.Flags);
+	}
+
+	// todo: support different layouts
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.DescsLayout = to_native(pDesc->DescsLayout);
+	inputs.Flags = to_native(pDesc->Flags);
+	inputs.NumDescs = pDesc->NumDescs;
+	inputs.pGeometryDescs = geomDescs;
+	inputs.Type = to_native(pDesc->Type);
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
+	device5->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+
+	*pInfo = *reinterpret_cast<api::rt_acceleration_structure_prebuild_info*>(&info);
 }
 
 reshade::d3d12::command_list_immediate_impl *reshade::d3d12::device_impl::get_first_immediate_command_list()
