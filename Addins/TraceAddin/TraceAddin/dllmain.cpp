@@ -14,8 +14,8 @@ using namespace reshade::api;
 
 namespace
 {
-	bool s_do_capture = true;
-	bool s_capture_continuous = true;
+	bool s_do_capture = false;
+	bool s_capture_continuous = false;
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
 	int ui_drawCallBegin = 0;
