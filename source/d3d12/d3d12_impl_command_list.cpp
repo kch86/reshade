@@ -20,6 +20,16 @@ void encode_pix3blob(UINT64(&pix3blob)[64], const char *label, const float color
 	pix3blob[63] = 0;
 }
 
+namespace reshade::d3d12
+{
+	extern D3D12_ELEMENTS_LAYOUT to_native(api::rt_elements_layout layout);
+	extern D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS to_native(api::rt_acceleration_structure_build_flags flags);
+	extern D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE to_native(api::rt_acceleration_structure_type type);
+	extern DXGI_FORMAT to_native(reshade::api::format value);
+	extern D3D12_RAYTRACING_GEOMETRY_TYPE to_native(api::rt_geometry_type type);
+	extern D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags);
+}
+
 reshade::d3d12::command_list_impl::command_list_impl(device_impl *device, ID3D12GraphicsCommandList *cmd_list) :
 	api_object_impl(cmd_list),
 	_device_impl(device)
@@ -975,4 +985,55 @@ void reshade::d3d12::command_list_impl::insert_debug_marker(const char *label, c
 	encode_pix3blob(pix3blob, label, color);
 	_orig->SetMarker(2, pix3blob, sizeof(pix3blob));
 #endif
+}
+
+void reshade::d3d12::command_list_impl::build_acceleration_structure(
+	api::rt_build_acceleration_structure_desc *desc,
+	uint32_t post_build_info_count,
+	api::rt_acceleration_structure_postbuild_info_desc *info_descs)
+{
+	ID3D12GraphicsCommandList4 *cmdlist;
+	if (FAILED(_orig->QueryInterface(IID_PPV_ARGS(&cmdlist))))
+	{
+		LOG_ERROR() << "build_acceleration_structure failed, no ID3D12GraphicsCommandList4 available";
+		return;
+	}
+
+	// TODO: move this to a shared func
+	temp_mem_dyn< D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
+	for (uint32_t i = 0; i < desc->Inputs.NumDescs; i++)
+	{
+		//TODO: support different types
+
+		const api::rt_geometry_desc &geom_desc = desc->Inputs.pGeometryDescs[i];
+		const api::rt_geometry_triangle_desc &triangle = geom_desc.Triangles;
+
+		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+		geomDesc.Type = to_native(geom_desc.Type);
+		geomDesc.Triangles.VertexBuffer.StartAddress = triangle.VertexBuffer.buffer.handle + triangle.VertexBuffer.offset;
+		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
+		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
+		geomDesc.Triangles.VertexCount = triangle.VertexCount;
+		geomDesc.Triangles.IndexBuffer = triangle.IndexBuffer.buffer.handle + triangle.IndexBuffer.offset;
+		geomDesc.Triangles.IndexCount = triangle.IndexCount;
+		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
+		geomDesc.Flags = to_native(geom_desc.Flags);
+	}
+
+	// todo: support different layouts
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.DescsLayout = to_native(desc->Inputs.DescsLayout);
+	inputs.Flags = to_native(desc->Inputs.Flags);
+	inputs.NumDescs = desc->Inputs.NumDescs;
+	inputs.pGeometryDescs = geomDescs;
+	inputs.Type = to_native(desc->Inputs.Type);
+
+	// Create the bottom-level AS
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
+	asDesc.Inputs = inputs;
+	asDesc.DestAccelerationStructureData = desc->DestData.buffer.handle + desc->DestData.offset;
+	asDesc.ScratchAccelerationStructureData = desc->ScratchData.buffer.handle + desc->ScratchData.offset;
+
+	// TODO: support the info descs
+	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
 }

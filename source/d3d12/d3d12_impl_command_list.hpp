@@ -68,6 +68,10 @@ namespace reshade::d3d12
 		void end_debug_event() final;
 		void insert_debug_marker(const char *label, const float color[4]) final;
 
+		void build_acceleration_structure(api::rt_build_acceleration_structure_desc *desc,
+			uint32_t post_build_info_count,
+			api::rt_acceleration_structure_postbuild_info_desc *info_descs) final;
+
 	protected:
 		device_impl *const _device_impl;
 		bool _has_commands = false;

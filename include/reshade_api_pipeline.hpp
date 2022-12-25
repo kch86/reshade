@@ -1094,10 +1094,10 @@ namespace reshade::api
 
 	struct rt_build_acceleration_structure_desc
 	{
-		resource DestData;
+		buffer_range DestData;
 		rt_build_acceleration_structure_inputs Inputs;
-		resource SourceData;
-		resource ScratchData;
+		buffer_range SourceData;
+		buffer_range ScratchData;
 	};
 
 	struct rt_acceleration_structure_prebuild_info
@@ -1117,7 +1117,7 @@ namespace reshade::api
 
 	struct rt_acceleration_structure_postbuild_info_desc
 	{
-		resource DestBuffer;
+		buffer_range DestBuffer;
 		rt_acceleration_structure_postbuild_info_type InfoType;
 	};
 }
