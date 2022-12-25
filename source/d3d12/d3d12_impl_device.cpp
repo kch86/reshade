@@ -52,6 +52,12 @@ namespace reshade::d3d12
 	{
 		return (D3D12_RAYTRACING_GEOMETRY_FLAGS)flags;
 	}
+
+	D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res)
+	{
+		ID3D12Resource *d3dres = reinterpret_cast<ID3D12Resource *>(res.handle);
+		return d3dres->GetGPUVirtualAddress();
+	}
 }
 
 reshade::d3d12::device_impl::device_impl(ID3D12Device *device) :
@@ -1391,11 +1397,11 @@ void reshade::d3d12::device_impl::get_rt_acceleration_structure_prebuild_info(
 
 		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
 		geomDesc.Type = to_native(desc.Type);
-		geomDesc.Triangles.VertexBuffer.StartAddress = triangle.VertexBuffer.buffer.handle + triangle.VertexBuffer.offset;
+		geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
 		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
 		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
 		geomDesc.Triangles.VertexCount = triangle.VertexCount;
-		geomDesc.Triangles.IndexBuffer = triangle.IndexBuffer.buffer.handle + triangle.IndexBuffer.offset;
+		geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
 		geomDesc.Triangles.IndexCount = triangle.IndexCount;
 		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
 		geomDesc.Flags = to_native(desc.Flags);
