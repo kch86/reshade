@@ -788,13 +788,14 @@ namespace reshade::api
 		/// Offset from the start of the buffer resource (in bytes).
 		/// </summary>
 		uint64_t offset = 0;
+
+		uint32_t stride = 0;
+
 		/// <summary>
 		/// Number of elements this range covers in the buffer resource (in bytes).
 		/// Set to -1 (UINT64_MAX) to indicate that the whole buffer should be used.
 		/// </summary>
 		uint64_t size = UINT64_MAX;
-
-		uint32_t stride = 0;
 	};
 
 	/// <summary>
@@ -1006,12 +1007,12 @@ namespace reshade::api
 
 	struct rt_geometry_triangle_desc
 	{
-		buffer_stride Transform3x4;
+		buffer_range Transform3x4;
 		format IndexFormat;
 		format VertexFormat;
 		uint32_t IndexCount;
 		uint32_t VertexCount;
-		buffer_stride IndexBuffer;
+		buffer_range IndexBuffer;
 		buffer_stride VertexBuffer;
 	};
 
