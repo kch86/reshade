@@ -341,7 +341,7 @@ AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12Grap
 	return buffers;
 }
 
-AsBuffers buildBvh(device* device9,
+scopedresource buildBvh(device* device9,
 				   command_list *cmdlist,
 				   command_queue *cmdqueue,
 				   const BvhBuildDesc &desc)
@@ -365,9 +365,11 @@ AsBuffers buildBvh(device* device9,
 	ID3D12GraphicsCommandList4 *nativeCmdlist4 = nullptr;
 	nativeCmdlist->QueryInterface(IID_PPV_ARGS(&nativeCmdlist4));
 
-	build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib);
+	ID3D12Resource* bvh = build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib).pResult;
 
-	return AsBuffers();
+	scopedresource res(device12, (resource)uint64_t(bvh));
+
+	return res;
 }
 
 scopedresource::~scopedresource()

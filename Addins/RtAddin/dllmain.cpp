@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <shared_mutex>
 #include <unordered_set>
+#include <vector>
 
 // dx12
 #include <d3d12.h>
@@ -49,6 +50,9 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
+	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
+	std::vector<scopedresource> s_bvhs;
+
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
 	VertexData s_currentVB;
@@ -220,6 +224,9 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 
 	assert(s_resources.find(handle.handle) == s_resources.end());
 	s_resources[handle.handle] = desc;
+
+	if(desc.usage == resource_usage::vertex_buffer)
+		s_needsBvhBuild[handle.handle] = true;
 }
 static void on_destroy_resource(device *device, resource handle)
 {
@@ -362,7 +369,14 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	};
 
-	buildBvh(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+	if (s_needsBvhBuild[s_currentVB.vb.handle])
+	{
+		scopedresource bvh = buildBvh(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+
+		s_bvhs.push_back(std::move(bvh));
+		s_needsBvhBuild[s_currentVB.vb.handle] = false;
+	}	
 
 	// should I reset the vb/ib data now?
 	// there could be multiple draws with the same vb/ib data

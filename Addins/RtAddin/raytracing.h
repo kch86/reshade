@@ -67,13 +67,7 @@ struct BvhBuildDesc
 	} ib;
 };
 
-struct AsBuffers
-{
-	ComPtr<ID3D12Resource> bvh;
-	ComPtr<ID3D12Resource> scratch;
-};
-
-AsBuffers buildBvh(reshade::api::device* d3d9On12Device,
+scopedresource buildBvh(reshade::api::device* d3d9On12Device,
 				   reshade::api::command_list *cmdlist,
 				   reshade::api::command_queue* cmdqueue,
 				   const BvhBuildDesc& desc);
