@@ -1,9 +1,12 @@
 nfs notes:
 todo:
-- get blas building working
 - get tlas building workinng
 - do I want to use kickStartRT? 
 -- all i have is final image....
+
+- if I want to support textures for d3d9on12, it looks like i'll have to do uploads to those textures myself
+-- the app was using managed_pool which seems to allow mapping
+-- I could create all the textures as dynamic I think
 
 vertex shader uniform structures:
 
