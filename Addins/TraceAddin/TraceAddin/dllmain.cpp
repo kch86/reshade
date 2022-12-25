@@ -232,11 +232,11 @@ namespace
 			s << "stream_output | ";
 		if( (usage & resource_usage::indirect_argument) != 0)
 			s << "indirect_argument | ";
-		if( (usage & resource_usage::depth_stencil|resource_usage::depth_stencil_read|resource_usage::depth_stencil_write) != 0)
+		if( (usage & (resource_usage::depth_stencil|resource_usage::depth_stencil_read|resource_usage::depth_stencil_write)) != 0)
 			s << "depth_stencil | ";
 		if( (usage & resource_usage::render_target) != 0)
 			s << "render_target | ";
-		if( (usage & resource_usage::shader_resource|resource_usage::shader_resource_pixel|resource_usage::shader_resource_non_pixel) != 0)
+		if( (usage & (resource_usage::shader_resource|resource_usage::shader_resource_pixel|resource_usage::shader_resource_non_pixel)) != 0)
 			s << "shader_resource | ";
 		if( (usage & resource_usage::unordered_access) != 0)
 			s << "unordered_access | ";
@@ -280,6 +280,241 @@ namespace
 		default:
 			return "unknown";
 		}
+	}
+	inline auto to_string(format fmt)
+	{
+		if (fmt == format::a8_unorm)
+			return "a8_unorm";
+		if (fmt == format::b10g10r10a2_typeless)
+			return "b10g10r10a2_typeless";
+		if (fmt == format::b10g10r10a2_uint)
+			return "b10g10r10a2_uint";
+		if (fmt == format::b10g10r10a2_unorm)
+			return "b10g10r10a2_unorm";
+		if (fmt == format::b4g4r4a4_unorm)
+			return "b4g4r4a4_unorm";
+		if (fmt == format::b5g5r5a1_unorm)
+			return "b5g5r5a1_unorm";
+		if (fmt == format::b5g5r5x1_unorm)
+			return "b5g5r5x1_unorm";
+		if (fmt == format::b5g6r5_unorm)
+			return "b5g6r5_unorm";
+		if (fmt == format::b8g8r8a8_typeless)
+			return "b8g8r8a8_typeless";
+		if (fmt == format::b8g8r8a8_unorm)
+			return "b8g8r8a8_unorm";
+		if (fmt == format::b8g8r8a8_unorm_srgb)
+			return "b8g8r8a8_unorm_srgb";
+		if (fmt == format::b8g8r8x8_typeless)
+			return "b8g8r8x8_typeless";
+		if (fmt == format::b8g8r8x8_unorm)
+			return "b8g8r8x8_unorm";
+		if (fmt == format::b8g8r8x8_unorm_srgb)
+			return "b8g8r8x8_unorm_srgb";
+		if (fmt == format::bc1_typeless)
+			return "bc1_typeless";
+		if (fmt == format::bc1_unorm)
+			return "bc1_unorm";
+		if (fmt == format::bc1_unorm_srgb)
+			return "bc1_unorm_srgb";
+		if (fmt == format::bc2_typeless)
+			return "bc2_typeless";
+		if (fmt == format::bc2_unorm)
+			return "bc2_unorm";
+		if (fmt == format::bc2_unorm_srgb)
+			return "bc2_unorm_srgb";
+		if (fmt == format::bc3_typeless)
+			return "bc3_typeless";
+		if (fmt == format::bc3_unorm)
+			return "bc3_unorm";
+		if (fmt == format::bc3_unorm_srgb)
+			return "bc3_unorm_srgb";
+		if (fmt == format::bc4_snorm)
+			return "bc4_snorm";
+		if (fmt == format::bc4_typeless)
+			return "bc4_typeless";
+		if (fmt == format::bc4_unorm)
+			return "bc4_unorm";
+		if (fmt == format::bc5_snorm)
+			return "bc5_snorm";
+		if (fmt == format::bc5_typeless)
+			return "bc5_typeless";
+		if (fmt == format::bc5_unorm)
+			return "bc5_unorm";
+		if (fmt == format::bc6h_sfloat)
+			return "bc6h_sfloat";
+		if (fmt == format::bc6h_typeless)
+			return "bc6h_typeless";
+		if (fmt == format::bc6h_ufloat)
+			return "bc6h_ufloat";
+		if (fmt == format::bc7_typeless)
+			return "bc7_typeless";
+		if (fmt == format::bc7_unorm)
+			return "bc7_unorm";
+		if (fmt == format::bc7_unorm_srgb)
+			return "bc7_unorm_srgb";
+		if (fmt == format::d16_unorm)
+			return "d16_unorm";
+		if (fmt == format::d16_unorm_s8_uint)
+			return "d16_unorm_s8_uint";
+		if (fmt == format::d24_unorm_s8_uint)
+			return "d24_unorm_s8_uint";
+		if (fmt == format::d24_unorm_x8_uint)
+			return "d24_unorm_x8_uint";
+		if (fmt == format::d32_float)
+			return "d32_float";
+		if (fmt == format::d32_float_s8_uint)
+			return "d32_float_s8_uint";
+		if (fmt == format::g8r8_g8b8_unorm)
+			return "g8r8_g8b8_unorm";
+		if (fmt == format::intz)
+			return "intz";
+		if (fmt == format::l16_unorm)
+			return "l16_unorm";
+		if (fmt == format::l16a16_unorm)
+			return "l16a16_unorm";
+		if (fmt == format::l8_unorm)
+			return "l8_unorm";
+		if (fmt == format::l8a8_unorm)
+			return "l8a8_unorm";
+		if (fmt == format::r10g10b10a2_typeless)
+			return "r10g10b10a2_typeless";
+		if (fmt == format::r10g10b10a2_uint)
+			return "r10g10b10a2_uint";
+		if (fmt == format::r10g10b10a2_unorm)
+			return "r10g10b10a2_unorm";
+		if (fmt == format::r10g10b10a2_xr_bias)
+			return "r10g10b10a2_xr_bias";
+		if (fmt == format::r11g11b10_float)
+			return "r11g11b10_float";
+		if (fmt == format::r16_float)
+			return "r16_float";
+		if (fmt == format::r16_sint)
+			return "r16_sint";
+		if (fmt == format::r16_snorm)
+			return "r16_snorm";
+		if (fmt == format::r16_typeless)
+			return "r16_typeless";
+		if (fmt == format::r16_uint)
+			return "r16_uint";
+		if (fmt == format::r16_unorm)
+			return "r16_unorm";
+		if (fmt == format::r16g16_float)
+			return "r16g16_float";
+		if (fmt == format::r16g16_sint)
+			return "r16g16_sint";
+		if (fmt == format::r16g16_snorm)
+			return "r16g16_snorm";
+		if (fmt == format::r16g16_typeless)
+			return "r16g16_typeless";
+		if (fmt == format::r16g16_uint)
+			return "r16g16_uint";
+		if (fmt == format::r16g16_unorm)
+			return "r16g16_unorm";
+		if (fmt == format::r16g16b16a16_float)
+			return "r16g16b16a16_float";
+		if (fmt == format::r16g16b16a16_sint)
+			return "r16g16b16a16_sint";
+		if (fmt == format::r16g16b16a16_snorm)
+			return "r16g16b16a16_snorm";
+		if (fmt == format::r16g16b16a16_typeless)
+			return "r16g16b16a16_typeless";
+		if (fmt == format::r16g16b16a16_uint)
+			return "r16g16b16a16_uint";
+		if (fmt == format::r16g16b16a16_unorm)
+			return "r16g16b16a16_unorm";
+		if (fmt == format::r1_unorm)
+			return "r1_unorm";
+		if (fmt == format::r24_g8_typeless)
+			return "r24_g8_typeless";
+		if (fmt == format::r24_unorm_x8_uint)
+			return "r24_unorm_x8_uint";
+		if (fmt == format::r32_float)
+			return "r32_float";
+		if (fmt == format::r32_float_x8_uint)
+			return "r32_float_x8_uint";
+		if (fmt == format::r32_g8_typeless)
+			return "r32_g8_typeless";
+		if (fmt == format::r32_sint)
+			return "r32_sint";
+		if (fmt == format::r32_typeless)
+			return "r32_typeless";
+		if (fmt == format::r32_uint)
+			return "r32_uint";
+		if (fmt == format::r32g32_float)
+			return "r32g32_float";
+		if (fmt == format::r32g32_sint)
+			return "r32g32_sint";
+		if (fmt == format::r32g32_typeless)
+			return "r32g32_typeless";
+		if (fmt == format::r32g32_uint)
+			return "r32g32_uint";
+		if (fmt == format::r32g32b32_float)
+			return "r32g32b32_float";
+		if (fmt == format::r32g32b32_sint)
+			return "r32g32b32_sint";
+		if (fmt == format::r32g32b32_typeless)
+			return "r32g32b32_typeless";
+		if (fmt == format::r32g32b32_uint)
+			return "r32g32b32_uint";
+		if (fmt == format::r32g32b32a32_float)
+			return "r32g32b32a32_float";
+		if (fmt == format::r32g32b32a32_sint)
+			return "r32g32b32a32_sint";
+		if (fmt == format::r32g32b32a32_typeless)
+			return "r32g32b32a32_typeless";
+		if (fmt == format::r32g32b32a32_uint)
+			return "r32g32b32a32_uint";
+		if (fmt == format::r8_sint)
+			return "r8_sint";
+		if (fmt == format::r8_snorm)
+			return "r8_snorm";
+		if (fmt == format::r8_typeless)
+			return "r8_typeless";
+		if (fmt == format::r8_uint)
+			return "r8_uint";
+		if (fmt == format::r8_unorm)
+			return "r8_unorm";
+		if (fmt == format::r8g8_b8g8_unorm)
+			return "r8g8_b8g8_unorm";
+		if (fmt == format::r8g8_sint)
+			return "r8g8_sint";
+		if (fmt == format::r8g8_snorm)
+			return "r8g8_snorm";
+		if (fmt == format::r8g8_typeless)
+			return "r8g8_typeless";
+		if (fmt == format::r8g8_uint)
+			return "r8g8_uint";
+		if (fmt == format::r8g8_unorm)
+			return "r8g8_unorm";
+		if (fmt == format::r8g8b8a8_sint)
+			return "r8g8b8a8_sint";
+		if (fmt == format::r8g8b8a8_snorm)
+			return "r8g8b8a8_snorm";
+		if (fmt == format::r8g8b8a8_typeless)
+			return "r8g8b8a8_typeless";
+		if (fmt == format::r8g8b8a8_uint)
+			return "r8g8b8a8_uint";
+		if (fmt == format::r8g8b8a8_unorm)
+			return "r8g8b8a8_unorm";
+		if (fmt == format::r8g8b8a8_unorm_srgb)
+			return "r8g8b8a8_unorm_srgb";
+		if (fmt == format::r8g8b8x8_typeless)
+			return "r8g8b8x8_typeless";
+		if (fmt == format::r8g8b8x8_unorm)
+			return "r8g8b8x8_unorm";
+		if (fmt == format::r8g8b8x8_unorm_srgb)
+			return "r8g8b8x8_unorm_srgb";
+		if (fmt == format::r9g9b9e5)
+			return "r9g9b9e5";
+		if (fmt == format::s8_uint)
+			return "s8_uint";
+		if (fmt == format::x24_unorm_g8_uint)
+			return "x24_unorm_g8_uint";
+		if (fmt == format::x32_float_g8_uint)
+			return "x32_float_g8_uint";
+
+		return "unkown";
 	}
 }
 
@@ -335,6 +570,10 @@ static bool on_create_resource(device *device, resource_desc& desc, subresource_
 {
 	std::stringstream s;
 	s << "on_create_resource: type: " << to_string(desc.type) << ", usage: " << to_string(desc.usage);
+	if (desc.type == resource_type::texture_2d)
+	{
+		s << ", format: " << to_string(desc.texture.format);
+	}
 	reshade::log_message(3, s.str().c_str());
 
 	return false;
