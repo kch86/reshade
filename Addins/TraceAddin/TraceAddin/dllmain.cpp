@@ -1042,6 +1042,13 @@ static bool on_resolve_texture_region(command_list *, resource src, uint32_t src
 
 	return false;
 }
+static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
+{
+	std::stringstream s;
+	s << "map_texture_region(" << (void *)resource.handle << ", " << subresource << ")";
+
+	reshade::log_message(3, s.str().c_str());
+}
 
 static bool on_clear_depth_stencil_view(command_list *, resource_view dsv, const float *depth, const uint8_t *stencil, uint32_t, const rect *)
 {
@@ -1262,6 +1269,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::copy_buffer_to_texture>(on_copy_buffer_to_texture);
 		reshade::register_event<reshade::addon_event::copy_texture_region>(on_copy_texture_region);
 		reshade::register_event<reshade::addon_event::copy_texture_to_buffer>(on_copy_texture_to_buffer);
+		reshade::register_event<reshade::addon_event::map_texture_region>(on_map_texture_region);
 		reshade::register_event<reshade::addon_event::resolve_texture_region>(on_resolve_texture_region);
 		reshade::register_event<reshade::addon_event::clear_depth_stencil_view>(on_clear_depth_stencil_view);
 		reshade::register_event<reshade::addon_event::clear_render_target_view>(on_clear_render_target_view);
