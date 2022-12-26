@@ -7,6 +7,8 @@ todo:
 - if I want to support textures for d3d9on12, it looks like i'll have to do uploads to those textures myself
 -- the app was using managed_pool which seems to allow mapping
 -- I could create all the textures as dynamic I think
+-- dynamic works with unwrapping... but it seems the textures aren't swizzled correctly...
+-- copy the device_imple update_texture_region (create temp texture ondemand)
 
 vertex shader uniform structures:
 
