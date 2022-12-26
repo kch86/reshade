@@ -1000,6 +1000,8 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 		return;
 	}
 
+	_has_commands = true;
+
 	// TODO: move this to a shared func
 	temp_mem_dyn< D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
 	for (uint32_t i = 0; i < desc->Inputs.NumDescs; i++)
