@@ -469,8 +469,11 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 	{
 		if (Pool == D3DPOOL_MANAGED)
 		{
-			Pool = D3DPOOL_DEFAULT;
-			Usage |= D3DUSAGE_DYNAMIC;
+			if ((Usage & D3DUSAGE_RENDERTARGET) != 0)
+			{
+				Pool = D3DPOOL_DEFAULT;
+			}
+				//Usage |= D3DUSAGE_DYNAMIC;
 		}
 	}
 
@@ -493,18 +496,21 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 
 
 #if 0
-		ID3D12CommandQueue *d3d12queue = nullptr;
-		uint64_t handle;
-		get_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), &handle);
-		d3d12queue = (D3D12CommandQueue *)handle;
-
-		IDirect3DDevice9On12 *d3d9on12 = this->_d3d9on12_device->_orig;
-		ID3D12Resource *d3d12res = nullptr;
-		HRESULT hres = d3d9on12->UnwrapUnderlyingResource(resource, d3d12queue, IID_PPV_ARGS(&d3d12res));
-		if (FAILED(hres))
+		if ((Usage & D3DUSAGE_RENDERTARGET) != 0)
 		{
-			LOG_ERROR() << "failed to unwrap resource";
-		}
+			ID3D12CommandQueue *d3d12queue = nullptr;
+			uint64_t handle;
+			get_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), &handle);
+			d3d12queue = (D3D12CommandQueue *)handle;
+
+			IDirect3DDevice9On12 *d3d9on12 = this->_d3d9on12_device->_orig;
+			ID3D12Resource *d3d12res = nullptr;
+			HRESULT hres = d3d9on12->UnwrapUnderlyingResource(resource, d3d12queue, IID_PPV_ARGS(&d3d12res));
+			if (FAILED(hres))
+			{
+				LOG_ERROR() << "failed to unwrap resource";
+			}
+		}		
 #endif
 
 #  if !RESHADE_ADDON_LITE
