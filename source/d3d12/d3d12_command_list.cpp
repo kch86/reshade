@@ -1017,6 +1017,16 @@ void STDMETHODCALLTYPE D3D12GraphicsCommandList::BuildRaytracingAccelerationStru
 {
 	assert(_interface_version >= 4);
 	static_cast<ID3D12GraphicsCommandList4 *>(_orig)->BuildRaytracingAccelerationStructure(pDesc, NumPostbuildInfoDescs, pPostbuildInfoDescs);
+
+#if RESHADE_ADDON && !RESHADE_ADDON_LITE
+	reshade::api::buffer_range buffer_range;
+	if (!_device_impl->resolve_gpu_address(pDesc->DestAccelerationStructureData, &buffer_range))
+		return;
+
+	reshade::invoke_addon_event<reshade::addon_event::build_acceleration_structure>(
+		this,
+		buffer_range);
+#endif
 }
 void STDMETHODCALLTYPE D3D12GraphicsCommandList::EmitRaytracingAccelerationStructurePostbuildInfo(const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC *pDesc, UINT NumSourceAccelerationStructures, const D3D12_GPU_VIRTUAL_ADDRESS *pSourceAccelerationStructureData)
 {

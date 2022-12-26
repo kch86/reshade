@@ -1041,4 +1041,15 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 	(void)post_build_info_count;
 	(void)info_descs;
 	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+
+
+#if RESHADE_ADDON && !RESHADE_ADDON_LITE
+	reshade::api::buffer_range buffer_range;
+	if (!_device_impl->resolve_gpu_address(asDesc.DestAccelerationStructureData, &buffer_range))
+		return;
+
+	reshade::invoke_addon_event<reshade::addon_event::build_acceleration_structure>(
+		this,
+		buffer_range);
+#endif
 }
