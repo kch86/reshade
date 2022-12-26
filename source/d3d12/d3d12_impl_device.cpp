@@ -1441,6 +1441,24 @@ bool reshade::d3d12::device_impl::resolve_gpu_address(D3D12_GPU_VIRTUAL_ADDRESS 
 	*out_offset = 0;
 	*out_resource = { 0 };
 
+	api::buffer_range out_range;
+	if (resolve_gpu_address(address, &out_range))
+	{
+		*out_offset = out_range.offset;
+		*out_resource = out_range.buffer;
+
+		return true;
+	}
+
+	return false;
+}
+
+bool reshade::d3d12::device_impl::resolve_gpu_address(D3D12_GPU_VIRTUAL_ADDRESS address, api::buffer_range *out_buffer_range) const
+{
+	assert(out_buffer_range != nullptr);
+
+	*out_buffer_range = {};
+
 	if (!address)
 		return true;
 
@@ -1455,8 +1473,9 @@ bool reshade::d3d12::device_impl::resolve_gpu_address(D3D12_GPU_VIRTUAL_ADDRESS 
 		if (address_offset >= buffer_info.second.SizeInBytes)
 			continue;
 
-		*out_offset = address_offset;
-		*out_resource = to_handle(buffer_info.first);
+		out_buffer_range->buffer = to_handle(buffer_info.first);
+		out_buffer_range->offset = address_offset;
+		out_buffer_range->size = buffer_info.second.SizeInBytes;
 		return true;
 	}
 
