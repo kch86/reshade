@@ -1201,6 +1201,14 @@ static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, 
 	return false;
 }
 
+static void on_build_acceleration_structure(command_list *cmd_list, const buffer_range &buffer)
+{
+	std::stringstream s;
+	s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ")";
+
+	reshade::log_message(3, s.str().c_str());
+}
+
 static void on_present(effect_runtime *runtime)
 {
 	if (s_do_capture)
@@ -1289,6 +1297,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::begin_query>(on_begin_query);
 		reshade::register_event<reshade::addon_event::end_query>(on_end_query);
 		reshade::register_event<reshade::addon_event::copy_query_pool_results>(on_copy_query_pool_results);
+		reshade::register_event<reshade::addon_event::build_acceleration_structure>(on_build_acceleration_structure);
 
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_overlay(nullptr, draw_ui);
