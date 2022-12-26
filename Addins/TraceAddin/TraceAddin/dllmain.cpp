@@ -14,8 +14,8 @@ using namespace reshade::api;
 
 namespace
 {
-	bool s_do_capture = false;
 	bool s_capture_continuous = false;
+	bool s_do_capture = s_capture_continuous;
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
 	int ui_drawCallBegin = 0;
@@ -1054,6 +1054,9 @@ static bool on_resolve_texture_region(command_list *, resource src, uint32_t src
 }
 static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
 {
+	if (!do_capture())
+		return;
+
 	std::stringstream s;
 	s << "map_texture_region(" << (void *)resource.handle << ", " << subresource << ")";
 
@@ -1203,6 +1206,9 @@ static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, 
 
 static void on_build_acceleration_structure(command_list *cmd_list, const buffer_range &buffer)
 {
+	/*if (!do_capture())
+		return;*/
+
 	std::stringstream s;
 	s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ")";
 
