@@ -458,11 +458,16 @@ void getHardwareAdapter(
 
 std::pair<ComPtr<ID3D12Device>, ComPtr<ID3D12CommandQueue>> createDevice()
 {
-	ComPtr<ID3D12Debug> debugController;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+	ini_file &config = reshade::global_config();
+	if (config.get("APP", "EnableGraphicsDebugLayer"))
 	{
-		debugController->EnableDebugLayer();
+		ComPtr<ID3D12Debug> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+		{
+			debugController->EnableDebugLayer();				
+		}
 	}
+	
 	ComPtr<IDXGIFactory4> factory;
 	HRESULT hr1(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
 	assert(SUCCEEDED(hr1));
@@ -477,6 +482,17 @@ std::pair<ComPtr<ID3D12Device>, ComPtr<ID3D12CommandQueue>> createDevice()
 		IID_PPV_ARGS(&device)
 	));
 	assert(SUCCEEDED(hr2));
+
+	if (config.get("APP", "EnableGraphicsDebugLayerBreakOnError"))
+	{
+		ID3D12InfoQueue *d3dInfoQueue = nullptr;
+		if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&d3dInfoQueue))))
+		{
+			d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+			d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+			d3dInfoQueue->SetBreakOnID(D3D12_MESSAGE_ID_REFLECTSHAREDPROPERTIES_INVALIDOBJECT, false);
+		}
+	}
 
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
