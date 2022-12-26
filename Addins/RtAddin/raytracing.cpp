@@ -1,5 +1,6 @@
 #include "dxhelpers.h"
 
+#include <shared_mutex>
 #include <reshade.hpp>
 #include <d3d9/d3d9_device.hpp>
 #include <d3d9/d3d9on12_device.hpp>
@@ -219,6 +220,43 @@ void testCompilePso(device *device)
 	g_createPso = false;
 }
 
+struct DeferDeleteData
+{
+	std::vector<std::pair<device*, resource>> todelete;
+};
+
+constexpr uint32_t MaxDeferredFrames = 4;
+static DeferDeleteData s_frameDeleteData[MaxDeferredFrames];
+static uint32_t s_frameIndex = 0;
+static std::shared_mutex s_mutex;
+
+void doDeferredDeletes()
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	// delete oldest frame
+	const uint32_t index = s_frameIndex % MaxDeferredFrames;
+	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
+
+	for (auto &pair : s_frameDeleteData[deleteIndex].todelete)
+	{
+		device *device = pair.first;
+		device->destroy_resource(pair.second);
+	}
+	s_frameDeleteData[deleteIndex].todelete.clear();
+
+	s_frameIndex++;
+}
+
+void deferDestroyResource(device* device, resource res)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	const uint32_t index = s_frameIndex % MaxDeferredFrames;
+
+	s_frameDeleteData[index].todelete.push_back({ device,res });
+}
+
 inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
 {
 #if 0
@@ -412,13 +450,8 @@ scopedresource buildBvh(device* device9,
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
-	/*D3D12_RESOURCE_BARRIER uavBarrier = {};
-	uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-	uavBarrier.UAV.pResource = buffers.pResult;
-	pCmdList->ResourceBarrier(1, &uavBarrier);*/
+	cmdlist->barrier({ 0 }, resource_usage::unordered_access, resource_usage::unordered_access);
 
-	//scratch will go out of scope here, prevent auto-deletion
-	scratch.handle = 0;
 #endif
 
 	return res;
@@ -426,9 +459,8 @@ scopedresource buildBvh(device* device9,
 
 scopedresource::~scopedresource()
 {
-	// TODO: put this into a deferred queue
 	if (handle)
 	{
-		_device->destroy_resource(*this);
+		deferDestroyResource(_device, *this);
 	}
 }

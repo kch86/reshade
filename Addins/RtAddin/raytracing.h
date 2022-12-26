@@ -11,6 +11,8 @@ namespace reshade::api
 	enum class format : uint32_t;
 }
 
+void doDeferredDeletes();
+
 struct scopedresource : public reshade::api::resource
 {
 	using base = reshade::api::resource;

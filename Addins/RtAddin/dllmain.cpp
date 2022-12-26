@@ -389,6 +389,9 @@ static void on_present(effect_runtime *runtime)
 	auto &dev_data = device->get_private_data<device_data>();
 
 	dev_data.hasRenderedThisFrame = false;
+	s_d3d12cmdqueue->flush_immediate_command_list();
+
+	doDeferredDeletes();
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
