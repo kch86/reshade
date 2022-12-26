@@ -257,32 +257,6 @@ void deferDestroyResource(device* device, resource res)
 	s_frameDeleteData[index].todelete.push_back({ device,res });
 }
 
-inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
-{
-#if 0
-	auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	ThrowIfFailed(pDevice->CreateCommittedResource(
-		&uploadHeapProperties,
-		D3D12_HEAP_FLAG_NONE,
-		&bufferDesc,
-		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-		nullptr,
-		IID_PPV_ARGS(ppResource)));
-	if (resourceName)
-	{
-		(*ppResource)->SetName(resourceName);
-	}
-#else
-	resource_desc desc(bufferSize, memory_heap::gpu_only, resource_usage::unordered_access);
-
-	resource res;
-	ThrowIfFailed(d->create_resource(desc, nullptr, resource_usage::unordered_access, &res));
-
-	return scopedresource(d, res);
-#endif
-}
-
 resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)
 {
 	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
@@ -305,8 +279,17 @@ struct AccelerationStructureBuffers
 	ID3D12Resource* pInstanceDesc;    // Used only for top-level AS
 };
 
-ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES initState, const D3D12_HEAP_PROPERTIES &heapProps)
+ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES initState)
 {
+	static const D3D12_HEAP_PROPERTIES kDefaultHeapProps =
+	{
+		D3D12_HEAP_TYPE_DEFAULT,
+		D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+		D3D12_MEMORY_POOL_UNKNOWN,
+		0,
+		0
+	};
+
 	D3D12_RESOURCE_DESC bufDesc = {};
 	bufDesc.Alignment = 0;
 	bufDesc.DepthOrArraySize = 1;
@@ -320,22 +303,48 @@ ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOUR
 	bufDesc.SampleDesc.Quality = 0;
 	bufDesc.Width = size;
 
-	ID3D12Resource* pBuffer;
-	ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, initState, nullptr, IID_PPV_ARGS(&pBuffer)));
+	ID3D12Resource *pBuffer;
+	ThrowIfFailed(pDevice->CreateCommittedResource(&kDefaultHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, initState, nullptr, IID_PPV_ARGS(&pBuffer)));
 	return pBuffer;
+}
+
+inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
+{
+#if 0
+	auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	ThrowIfFailed(pDevice->CreateCommittedResource(
+		&uploadHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferDesc,
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		nullptr,
+		IID_PPV_ARGS(ppResource)));
+	if (resourceName)
+	{
+		(*ppResource)->SetName(resourceName);
+	}
+#elif 0
+	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(d->get_native());
+
+	ID3D12Device5 *nativeDevice5 = nullptr;
+	nativeDevice->QueryInterface(IID_PPV_ARGS(&nativeDevice5));
+	ID3D12Resource *native = createBuffer(nativeDevice5, bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+	return std::move(scopedresource(d, { (uint64_t)native }));
+
+#else
+	resource_desc desc(bufferSize, memory_heap::gpu_only, resource_usage::unordered_access);
+
+	resource res;
+	ThrowIfFailed(d->create_resource(desc, nullptr, resource_usage::unordered_access, &res));
+
+	return scopedresource(d, res);
+#endif
 }
 
 AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12GraphicsCommandList4* pCmdList, const BvhBuildDesc &desc, ID3D12Resource* vb, ID3D12Resource* ib)
 {
-	static const D3D12_HEAP_PROPERTIES kDefaultHeapProps =
-	{
-		D3D12_HEAP_TYPE_DEFAULT,
-		D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-		D3D12_MEMORY_POOL_UNKNOWN,
-		0,
-		0
-	};
-
 	D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
 	geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
 	geomDesc.Triangles.VertexBuffer.StartAddress = vb->GetGPUVirtualAddress() + desc.vb.offset;
@@ -360,8 +369,8 @@ AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12Grap
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
 	AccelerationStructureBuffers buffers;
-	buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, kDefaultHeapProps);
-	buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, kDefaultHeapProps);
+	buffers.pScratch = createBuffer(pDevice, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	buffers.pResult = createBuffer(pDevice, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
 	// Create the bottom-level AS
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
@@ -405,9 +414,11 @@ scopedresource buildBvh(device* device9,
 	ID3D12GraphicsCommandList4 *nativeCmdlist4 = nullptr;
 	nativeCmdlist->QueryInterface(IID_PPV_ARGS(&nativeCmdlist4));
 
-	ID3D12Resource* bvh = build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib).pResult;
+	ID3D12Resource* nativebvh = build_bvh_native(nativeDevice5, nativeCmdlist4, desc, vb, ib).pResult;
 
-	scopedresource res(device12, (resource)uint64_t(bvh));
+	cmdqueue->flush_immediate_command_list();
+
+	scopedresource bvh(device12, (resource)uint64_t(nativebvh));
 #else
 	rt_geometry_desc geomDesc = {};
 	geomDesc.Type = rt_geometry_type::triangles;
@@ -438,23 +449,38 @@ scopedresource buildBvh(device* device9,
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
-	scopedresource res = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
+	//scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
+	//scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
+
+	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(device12->get_native());
+
+	ID3D12Device5 *nativeDevice5 = nullptr;
+	nativeDevice->QueryInterface(IID_PPV_ARGS(&nativeDevice5));
+	ID3D12Resource* scratch_native = createBuffer(nativeDevice5, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	ID3D12Resource *bvh_native = createBuffer(nativeDevice5, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+
+	scopedresource scratch(device12, { (uint64_t)scratch_native });
+	scopedresource bvh(device12, { (uint64_t)bvh_native });
 
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
 	asDesc.Inputs = inputs;
-	asDesc.DestData = { .buffer = res };
+	asDesc.DestData = { .buffer = bvh };
 	asDesc.ScratchData = { .buffer = scratch };
 
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
-	cmdlist->barrier({ 0 }, resource_usage::unordered_access, resource_usage::unordered_access);
+	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
+	cmdqueue->flush_immediate_command_list();
+
+	//leak resources
+	//scratch.handle = 0;
+	//bvh.handle = 0;
 
 #endif
 
-	return res;
+	return bvh;
 }
 
 scopedresource::~scopedresource()
