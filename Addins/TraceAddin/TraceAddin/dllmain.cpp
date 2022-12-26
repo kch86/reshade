@@ -105,7 +105,7 @@ namespace
 			return "unknown";
 		}
 	}
-	inline auto to_string(resource_type type)
+	inline auto to_string(resource_type type, int count)
 	{
 		switch (type)
 		{
@@ -114,6 +114,8 @@ namespace
 		case resource_type::texture_1d:
 			return "texture1d";
 		case resource_type::texture_2d:
+			if (count > 1)
+				return "textureCube";
 			return "texture2d";
 		case resource_type::texture_3d:
 			return "texture3d";
@@ -569,7 +571,7 @@ static void on_destroy_sampler(device *device, sampler handle)
 static bool on_create_resource(device *device, resource_desc& desc, subresource_data *initial_data, resource_usage initial_state)
 {
 	std::stringstream s;
-	s << "on_create_resource: type: " << to_string(desc.type) << ", usage: " << to_string(desc.usage);
+	s << "on_create_resource: type: " << to_string(desc.type, desc.texture.depth_or_layers) << ", usage: " << to_string(desc.usage);
 	if (desc.type == resource_type::texture_2d)
 	{
 		s << ", format: " << to_string(desc.texture.format);
@@ -581,6 +583,14 @@ static bool on_create_resource(device *device, resource_desc& desc, subresource_
 static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage, resource handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	std::stringstream s;
+	s << "on_init_resource: " << (void*)handle.handle << ", type: " << to_string(desc.type, desc.texture.depth_or_layers) << ", usage : " << to_string(desc.usage);
+	if (desc.type == resource_type::texture_2d)
+	{
+		s << ", format: " << to_string(desc.texture.format);
+	}
+	reshade::log_message(3, s.str().c_str());
 
 	s_resources.emplace(handle.handle);
 }
