@@ -310,37 +310,12 @@ ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOUR
 
 inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
 {
-#if 0
-	auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	ThrowIfFailed(pDevice->CreateCommittedResource(
-		&uploadHeapProperties,
-		D3D12_HEAP_FLAG_NONE,
-		&bufferDesc,
-		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-		nullptr,
-		IID_PPV_ARGS(ppResource)));
-	if (resourceName)
-	{
-		(*ppResource)->SetName(resourceName);
-	}
-#elif 0
-	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(d->get_native());
-
-	ID3D12Device5 *nativeDevice5 = nullptr;
-	nativeDevice->QueryInterface(IID_PPV_ARGS(&nativeDevice5));
-	ID3D12Resource *native = createBuffer(nativeDevice5, bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-	return std::move(scopedresource(d, { (uint64_t)native }));
-
-#else
 	resource_desc desc(bufferSize, memory_heap::gpu_only, resource_usage::unordered_access);
 
 	resource res;
 	ThrowIfFailed(d->create_resource(desc, nullptr, resource_usage::unordered_access, &res));
 
 	return scopedresource(d, res);
-#endif
 }
 
 AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12GraphicsCommandList4* pCmdList, const BvhBuildDesc &desc, ID3D12Resource* vb, ID3D12Resource* ib)
@@ -449,18 +424,8 @@ scopedresource buildBvh(device* device9,
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-	//scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
-	//scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
-
-	ID3D12Device *nativeDevice = reinterpret_cast<ID3D12Device *>(device12->get_native());
-
-	ID3D12Device5 *nativeDevice5 = nullptr;
-	nativeDevice->QueryInterface(IID_PPV_ARGS(&nativeDevice5));
-	ID3D12Resource* scratch_native = createBuffer(nativeDevice5, info.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	ID3D12Resource *bvh_native = createBuffer(nativeDevice5, info.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-
-	scopedresource scratch(device12, { (uint64_t)scratch_native });
-	scopedresource bvh(device12, { (uint64_t)bvh_native });
+	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
+	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
 
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
@@ -473,10 +438,6 @@ scopedresource buildBvh(device* device9,
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
 	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
 	cmdqueue->flush_immediate_command_list();
-
-	//leak resources
-	//scratch.handle = 0;
-	//bvh.handle = 0;
 
 #endif
 
