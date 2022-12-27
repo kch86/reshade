@@ -14,6 +14,7 @@ struct temp_mem
 {
 	explicit temp_mem(size_t elements = STACK_ELEMENTS)
 	{
+		count = elements;
 		if (elements > STACK_ELEMENTS)
 			p = new T[elements];
 		else
@@ -28,38 +29,14 @@ struct temp_mem
 	T &operator[](size_t element)
 	{
 		assert(element < STACK_ELEMENTS || p != stack);
+		assert(element < count);
 
 		return p[element];
 	}
 
-	T *p, stack[STACK_ELEMENTS];
-};
-
-template <typename T, size_t STACK_ELEMENTS = 16>
-struct temp_mem_dyn
-{
-	explicit temp_mem_dyn(size_t elements)
+	T &operator[](int element)
 	{
-		count = elements;
-		if (count > STACK_ELEMENTS)
-		{
-			p = new T[count];
-			stackalloc = false;
-		}
-		else
-		{
-			p = new(_malloca(sizeof(T) * count)) T[count];
-		}
-			
-	}
-	~temp_mem_dyn()
-	{
-		if (p && !stackalloc)
-			delete[] p;
-	}
-
-	T &operator[](size_t element)
-	{
+		assert(element < STACK_ELEMENTS || p != stack);
 		assert(element < count);
 
 		return p[element];
@@ -70,13 +47,12 @@ struct temp_mem_dyn
 		return p;
 	}
 
-	operator T*() const
+	operator T *() const
 	{
 		return p;
 	}
 
-	T *p;
-	bool stackalloc = true;
+	T *p, stack[STACK_ELEMENTS];
 	uint32_t count;
 };
 
