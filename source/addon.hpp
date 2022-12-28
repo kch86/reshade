@@ -37,7 +37,7 @@ struct temp_mem
 	T &operator[](int element)
 	{
 		assert(element < STACK_ELEMENTS || p != stack);
-		assert(element < count);
+		assert(element < (size_t)count);
 
 		return p[element];
 	}
@@ -54,6 +54,39 @@ struct temp_mem
 
 	T *p, stack[STACK_ELEMENTS];
 	uint32_t count;
+};
+
+template <typename T>
+struct span
+{
+	span(T *ptr, uint32_t count)
+		: _ptr(ptr)
+		, _count(count)
+	{
+
+	}
+
+	span(T *begin, T* end)
+		: _ptr(begin)
+		, _count(end - begin)
+	{
+
+	}
+
+	T *data() const { return _ptr; }
+	T *data() { return _ptr;  }
+
+	uint32_t size() const { return _count; }
+
+	T &operator[](uint32_t idx)
+	{
+		assert(idx < _count);
+		return *(_ptr + idx);
+	};
+
+private:
+	T *_ptr = nullptr;
+	uint32_t _count = 0;
 };
 
 namespace reshade::api
