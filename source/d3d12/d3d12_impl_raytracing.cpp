@@ -48,28 +48,38 @@ namespace reshade::d3d12
 auto reshade::d3d12::convert_rt_build_inputs(const api::rt_build_acceleration_structure_inputs &input,
 	span<D3D12_RAYTRACING_GEOMETRY_DESC> geom_desc_storage) -> D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS
 {
+	assert(geom_desc_storage.size() == input.NumDescs);
 	for (uint32_t i = 0; i < input.NumDescs; i++)
 	{
-		//TODO: support different types
-
 		const api::rt_geometry_desc &desc = input.pGeometryDescs[i];
-		const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
 
 		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+		if (desc.Type == api::rt_geometry_type::procedural)
+		{
+			const api::rt_geometry_aabb_desc &aabb = desc.AABBs;
+			geomDesc.AABBs.AABBCount = aabb.AABBCount;
+			geomDesc.AABBs.AABBs.StartAddress = to_native_gpu(aabb.AABBs.buffer) + aabb.AABBs.offset;
+			geomDesc.AABBs.AABBs.StrideInBytes = aabb.AABBs.stride;
+		}
+		else
+		{
+			const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
+			geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
+			geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
+			geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
+			geomDesc.Triangles.VertexCount = triangle.VertexCount;
+			geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
+			geomDesc.Triangles.IndexCount = triangle.IndexCount;
+			geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
+		}
+
 		geomDesc.Type = to_native(desc.Type);
-		geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
-		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
-		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
-		geomDesc.Triangles.VertexCount = triangle.VertexCount;
-		geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
-		geomDesc.Triangles.IndexCount = triangle.IndexCount;
-		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
 		geomDesc.Flags = to_native(desc.Flags);
 
 		geom_desc_storage[i] = geomDesc;
 	}
 
-	// todo: support different layouts
+	// todo: support different layouts?
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.DescsLayout = to_native(input.DescsLayout);
 	inputs.Flags = to_native(input.Flags);

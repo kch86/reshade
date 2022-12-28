@@ -1029,7 +1029,7 @@ namespace reshade::api
 	struct rt_geometry_aabb_desc
 	{
 		uint64_t AABBCount;
-		resource AABBs;
+		buffer_stride AABBs;
 	};
 
 	enum class rt_geometry_type : uint32_t
