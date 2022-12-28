@@ -71,6 +71,7 @@ auto reshade::d3d12::convert_rt_build_inputs(const api::rt_build_acceleration_st
 			geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
 			geomDesc.Triangles.IndexCount = triangle.IndexCount;
 			geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
+			geomDesc.Triangles.Transform3x4 = to_native_gpu(triangle.Transform3x4.buffer) + triangle.Transform3x4.offset;
 		}
 
 		geomDesc.Type = to_native(desc.Type);
