@@ -1007,13 +1007,13 @@ namespace reshade::api
 
 	struct rt_geometry_triangle_desc
 	{
-		buffer_range Transform3x4;
-		format IndexFormat;
-		format VertexFormat;
-		uint32_t IndexCount;
-		uint32_t VertexCount;
-		buffer_range IndexBuffer;
-		buffer_stride VertexBuffer;
+		buffer_range transform3x4_buffer;
+		format index_format;
+		format vertex_format;
+		uint32_t index_count;
+		uint32_t vertex_count;
+		buffer_range index_buffer;
+		buffer_stride vertex_buffer;
 	};
 
 	struct rt_aabb

@@ -397,19 +397,19 @@ scopedresource buildBvh(device* device9,
 #else
 	rt_geometry_desc geomDesc = {};
 	geomDesc.Type = rt_geometry_type::triangles;
-	geomDesc.Triangles.VertexBuffer = {
+	geomDesc.Triangles.vertex_buffer = {
 		.buffer = desc.vb.res,
 		.offset = desc.vb.offset,
 		.stride = desc.vb.stride,
 	};
-	geomDesc.Triangles.VertexFormat = desc.vb.fmt;
-	geomDesc.Triangles.VertexCount = desc.vb.count;
-	geomDesc.Triangles.IndexBuffer = {
+	geomDesc.Triangles.vertex_format = desc.vb.fmt;
+	geomDesc.Triangles.vertex_count = desc.vb.count;
+	geomDesc.Triangles.index_buffer = {
 		.buffer = desc.ib.res,
 		.offset = desc.ib.offset,
 	};
-	geomDesc.Triangles.IndexCount = desc.ib.count;
-	geomDesc.Triangles.IndexFormat = desc.ib.fmt;
+	geomDesc.Triangles.index_count = desc.ib.count;
+	geomDesc.Triangles.index_format = desc.ib.fmt;
 	geomDesc.Flags = rt_geometry_flags::opaque;
 
 	// Get the size requirements for the scratch and AS buffers

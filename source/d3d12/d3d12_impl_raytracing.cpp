@@ -64,14 +64,14 @@ auto reshade::d3d12::convert_rt_build_inputs(const api::rt_build_acceleration_st
 		else
 		{
 			const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
-			geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
-			geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
-			geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
-			geomDesc.Triangles.VertexCount = triangle.VertexCount;
-			geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
-			geomDesc.Triangles.IndexCount = triangle.IndexCount;
-			geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
-			geomDesc.Triangles.Transform3x4 = to_native_gpu(triangle.Transform3x4.buffer) + triangle.Transform3x4.offset;
+			geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.vertex_buffer.buffer) + triangle.vertex_buffer.offset;
+			geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.vertex_buffer.stride;
+			geomDesc.Triangles.VertexFormat = to_native(triangle.vertex_format);
+			geomDesc.Triangles.VertexCount = triangle.vertex_count;
+			geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.index_buffer.buffer) + triangle.index_buffer.offset;
+			geomDesc.Triangles.IndexCount = triangle.index_count;
+			geomDesc.Triangles.IndexFormat = to_native(triangle.index_format);
+			geomDesc.Triangles.Transform3x4 = to_native_gpu(triangle.transform3x4_buffer.buffer) + triangle.transform3x4_buffer.offset;
 		}
 
 		geomDesc.Type = to_native(desc.Type);
