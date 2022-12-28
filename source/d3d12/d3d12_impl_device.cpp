@@ -5,6 +5,7 @@
 
 #include "d3d12_impl_device.hpp"
 #include "d3d12_impl_command_queue.hpp"
+#include "d3d12_impl_raytracing.hpp"
 #include "d3d12_impl_type_convert.hpp"
 #include "d3d12_descriptor_heap.hpp"
 #include "d3d12_resource_call_vtable.inl"
@@ -20,45 +21,6 @@ constexpr size_t heap_index_start = 28;
 // Make a bit more space for the heap index in descriptor handles, at the cost of less space for the descriptor index, due to overall limit of only 32-bit being available
 constexpr size_t heap_index_start = 24;
 #endif
-
-namespace reshade::d3d12
-{
-	D3D12_ELEMENTS_LAYOUT to_native(api::rt_elements_layout layout)
-	{
-		return (D3D12_ELEMENTS_LAYOUT)layout;
-	}
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS to_native(api::rt_acceleration_structure_build_flags flags)
-	{
-		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS)flags;
-	}
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE to_native(api::rt_acceleration_structure_type type)
-	{
-		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE)type;
-	}
-
-	DXGI_FORMAT to_native(reshade::api::format value)
-	{
-		return static_cast<DXGI_FORMAT>(value);
-	}
-
-	D3D12_RAYTRACING_GEOMETRY_TYPE to_native(api::rt_geometry_type type)
-	{
-		return (D3D12_RAYTRACING_GEOMETRY_TYPE)type;
-	}
-
-	D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags)
-	{
-		return (D3D12_RAYTRACING_GEOMETRY_FLAGS)flags;
-	}
-
-	D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res)
-	{
-		ID3D12Resource *d3dres = reinterpret_cast<ID3D12Resource *>(res.handle);
-		return d3dres->GetGPUVirtualAddress();
-	}
-}
 
 reshade::d3d12::device_impl::device_impl(ID3D12Device *device) :
 	api_object_impl(device),
@@ -1387,35 +1349,8 @@ void reshade::d3d12::device_impl::get_rt_acceleration_structure_prebuild_info(
 		return;
 	}
 
-	temp_mem< D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(pDesc->NumDescs);
-	for (uint32_t i = 0; i < pDesc->NumDescs; i++)
-	{
-		//TODO: support different types
-
-		const api::rt_geometry_desc &desc = pDesc->pGeometryDescs[i];
-		const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
-
-		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
-		geomDesc.Type = to_native(desc.Type);
-		geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
-		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
-		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
-		geomDesc.Triangles.VertexCount = triangle.VertexCount;
-		geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
-		geomDesc.Triangles.IndexCount = triangle.IndexCount;
-		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
-		geomDesc.Flags = to_native(desc.Flags);
-
-		geomDescs[i] = geomDesc;
-	}
-
-	// todo: support different layouts
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-	inputs.DescsLayout = to_native(pDesc->DescsLayout);
-	inputs.Flags = to_native(pDesc->Flags);
-	inputs.NumDescs = pDesc->NumDescs;
-	inputs.pGeometryDescs = geomDescs;
-	inputs.Type = to_native(pDesc->Type);
+	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(pDesc->NumDescs);
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = convert_rt_build_inputs(*pDesc, { geomDescs.p, geomDescs.count });
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};
 	device5->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);

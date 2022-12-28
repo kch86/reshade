@@ -5,6 +5,7 @@
 
 #include "d3d12_impl_device.hpp"
 #include "d3d12_impl_command_list.hpp"
+#include "d3d12_impl_raytracing.hpp"
 #include "d3d12_impl_type_convert.hpp"
 #include "dll_log.hpp"
 #include <algorithm>
@@ -18,22 +19,6 @@ void encode_pix3blob(UINT64(&pix3blob)[64], const char *label, const float color
 	pix3blob[2] = (8ull /* copyChunkSize */ << 55) | (1ull /* isANSI */ << 54);
 	std::strncpy(reinterpret_cast<char *>(pix3blob + 3), label, sizeof(pix3blob) - (4 * sizeof(UINT64)));
 	pix3blob[63] = 0;
-}
-
-namespace reshade::d3d12
-{
-	extern D3D12_ELEMENTS_LAYOUT to_native(api::rt_elements_layout layout);
-	extern D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS to_native(api::rt_acceleration_structure_build_flags flags);
-	extern D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE to_native(api::rt_acceleration_structure_type type);
-	extern DXGI_FORMAT to_native(reshade::api::format value);
-	extern D3D12_RAYTRACING_GEOMETRY_TYPE to_native(api::rt_geometry_type type);
-	extern D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags);
-	extern D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res);
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE to_native(api::rt_acceleration_structure_postbuild_info_type type)
-	{
-		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE)type;
-	}
 }
 
 reshade::d3d12::command_list_impl::command_list_impl(device_impl *device, ID3D12GraphicsCommandList *cmd_list) :
@@ -1007,56 +992,20 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 
 	_has_commands = true;
 
-	// TODO: move this to a shared func
 	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
-	for (uint32_t i = 0; i < desc->Inputs.NumDescs; i++)
-	{
-		//TODO: support different types
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = convert_rt_build_desc(*desc, { geomDescs.p, geomDescs.count });
 
-		const api::rt_geometry_desc &geom_desc = desc->Inputs.pGeometryDescs[i];
-		const api::rt_geometry_triangle_desc &triangle = geom_desc.Triangles;
-
-		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
-		geomDesc.Type = to_native(geom_desc.Type);
-		geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.VertexBuffer.buffer) + triangle.VertexBuffer.offset;
-		geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.VertexBuffer.stride;
-		geomDesc.Triangles.VertexFormat = to_native(triangle.VertexFormat);
-		geomDesc.Triangles.VertexCount = triangle.VertexCount;
-		geomDesc.Triangles.IndexBuffer = to_native_gpu(triangle.IndexBuffer.buffer) + triangle.IndexBuffer.offset;
-		geomDesc.Triangles.IndexCount = triangle.IndexCount;
-		geomDesc.Triangles.IndexFormat = to_native(triangle.IndexFormat);
-		geomDesc.Flags = to_native(geom_desc.Flags);
-
-		geomDescs[i] = geomDesc;
-	}
-
-	// todo: support different layouts
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-	inputs.DescsLayout = to_native(desc->Inputs.DescsLayout);
-	inputs.Flags = to_native(desc->Inputs.Flags);
-	inputs.NumDescs = desc->Inputs.NumDescs;
-	inputs.pGeometryDescs = geomDescs;
-	inputs.Type = to_native(desc->Inputs.Type);
-
-	// Create the bottom-level AS
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
-	asDesc.Inputs = inputs;
-	asDesc.DestAccelerationStructureData = to_native_gpu(desc->DestData.buffer) + desc->DestData.offset;
-	asDesc.ScratchAccelerationStructureData = to_native_gpu(desc->ScratchData.buffer) + desc->ScratchData.offset;
-
-	temp_mem<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC> infodescs(post_build_info_count);
+	temp_mem<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC> info_descs_native(post_build_info_count);
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC *descsptr = nullptr;
 
 	if (post_build_info_count)
 	{
-		descsptr = infodescs;
+		descsptr = info_descs_native;
 		assert(info_descs);
 
-		for (uint32_t i = 0; i < post_build_info_count; i++)
-		{
-			infodescs[i].DestBuffer = to_native_gpu(info_descs[i].DestBuffer.buffer) + info_descs[i].DestBuffer.offset;
-			infodescs[i].InfoType = to_native(info_descs[i].InfoType);
-		}
+		convert_rt_post_build_info_array(
+			{ info_descs, post_build_info_count },
+			{ info_descs_native, post_build_info_count });
 	}
 	
 	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, post_build_info_count, descsptr);
