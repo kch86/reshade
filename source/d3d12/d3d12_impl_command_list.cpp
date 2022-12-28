@@ -29,6 +29,11 @@ namespace reshade::d3d12
 	extern D3D12_RAYTRACING_GEOMETRY_TYPE to_native(api::rt_geometry_type type);
 	extern D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags);
 	extern D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res);
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE to_native(api::rt_acceleration_structure_postbuild_info_type type)
+	{
+		return (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE)type;
+	}
 }
 
 reshade::d3d12::command_list_impl::command_list_impl(device_impl *device, ID3D12GraphicsCommandList *cmd_list) :
@@ -1003,7 +1008,7 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 	_has_commands = true;
 
 	// TODO: move this to a shared func
-	temp_mem< D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
+	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
 	for (uint32_t i = 0; i < desc->Inputs.NumDescs; i++)
 	{
 		//TODO: support different types
@@ -1039,11 +1044,22 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 	asDesc.DestAccelerationStructureData = to_native_gpu(desc->DestData.buffer) + desc->DestData.offset;
 	asDesc.ScratchAccelerationStructureData = to_native_gpu(desc->ScratchData.buffer) + desc->ScratchData.offset;
 
-	// TODO: support the info descs
-	(void)post_build_info_count;
-	(void)info_descs;
-	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, 0, nullptr);
+	temp_mem<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC> infodescs(post_build_info_count);
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC *descsptr = nullptr;
 
+	if (post_build_info_count)
+	{
+		descsptr = infodescs;
+		assert(info_descs);
+
+		for (uint32_t i = 0; i < post_build_info_count; i++)
+		{
+			infodescs[i].DestBuffer = to_native_gpu(info_descs[i].DestBuffer.buffer) + info_descs[i].DestBuffer.offset;
+			infodescs[i].InfoType = to_native(info_descs[i].InfoType);
+		}
+	}
+	
+	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, post_build_info_count, descsptr);
 
 #if RESHADE_ADDON && !RESHADE_ADDON_LITE
 	reshade::api::buffer_range buffer_range;
