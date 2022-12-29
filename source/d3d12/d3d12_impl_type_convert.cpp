@@ -214,6 +214,11 @@ auto reshade::d3d12::convert_usage_to_resource_states(api::resource_usage state)
 		result ^= static_cast<D3D12_RESOURCE_STATES>(api::resource_usage::constant_buffer);
 	}
 
+	if ((state & api::resource_usage::acceleration_structure) != 0)
+	{
+		result |= D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+	}
+
 	return result;
 }
 
@@ -245,13 +250,13 @@ reshade::api::sampler_desc reshade::d3d12::convert_sampler_desc(const D3D12_SAMP
 	desc.address_u = static_cast<api::texture_address_mode>(internal_desc.AddressU);
 	desc.address_v = static_cast<api::texture_address_mode>(internal_desc.AddressV);
 	desc.address_w = static_cast<api::texture_address_mode>(internal_desc.AddressW);
-	desc.mip_lod_bias = internal_desc.MipLODBias;
-	desc.max_anisotropy = static_cast<float>(internal_desc.MaxAnisotropy);
-	desc.compare_op = convert_compare_op(internal_desc.ComparisonFunc);
-	std::copy_n(internal_desc.BorderColor, 4, desc.border_color);
-	desc.min_lod = internal_desc.MinLOD;
-	desc.max_lod = internal_desc.MaxLOD;
-	return desc;
+desc.mip_lod_bias = internal_desc.MipLODBias;
+desc.max_anisotropy = static_cast<float>(internal_desc.MaxAnisotropy);
+desc.compare_op = convert_compare_op(internal_desc.ComparisonFunc);
+std::copy_n(internal_desc.BorderColor, 4, desc.border_color);
+desc.min_lod = internal_desc.MinLOD;
+desc.max_lod = internal_desc.MaxLOD;
+return desc;
 }
 reshade::api::sampler_desc reshade::d3d12::convert_sampler_desc(const D3D12_SAMPLER_DESC2 &internal_desc)
 {
@@ -343,6 +348,11 @@ void reshade::d3d12::convert_resource_desc(const api::resource_desc &desc, D3D12
 		internal_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	else
 		internal_desc.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	if ((desc.usage & api::resource_usage::acceleration_structure) != 0)
+	{
+		internal_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	}
 
 	if ((desc.flags & api::resource_flags::shared) != 0)
 		heap_flags |= D3D12_HEAP_FLAG_SHARED;

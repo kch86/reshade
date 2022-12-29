@@ -211,6 +211,7 @@ namespace reshade::api
 		shader_resource_pixel = 0x80,
 		shader_resource_non_pixel = 0x40,
 		unordered_access = 0x8,
+		acceleration_structure = 0x400000,
 
 		copy_dest = 0x400,
 		copy_source = 0x800,
