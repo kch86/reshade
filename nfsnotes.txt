@@ -9,6 +9,8 @@ todo:
 -- I could create all the textures as dynamic I think
 -- dynamic works with unwrapping... but it seems the textures aren't swizzled correctly...
 -- copy the device_imple update_texture_region (create temp texture ondemand)
+- convert to list of barriers for bvhs built the current frame
+- make warning disable list configurable through the .ini
 
 vertex shader uniform structures:
 
