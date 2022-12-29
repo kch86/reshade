@@ -1210,10 +1210,10 @@ static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, 
 	return false;
 }
 
-static void on_build_acceleration_structure(command_list *cmd_list, const buffer_range &buffer)
+static void on_build_acceleration_structure(command_list *cmd_list, const rt_build_acceleration_structure_desc &desc, const buffer_range &buffer)
 {
-	/*if (!do_capture())
-		return;*/
+	if (!do_capture() && desc.Inputs.Type == rt_acceleration_structure_type::top_level)
+		return;
 
 	std::stringstream s;
 	s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ")";
