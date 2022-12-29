@@ -53,4 +53,9 @@
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="Shaders\Simple.fx">
+      <Filter>Shaders</Filter>
+    </CopyFileToFolders>
+  </ItemGroup>
 </Project>

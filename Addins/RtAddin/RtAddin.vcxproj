@@ -171,6 +171,10 @@
       <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\%(Filename).hlsl.h</HeaderFileOutput>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">/Zpr %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
+    <CopyFileToFolders Include="Shaders\Simple.fx">
+      <FileType>Document</FileType>
+      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)reshade-shaders\Shaders;%(DestinationFolders)</DestinationFolders>
+    </CopyFileToFolders>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
