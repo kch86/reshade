@@ -1056,6 +1056,25 @@ namespace reshade::api
 		};
 	};
 
+	enum rt_instance_flags
+	{
+		none = 0,
+		triangle_cull_disable = 0x1,
+		triangle_front_counterclockwise = 0x2,
+		force_opaque = 0x4,
+		force_non_opaque = 0x8
+	};
+
+	struct rt_instance_desc
+	{
+		float transform[3][4];
+		uint32_t instance_id : 24;
+		uint32_t instance_mask : 8;
+		uint32_t instance_contribution_to_hit_group_index : 24;
+		rt_instance_flags flags : 8;
+		buffer_range acceleration_structure;
+	};
+
 	enum class rt_acceleration_structure_type : uint32_t
 	{
 		top_level = 0,
@@ -1087,7 +1106,10 @@ namespace reshade::api
 		rt_elements_layout DescsLayout;
 		union
 		{
-			resource InstanceDescs;
+			struct {
+				buffer_range instances_buffer;
+				const rt_instance_desc *instance_descs;
+			} instances;
 			const rt_geometry_desc *pGeometryDescs;
 			const rt_geometry_desc *const *ppGeometryDescs;
 		};

@@ -41,12 +41,7 @@ struct temp_mem
 template <typename T>
 struct span
 {
-	span()
-		: _ptr(nullptr)
-		, _count(0)
-	{
-
-	}
+	span() = default;
 
 	span(T *ptr, uint32_t count)
 		: _ptr(ptr)

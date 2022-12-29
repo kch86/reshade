@@ -993,7 +993,7 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 	_has_commands = true;
 
 	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(desc->Inputs.NumDescs);
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = convert_rt_build_desc(*desc, { geomDescs.p, geomDescs.count });
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = convert_rt_build_desc(_device_impl, *desc, { geomDescs.p, geomDescs.count });
 
 	temp_mem<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC> info_descs_native(post_build_info_count);
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC *descsptr = nullptr;
