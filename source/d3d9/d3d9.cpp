@@ -483,14 +483,29 @@ std::pair<ComPtr<ID3D12Device>, ComPtr<ID3D12CommandQueue>> createDevice()
 	));
 	assert(SUCCEEDED(hr2));
 
-	if (config.get("APP", "EnableGraphicsDebugLayerBreakOnError"))
+	if (config.get("APP", "EnableGraphicsDebugLayer"))
 	{
 		ID3D12InfoQueue *d3dInfoQueue = nullptr;
 		if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&d3dInfoQueue))))
 		{
-			d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-			d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-			d3dInfoQueue->SetBreakOnID(D3D12_MESSAGE_ID_REFLECTSHAREDPROPERTIES_INVALIDOBJECT, false);
+			if (config.get("APP", "EnableGraphicsDebugLayerBreakOnError"))
+			{
+				d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+				d3dInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+			}
+
+			D3D12_MESSAGE_ID hide[] =
+			{
+				D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED,
+				D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+				D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,
+				D3D12_MESSAGE_ID_REFLECTSHAREDPROPERTIES_INVALIDOBJECT,
+			};
+			D3D12_INFO_QUEUE_FILTER filter;
+			memset(&filter, 0, sizeof(filter));
+			filter.DenyList.NumIDs = _countof(hide);
+			filter.DenyList.pIDList = hide;
+			d3dInfoQueue->AddStorageFilterEntries(&filter);
 		}
 	}
 
@@ -520,8 +535,9 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 		ID3D12CommandQueue *queue = nullptr;
 		if (config.get("APP", "D3D9On12ExplicitDevice"))
 		{
-			const auto dxgi_module = LoadLibraryW(L"dxgi.dll");
-			const auto d3d12_module = LoadLibraryW(L"d3d12.dll");
+			// load these libraries so the hooks are created in time before the device is created
+			LoadLibraryW(L"dxgi.dll");
+			LoadLibraryW(L"d3d12.dll");
 
 			auto [deviceptr, queueptr] = createDevice();
 
@@ -543,6 +559,7 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 		{
 			IDirect3D9Ex *resEx = nullptr;
 			HRESULT hr = Direct3DCreate9On12Ex(SDKVersion, &args, 1, &resEx);
+			assert(SUCCEEDED(hr));
 			res = resEx;
 		}
 		else
