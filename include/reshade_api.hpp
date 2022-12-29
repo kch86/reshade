@@ -481,6 +481,16 @@ namespace reshade::api
 		}
 
 		/// <summary>
+		///
+		/// </summary>
+		virtual void get_technique_pass_storage(effect_technique technique, size_t pass_index, descriptor_set *out_storage_set) = 0;
+
+		/// <summary>
+		///
+		/// </summary>
+		virtual void get_technique_pass_resources(effect_technique, size_t pass_index, span<const resource> *resources) = 0;
+
+		/// <summary>
 		/// Gets the value from an annotation attached to the specified <paramref name="technique"/> as boolean values.
 		/// </summary>
 		/// <param name="technique">Opaque handle to the technique.</param>

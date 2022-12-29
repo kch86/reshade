@@ -5,7 +5,43 @@
 
 #pragma once
 
+#include <assert.h>
 #include "reshade_api_resource.hpp"
+
+template <typename T>
+struct span
+{
+	span() = default;
+
+	span(T *ptr, uint32_t count)
+		: _ptr(ptr)
+		, _count(count)
+	{
+
+	}
+
+	span(T *begin, T *end)
+		: _ptr(begin)
+		, _count(end - begin)
+	{
+
+	}
+
+	T *data() const { return _ptr; }
+	T *data() { return _ptr; }
+
+	uint32_t size() const { return _count; }
+
+	T &operator[](uint32_t idx)
+	{
+		assert(idx < _count);
+		return *(_ptr + idx);
+	};
+
+private:
+	T *_ptr = nullptr;
+	uint32_t _count = 0;
+};
 
 namespace reshade::api
 {

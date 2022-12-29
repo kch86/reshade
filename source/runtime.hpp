@@ -139,6 +139,8 @@ namespace reshade
 		api::effect_technique find_technique(const char *effect_name, const char *technique_name) final;
 
 		void get_technique_name(api::effect_technique technique, char *name, size_t *length) const final;
+		void get_technique_pass_storage(api::effect_technique technique, size_t pass_index, api::descriptor_set *out_storage_set) final;
+		void get_technique_pass_resources(api::effect_technique, size_t pass_index, span<const api::resource> *resources) final;
 
 		bool get_annotation_bool_from_technique(api::effect_technique technique, const char *name, bool *values, size_t count, size_t array_index = 0) const final;
 		bool get_annotation_float_from_technique(api::effect_technique technique, const char *name, float *values, size_t count, size_t array_index = 0) const final;

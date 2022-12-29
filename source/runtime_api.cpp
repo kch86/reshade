@@ -753,6 +753,24 @@ void reshade::runtime::get_technique_name([[maybe_unused]] api::effect_technique
 		*length = 0;
 }
 
+void reshade::runtime::get_technique_pass_storage(api::effect_technique handle, size_t pass_index, api::descriptor_set *out_storage_set)
+{
+	if (out_storage_set)
+	{
+		const auto tech = reinterpret_cast<const technique *>(handle.handle);
+		*out_storage_set = tech->passes_data[pass_index].storage_set;
+	}
+}
+
+void reshade::runtime::get_technique_pass_resources(api::effect_technique handle, size_t pass_index, span<const api::resource> *out_resources)
+{
+	if (out_resources)
+	{
+		const auto tech = reinterpret_cast<const technique *>(handle.handle);
+		*out_resources = { tech->passes_data[pass_index].modified_resources.data(), tech->passes_data[pass_index].modified_resources.size() };
+	}
+}
+
 bool reshade::runtime::get_annotation_bool_from_technique([[maybe_unused]] api::effect_technique handle, [[maybe_unused]] const char *name, bool *values, size_t count, [[maybe_unused]] size_t array_index) const
 {
 #if RESHADE_FX
