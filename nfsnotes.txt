@@ -11,6 +11,7 @@ todo:
 -- copy the device_imple update_texture_region (create temp texture ondemand)
 - convert to list of barriers for bvhs built the current frame
 - make warning disable list configurable through the .ini
+- go through reshade for wrap/unwrap commands
 
 vertex shader uniform structures:
 
