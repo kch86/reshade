@@ -1530,6 +1530,8 @@ namespace reshade
 		/// </summary>
 		reshade_render_technique,
 
+		reshade_render_technique_pass,
+
 #ifdef RESHADE_ADDON
 		max // Last value used internally by ReShade to determine number of events in this enum
 #endif
@@ -1659,4 +1661,5 @@ namespace reshade
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_screenshot, void, api::effect_runtime *runtime, const char *filename);
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_render_technique, void, api::effect_runtime *runtime, api::effect_technique technique, api::command_list *cmd_list, api::resource_view rtv, api::resource_view rtv_srgb);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_render_technique_pass, bool, api::effect_runtime *runtime, api::effect_technique technique, api::command_list *cmd_list, size_t pass_index);
 }

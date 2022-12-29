@@ -3702,6 +3702,20 @@ void reshade::runtime::render_technique(technique &tech, api::command_list *cmd_
 		const reshadefx::pass_info &pass_info = tech.passes[pass_index];
 		const technique::pass_data &pass_data = tech.passes_data[pass_index];
 
+#if RESHADE_ADDON
+		if (!_is_in_api_call)
+		{
+			_is_in_api_call = true;
+			const bool skip_pass = invoke_addon_event<addon_event::reshade_render_technique_pass>(const_cast<runtime *>(this), api::effect_technique{ reinterpret_cast<uintptr_t>(&tech) }, cmd_list, pass_index);
+			_is_in_api_call = false;
+
+			if (skip_pass)
+			{
+				continue;
+			}
+		}
+#endif
+
 #ifndef NDEBUG
 		cmd_list->begin_debug_event((pass_info.name.empty() ? "Pass " + std::to_string(pass_index) : pass_info.name).c_str(), debug_event_col);
 #endif
