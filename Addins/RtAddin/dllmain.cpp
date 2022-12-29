@@ -418,6 +418,48 @@ static void on_present(effect_runtime *runtime)
 	doDeferredDeletes();
 }
 
+void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
+{
+	//const auto tech = reinterpret_cast<const technique *>(technique.handle);
+
+	
+
+	// check name, grab resources, submit commandlist
+}
+
+bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, size_t pass_index)
+{
+	size_t nameLength = 0;
+	runtime->get_technique_name(technique, 0, &nameLength);
+	nameLength += 1;
+
+	std::string name;
+	name.resize(nameLength);
+	runtime->get_technique_name(technique, name.data(), &nameLength);
+
+	//if (name != "Raytracing" || pass_index != 0)
+	if (strstr(name.c_str(), "Raytracing") == nullptr || pass_index != 0)
+	{
+		return false;
+	}
+
+	descriptor_set outputs;
+	span<const resource> resources;
+	runtime->get_technique_pass_storage(technique, pass_index, &outputs);
+	runtime->get_technique_pass_resources(technique, pass_index, &resources);
+
+	for (size_t i = 0; i < resources.size(); i++)
+	{
+		resource res = resources[i];
+
+		resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, res);
+		// do work
+		unlock_resource(runtime->get_device(), res);
+	}
+
+	return true;
+}
+
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
 extern "C" __declspec(dllexport) const char *DESCRIPTION = "Provide ray tracing functionality.";
 
@@ -449,6 +491,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::bind_vertex_buffers>(on_bind_vertex_buffers);
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
+		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
+		
 		register_state_tracking();
 		break;
     case DLL_PROCESS_DETACH:
