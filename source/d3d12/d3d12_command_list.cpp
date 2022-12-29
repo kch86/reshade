@@ -1023,8 +1023,11 @@ void STDMETHODCALLTYPE D3D12GraphicsCommandList::BuildRaytracingAccelerationStru
 	if (!_device_impl->resolve_gpu_address(pDesc->DestAccelerationStructureData, &buffer_range))
 		return;
 
+	//TODO: fill this out
+	reshade::api::rt_build_acceleration_structure_desc desc = {};
 	reshade::invoke_addon_event<reshade::addon_event::build_acceleration_structure>(
 		this,
+		desc,
 		buffer_range);
 #endif
 }

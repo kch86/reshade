@@ -813,7 +813,7 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList4::BuildRaytracingAccelerationStructure</description></item>
 		/// </list>
-		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, const buffer_range&)</c></para>
+		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, const rt_build_acceleration_structure& desc, const buffer_range&)</c></para>
 		/// </summary>
 		build_acceleration_structure,
 
@@ -1602,7 +1602,7 @@ namespace reshade
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::begin_render_pass, void, api::command_list *cmd_list, uint32_t count, const api::render_pass_render_target_desc *rts, const api::render_pass_depth_stencil_desc *ds);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::end_render_pass, void, api::command_list *cmd_list);
-	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::build_acceleration_structure, void, api::command_list *cmd_list, const api::buffer_range&);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::build_acceleration_structure, void, api::command_list *cmd_list, const api::rt_build_acceleration_structure_desc &desc, const api::buffer_range&);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::bind_render_targets_and_depth_stencil, void, api::command_list *cmd_list, uint32_t count, const api::resource_view *rtvs, api::resource_view dsv);
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::bind_pipeline, void, api::command_list *cmd_list, api::pipeline_stage stages, api::pipeline pipeline);

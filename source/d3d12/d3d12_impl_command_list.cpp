@@ -1017,6 +1017,7 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 
 	reshade::invoke_addon_event<reshade::addon_event::build_acceleration_structure>(
 		this,
+		*desc,
 		buffer_range);
 #endif
 }
