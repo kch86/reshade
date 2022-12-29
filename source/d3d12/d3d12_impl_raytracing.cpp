@@ -36,6 +36,11 @@ namespace reshade::d3d12
 
 	D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res)
 	{
+		if (res.handle == 0)
+		{
+			return 0;
+		}
+
 		ID3D12Resource *d3dres = reinterpret_cast<ID3D12Resource *>(res.handle);
 		return d3dres->GetGPUVirtualAddress();
 	}
@@ -65,27 +70,30 @@ auto reshade::d3d12::convert_rt_build_inputs(
 
 	if (input.Type == api::rt_acceleration_structure_type::top_level)
 	{
-		D3D12_RAYTRACING_INSTANCE_DESC* instancesPtr;
-		uint64_t size_to_map = sizeof(api::rt_instance_desc) * input.NumDescs;
-		device->map_buffer_region(input.instances.instances_buffer.buffer, input.instances.instances_buffer.offset, size_to_map, api::map_access::write_only, (void**)&instancesPtr);
-
-		for (uint32_t i = 0; i < input.NumDescs; i++)
+		if (input.instances.instances_buffer.buffer.handle != 0)
 		{
-			const api::rt_instance_desc &src = input.instances.instance_descs[i];
+			D3D12_RAYTRACING_INSTANCE_DESC *instancesPtr;
+			uint64_t size_to_map = sizeof(api::rt_instance_desc) * input.NumDescs;
+			device->map_buffer_region(input.instances.instances_buffer.buffer, input.instances.instances_buffer.offset, size_to_map, api::map_access::write_only, (void **)&instancesPtr);
 
-			D3D12_RAYTRACING_INSTANCE_DESC &dst = instancesPtr[i];
-			dst = {};
-			dst.AccelerationStructure = to_native_gpu(src.acceleration_structure.buffer) + src.acceleration_structure.offset;
-			dst.InstanceContributionToHitGroupIndex = src.instance_contribution_to_hit_group_index;
-			dst.Flags = to_native(src.flags);
-			dst.InstanceID = src.instance_id;
-			dst.InstanceMask = src.instance_mask;
-			memcpy(dst.Transform, src.transform, sizeof(dst.Transform));
-		}
+			for (uint32_t i = 0; i < input.NumDescs; i++)
+			{
+				const api::rt_instance_desc &src = input.instances.instance_descs[i];
 
-		device->unmap_buffer_region(input.instances.instances_buffer.buffer);
+				D3D12_RAYTRACING_INSTANCE_DESC &dst = instancesPtr[i];
+				dst = {};
+				dst.AccelerationStructure = to_native_gpu(src.acceleration_structure.buffer) + src.acceleration_structure.offset;
+				dst.InstanceContributionToHitGroupIndex = src.instance_contribution_to_hit_group_index;
+				dst.Flags = to_native(src.flags);
+				dst.InstanceID = src.instance_id;
+				dst.InstanceMask = src.instance_mask;
+				memcpy(dst.Transform, src.transform, sizeof(dst.Transform));
+			}
 
-		inputs.InstanceDescs = to_native_gpu(input.instances.instances_buffer.buffer) + input.instances.instances_buffer.offset;
+			device->unmap_buffer_region(input.instances.instances_buffer.buffer);
+
+			inputs.InstanceDescs = to_native_gpu(input.instances.instances_buffer.buffer) + input.instances.instances_buffer.offset;
+		}		
 	}
 	else
 	{
