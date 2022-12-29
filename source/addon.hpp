@@ -34,24 +34,6 @@ struct temp_mem
 		return p[element];
 	}
 
-	T &operator[](int element)
-	{
-		assert(element < STACK_ELEMENTS || p != stack);
-		assert(element < (size_t)count);
-
-		return p[element];
-	}
-
-	operator T *()
-	{
-		return p;
-	}
-
-	operator T *() const
-	{
-		return p;
-	}
-
 	T *p, stack[STACK_ELEMENTS];
 	uint32_t count;
 };
@@ -59,6 +41,13 @@ struct temp_mem
 template <typename T>
 struct span
 {
+	span()
+		: _ptr(nullptr)
+		, _count(0)
+	{
+
+	}
+
 	span(T *ptr, uint32_t count)
 		: _ptr(ptr)
 		, _count(count)

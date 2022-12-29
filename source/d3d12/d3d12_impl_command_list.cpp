@@ -1000,12 +1000,12 @@ void reshade::d3d12::command_list_impl::build_acceleration_structure(
 
 	if (post_build_info_count)
 	{
-		descsptr = info_descs_native;
+		descsptr = info_descs_native.p;
 		assert(info_descs);
 
 		convert_rt_post_build_info_array(
 			{ info_descs, post_build_info_count },
-			{ info_descs_native, post_build_info_count });
+			{ info_descs_native.p, post_build_info_count });
 	}
 	
 	cmdlist->BuildRaytracingAccelerationStructure(&asDesc, post_build_info_count, descsptr);
