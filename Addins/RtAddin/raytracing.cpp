@@ -308,17 +308,17 @@ ID3D12Resource* createBuffer(ID3D12Device5* pDevice, uint64_t size, D3D12_RESOUR
 	return pBuffer;
 }
 
-inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, const wchar_t *resourceName = nullptr)
+inline scopedresource allocateUAVBuffer(device *d, uint64_t bufferSize, resource_usage usage, const wchar_t *resourceName = nullptr)
 {
-	resource_desc desc(bufferSize, memory_heap::gpu_only, resource_usage::unordered_access);
+	resource_desc desc(bufferSize, memory_heap::gpu_only, usage);
 
 	resource res;
-	ThrowIfFailed(d->create_resource(desc, nullptr, resource_usage::unordered_access, &res));
+	ThrowIfFailed(d->create_resource(desc, nullptr, usage, &res));
 
 	return scopedresource(d, res);
 }
 
-AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12GraphicsCommandList4* pCmdList, const BvhBuildDesc &desc, ID3D12Resource* vb, ID3D12Resource* ib)
+AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12GraphicsCommandList4* pCmdList, const BlasBuildDesc &desc, ID3D12Resource* vb, ID3D12Resource* ib)
 {
 	D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
 	geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
@@ -364,10 +364,10 @@ AccelerationStructureBuffers build_bvh_native(ID3D12Device5* pDevice, ID3D12Grap
 	return buffers;
 }
 
-scopedresource buildBvh(device* device9,
+scopedresource buildBlas(device* device9,
 				   command_list *cmdlist,
 				   command_queue *cmdqueue,
-				   const BvhBuildDesc &desc)
+				   const BlasBuildDesc &desc)
 {
 	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;// ->_orig;
 	assert(d3d9on12);
@@ -424,8 +424,8 @@ scopedresource buildBvh(device* device9,
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes);
-	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes);
+	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes, resource_usage::unordered_access);
+	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes, resource_usage::acceleration_structure);
 
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
@@ -437,14 +437,54 @@ scopedresource buildBvh(device* device9,
 
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
 	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
-	cmdqueue->flush_immediate_command_list();
 
 #endif
 
 	return bvh;
 }
 
-scopedresource::~scopedresource()
+scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::command_queue *cmdqueue, const TlasBuildDesc &desc)
+{
+	device *device12 = cmdlist->get_device();
+
+	rt_build_acceleration_structure_inputs inputs = {};
+	inputs.DescsLayout = rt_elements_layout::array;
+	inputs.Flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
+	inputs.NumDescs = desc.instances.size();
+	inputs.Type = rt_acceleration_structure_type::top_level;
+
+	rt_acceleration_structure_prebuild_info info = {};
+	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
+
+	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
+	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes, resource_usage::unordered_access);
+	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes, resource_usage::acceleration_structure);
+
+	const uint32_t instancesSizeBytes = sizeof(rt_instance_desc) * desc.instances.size();
+	resource instances;
+	device12->create_resource(
+		resource_desc(instancesSizeBytes, memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+		nullptr, resource_usage::cpu_access, &instances);
+
+	// schedule buffer for deletion
+	scopedresource instancelifetime(device12, instances);
+
+	rt_build_acceleration_structure_desc asDesc = {};
+	asDesc.Inputs = inputs;
+	asDesc.Inputs.instances.instance_descs = desc.instances.data();
+	asDesc.Inputs.instances.instances_buffer = { .buffer = instances };
+	asDesc.DestData = { .buffer = bvh };
+	asDesc.ScratchData = { .buffer = scratch };
+
+	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
+
+	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
+	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
+
+	return bvh;
+}
+
+void scopedresource::free()
 {
 	if (handle)
 	{

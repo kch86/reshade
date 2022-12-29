@@ -52,6 +52,7 @@ namespace
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
 	std::vector<scopedresource> s_bvhs;
+	scopedresource s_tlas;
 
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
@@ -353,7 +354,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
-	BvhBuildDesc desc = {
+	BlasBuildDesc desc = {
 		.vb = {
 			.res = s_shadow_resources[s_currentVB.vb.handle],
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
@@ -372,7 +373,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 	if (s_needsBvhBuild[s_currentVB.vb.handle])
 	{
-		scopedresource bvh = buildBvh(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+		scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
 
 		s_bvhs.push_back(std::move(bvh));
 		s_needsBvhBuild[s_currentVB.vb.handle] = false;
@@ -389,6 +390,29 @@ static void on_present(effect_runtime *runtime)
 	auto &dev_data = device->get_private_data<device_data>();
 
 	dev_data.hasRenderedThisFrame = false;
+
+	s_tlas.free();
+
+	if (s_bvhs.size() > 0)
+	{
+		std::vector<rt_instance_desc> instances(s_bvhs.size());
+		for (size_t i = 0; i < instances.size(); i++)
+		{
+			rt_instance_desc &instance = instances[i];
+			instance = {};
+			instance.acceleration_structure = { .buffer = s_bvhs[i] };
+			instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
+			instance.instance_mask = 0xff;
+			instance.instance_id = i;
+			instance.flags = rt_instance_flags::none;
+		}
+
+		TlasBuildDesc desc = {
+			.instances = {instances.data(), instances.size() }
+		};
+		s_tlas = buildTlas(s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+	}	
+
 	s_d3d12cmdqueue->flush_immediate_command_list();
 
 	doDeferredDeletes();

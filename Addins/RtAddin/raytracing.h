@@ -1,5 +1,6 @@
 #pragma once
 
+#include "addon.hpp"
 #include "dxhelpers.h"
 #include <reshade_api_resource.hpp>
 
@@ -16,6 +17,7 @@ void doDeferredDeletes();
 struct scopedresource : public reshade::api::resource
 {
 	using base = reshade::api::resource;
+	scopedresource() = default;
 	scopedresource(reshade::api::device *d, base res)
 		: _device(d)
 		, base(res)
@@ -38,7 +40,12 @@ struct scopedresource : public reshade::api::resource
 		return *this;
 	}
 
-	~scopedresource();
+	~scopedresource()
+	{
+		free();
+	}
+
+	void free();
 
 	scopedresource(scopedresource &) = delete;
 	scopedresource& operator=(scopedresource &) = delete;
@@ -49,7 +56,7 @@ struct scopedresource : public reshade::api::resource
 void createDxrDevice(reshade::api::device *device);
 void testCompilePso(reshade::api::device *device);
 
-struct BvhBuildDesc
+struct BlasBuildDesc
 {
 	struct
 	{
@@ -69,10 +76,26 @@ struct BvhBuildDesc
 	} ib;
 };
 
-scopedresource buildBvh(reshade::api::device* d3d9On12Device,
+struct TlasInstance
+{
+	reshade::api::resource bvh;
+	float transform[3][4];
+};
+
+struct TlasBuildDesc
+{
+	span<reshade::api::rt_instance_desc> instances;
+};
+
+
+scopedresource buildBlas(reshade::api::device* d3d9On12Device,
 				   reshade::api::command_list *cmdlist,
 				   reshade::api::command_queue* cmdqueue,
-				   const BvhBuildDesc& desc);
+				   const BlasBuildDesc& desc);
+
+scopedresource buildTlas(reshade::api::command_list* cmdlist,
+	reshade::api::command_queue *cmdqueue,
+	const TlasBuildDesc &desc);
 
 inline const DXGI_FORMAT to_native_d3d12(reshade::api::format value)
 {
