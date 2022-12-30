@@ -45,6 +45,12 @@ namespace
 		format fmt = format::unknown;
 	};
 
+	struct RtBindings
+	{
+		descriptor_set inputs;
+		descriptor_set outputs;
+	};
+
 	std::shared_mutex s_mutex;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
@@ -53,6 +59,9 @@ namespace
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
 	std::vector<scopedresource> s_bvhs;
 	scopedresource s_tlas;
+	pipeline_layout s_pipeline_layout;
+	pipeline s_pipeline;
+	RtBindings s_bindings;
 
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
@@ -78,6 +87,29 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 	resource_view current_dsv = { 0 };
 	uint32_t current_render_pass_index = 0;
 };
+
+static void init_pipeline()
+{
+	// create compute pipeline
+	pipeline_layout_param params[] = {
+		//srv... need a accel structure type here?
+		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::shader_resource_view}),
+		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::unordered_access_view})
+	};
+	s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout);
+
+	pipeline_subobject objects[] = {
+		{
+			.type = pipeline_subobject_type::compute_shader,
+			.count = 1,
+			.data = nullptr
+		}
+	};
+	s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline);
+
+	s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
+	s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
+}
 
 static void on_init_device(device *device)
 {
@@ -454,22 +486,58 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	runtime->get_technique_pass_storage(technique, pass_index, &outputs);
 	runtime->get_technique_pass_resources(technique, pass_index, &resources);
 
+	if (resources.size() == 0)
+		return false;
+
 	update_rt();
 
-	for (size_t i = 0; i < resources.size(); i++)
+	resource output_target = resources[0];
+
+	resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, output_target);
 	{
-		resource res = resources[i];
+		// res12 is a render target, transition to uav
+		s_d3d12cmdlist->barrier(res12, resource_usage::render_target, resource_usage::unordered_access);
 
-		resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, res);
+		resource_view_desc uav_desc;
+		resource_view uav;
+		s_d3d12device->create_resource_view(res12, resource_usage::unordered_access, uav_desc, &uav);
 
-		uint64_t signal = 0, fence = 0;
-		s_d3d12cmdqueue->flush_immediate_command_list(&signal, &fence);
+		resource_view_desc tlas_srv_desc;
+		resource_view tlas_srv;
+		s_d3d12device->create_resource_view(s_tlas, resource_usage::shader_resource, tlas_srv_desc, &tlas_srv);
 
-		ID3D12Fence *fence12 = reinterpret_cast<ID3D12Fence *>(fence);
+		//update descriptors
+		descriptor_set_update updates[] = {
+			{
+				.count = 1,
+				.type = descriptor_type::shader_resource_view,
+				.descriptors = nullptr, // bind tlas srv
+			},
+			{
+				.count = 1,
+				.type = descriptor_type::unordered_access_view,
+				.descriptors = nullptr, // bind output uav
+			},
+		};
 
-		// do work
-		unlock_resource(runtime->get_device(), signal, fence12, res);
+		s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
+		s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
+		s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
+
+		// dispatch
+		uint32_t width, height;
+		runtime->get_screenshot_width_and_height(&width, &height);
+
+		const uint32_t groupX = (width + 7) / 8;
+		const uint32_t groupY = (height + 7) / 8;
+		s_d3d12cmdlist->dispatch(groupX, groupY, 1);
 	}
+
+	uint64_t signal = 0, fence = 0;
+	s_d3d12cmdqueue->flush_immediate_command_list(&signal, &fence);
+
+	ID3D12Fence *fence12 = reinterpret_cast<ID3D12Fence *>(fence);
+	unlock_resource(runtime->get_device(), signal, fence12, output_target);
 
 	return true;
 }
