@@ -330,7 +330,8 @@ namespace reshade::api
 		texture_2d_multisample_array,
 		texture_3d,
 		texture_cube,
-		texture_cube_array
+		texture_cube_array,
+		acceleration_structure,
 	};
 
 	/// <summary>
@@ -398,6 +399,12 @@ namespace reshade::api
 				/// </summary>
 				uint32_t layer_count = UINT32_MAX;
 			} texture;
+
+			struct
+			{
+				resource resource = { 0 };
+				uint64_t offset = 0;
+			} acceleration_structure;
 		};
 	};
 

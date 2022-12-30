@@ -550,6 +550,10 @@ void reshade::d3d12::convert_resource_view_desc(const api::resource_view_desc &d
 		internal_desc.Buffer.NumElements = static_cast<UINT>(desc.buffer.size);
 		// Missing fields: D3D12_BUFFER_SRV::StructureByteStride, D3D12_BUFFER_SRV::Flags
 		break;
+	case api::resource_view_type::acceleration_structure:
+		internal_desc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+		internal_desc.RaytracingAccelerationStructure.Location = to_native_gpu(desc.acceleration_structure.resource) + desc.acceleration_structure.offset;
+		break;
 	case api::resource_view_type::texture_1d:
 		internal_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
 		internal_desc.Texture1D.MostDetailedMip = desc.texture.first_level;
@@ -1050,6 +1054,18 @@ reshade::api::depth_stencil_desc reshade::d3d12::convert_depth_stencil_desc(cons
 	return convert_depth_stencil_desc(reinterpret_cast<const D3D12_DEPTH_STENCIL_DESC &>(internal_desc));
 }
 
+
+D3D12_GPU_VIRTUAL_ADDRESS reshade::d3d12::to_native_gpu(api::resource res)
+{
+	if (res.handle == 0)
+	{
+		return 0;
+	}
+
+	ID3D12Resource *d3dres = reinterpret_cast<ID3D12Resource *>(res.handle);
+	return d3dres->GetGPUVirtualAddress();
+}
+
 auto reshade::d3d12::convert_logic_op(api::logic_op value) -> D3D12_LOGIC_OP
 {
 	switch (value)
@@ -1415,6 +1431,7 @@ auto reshade::d3d12::convert_descriptor_type(api::descriptor_type type) -> D3D12
 		assert(false);
 		[[fallthrough]];
 	case api::descriptor_type::shader_resource_view:
+	case api::descriptor_type::acceleration_structure:
 		return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	case api::descriptor_type::unordered_access_view:
 		return D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
@@ -1449,6 +1466,7 @@ auto reshade::d3d12::convert_descriptor_type_to_heap_type(api::descriptor_type t
 		assert(false);
 		[[fallthrough]];
 	case api::descriptor_type::constant_buffer:
+	case api::descriptor_type::acceleration_structure:
 	case api::descriptor_type::shader_resource_view:
 	case api::descriptor_type::unordered_access_view:
 		return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;

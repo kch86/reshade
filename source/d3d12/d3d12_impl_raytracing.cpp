@@ -1,5 +1,6 @@
 #include "d3d12_impl_raytracing.hpp"
 #include "d3d12_impl_device.hpp"
+#include "d3d12_impl_type_convert.hpp"
 #include "addon.hpp"
 
 namespace reshade::d3d12
@@ -32,17 +33,6 @@ namespace reshade::d3d12
 	D3D12_RAYTRACING_GEOMETRY_FLAGS to_native(api::rt_geometry_flags flags)
 	{
 		return (D3D12_RAYTRACING_GEOMETRY_FLAGS)flags;
-	}
-
-	D3D12_GPU_VIRTUAL_ADDRESS to_native_gpu(api::resource res)
-	{
-		if (res.handle == 0)
-		{
-			return 0;
-		}
-
-		ID3D12Resource *d3dres = reinterpret_cast<ID3D12Resource *>(res.handle);
-		return d3dres->GetGPUVirtualAddress();
 	}
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_TYPE to_native(api::rt_acceleration_structure_postbuild_info_type type)

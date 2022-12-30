@@ -453,6 +453,22 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
+		case api::resource_usage::acceleration_structure:
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE descriptor_handle;
+			if (!_view_heaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].allocate(descriptor_handle))
+				break;
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC internal_desc = {};
+			internal_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			convert_resource_view_desc(desc, internal_desc);
+
+			_orig->CreateShaderResourceView(reinterpret_cast<ID3D12Resource *>(resource.handle), &internal_desc, descriptor_handle);
+
+			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			*out_handle = to_handle(descriptor_handle);
+			return true;
+		}
 	}
 
 	return false;

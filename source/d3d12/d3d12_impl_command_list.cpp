@@ -337,7 +337,7 @@ void reshade::d3d12::command_list_impl::push_descriptors(api::shader_stage stage
 			_device_impl->_orig->CreateConstantBufferView(&view_desc, base_handle);
 		}
 	}
-	else if (update.type == api::descriptor_type::sampler || update.type == api::descriptor_type::shader_resource_view || update.type == api::descriptor_type::unordered_access_view)
+	else if (update.type == api::descriptor_type::sampler || update.type == api::descriptor_type::shader_resource_view || update.type == api::descriptor_type::unordered_access_view || update.type == api::descriptor_type::acceleration_structure)
 	{
 #ifndef _WIN64
 		temp_mem<D3D12_CPU_DESCRIPTOR_HANDLE> src_handles(update.count);
