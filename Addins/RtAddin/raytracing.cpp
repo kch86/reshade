@@ -272,13 +272,19 @@ resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, 
 	return { uint64_t(d3d12res) };
 }
 
-void returnd3d12resource(Direct3DDevice9On12 *device, resource res)
+void returnd3d12resource(Direct3DDevice9On12 *device, uint64_t signal, ID3D12Fence *fence, resource res)
 {
 	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
 
 	// TODO: pass valid values for the signal/fences
 	IDirect3DDevice9On12 *d3d9on12 = device->_orig;
-	ThrowIfFailed(d3d9on12->ReturnUnderlyingResource(d3d9res, 0, nullptr, nullptr));
+
+	uint32_t signal_count = 0;
+	if (fence)
+	{
+		signal_count = 1;
+	}
+	ThrowIfFailed(d3d9on12->ReturnUnderlyingResource(d3d9res, signal_count, &signal, &fence));
 }
 
 struct AccelerationStructureBuffers
@@ -499,10 +505,10 @@ resource lock_resource(reshade::api::device *device9, reshade::api::command_queu
 	return getd3d12resource(d3d9on12, cmdqueue12, d3d9resource);
 }
 
-void unlock_resource(reshade::api::device *device9, reshade::api::resource d3d9resource)
+void unlock_resource(reshade::api::device *device9, uint64_t signal, ID3D12Fence *fence, reshade::api::resource d3d9resource)
 {
 	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;// ->_orig;
-	returnd3d12resource(d3d9on12, d3d9resource);
+	returnd3d12resource(d3d9on12, signal, fence, d3d9resource);
 }
 
 void scopedresource::free()

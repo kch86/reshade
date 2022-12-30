@@ -391,6 +391,11 @@ static void on_present(effect_runtime *runtime)
 
 	dev_data.hasRenderedThisFrame = false;
 
+	doDeferredDeletes();
+}
+
+static void update_rt()
+{
 	s_tlas.free();
 
 	if (s_bvhs.size() > 0)
@@ -411,11 +416,12 @@ static void on_present(effect_runtime *runtime)
 			.instances = {instances.data(), instances.size() }
 		};
 		s_tlas = buildTlas(s_d3d12cmdlist, s_d3d12cmdqueue, desc);
-	}	
+	}
+}
 
+static void do_trace()
+{
 	s_d3d12cmdqueue->flush_immediate_command_list();
-
-	doDeferredDeletes();
 }
 
 void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
@@ -448,13 +454,21 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	runtime->get_technique_pass_storage(technique, pass_index, &outputs);
 	runtime->get_technique_pass_resources(technique, pass_index, &resources);
 
+	update_rt();
+
 	for (size_t i = 0; i < resources.size(); i++)
 	{
 		resource res = resources[i];
 
 		resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, res);
+
+		uint64_t signal = 0, fence = 0;
+		s_d3d12cmdqueue->flush_immediate_command_list(&signal, &fence);
+
+		ID3D12Fence *fence12 = reinterpret_cast<ID3D12Fence *>(fence);
+
 		// do work
-		unlock_resource(runtime->get_device(), res);
+		unlock_resource(runtime->get_device(), signal, fence12, res);
 	}
 
 	return true;

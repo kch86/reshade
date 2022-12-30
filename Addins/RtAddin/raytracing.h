@@ -103,4 +103,4 @@ inline const DXGI_FORMAT to_native_d3d12(reshade::api::format value)
 }
 
 reshade::api::resource lock_resource(reshade::api::device *device9, reshade::api::command_queue* cmdqueue12, reshade::api::resource d3d9resource);
-void unlock_resource(reshade::api::device *device9, reshade::api::resource d3d9resource);
+void unlock_resource(reshade::api::device *device9, uint64_t signal, ID3D12Fence* fence, reshade::api::resource d3d9resource);
