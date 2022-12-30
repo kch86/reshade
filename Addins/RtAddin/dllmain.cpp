@@ -15,6 +15,7 @@
 
 //ray tracing includes
 #include "raytracing.h"
+#include "CompiledShaders\Raytracing_inline.hlsl.h"
 
 using namespace reshade::api;
 
@@ -93,16 +94,21 @@ static void init_pipeline()
 	// create compute pipeline
 	pipeline_layout_param params[] = {
 		//srv... need a accel structure type here?
-		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::shader_resource_view}),
+		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::acceleration_structure}),
 		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::unordered_access_view})
 	};
 	s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout);
 
+
+	shader_desc shader_desc = {
+		.code = g_pRaytracing_inline,
+		.code_size = ARRAYSIZE(g_pRaytracing_inline)
+	};
 	pipeline_subobject objects[] = {
 		{
 			.type = pipeline_subobject_type::compute_shader,
 			.count = 1,
-			.data = nullptr
+			.data = &shader_desc,
 		}
 	};
 	s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline);
@@ -124,10 +130,11 @@ static void on_init_device(device *device)
 	else if (device->get_api() == device_api::d3d12)
 	{
 		s_d3d12device = device;
-	}
 
-	createDxrDevice(device);
-	testCompilePso(device);
+		init_pipeline();
+		createDxrDevice(device);
+		testCompilePso(device);
+	}
 }
 static void on_destroy_device(device *device)
 {
@@ -498,19 +505,23 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 		// res12 is a render target, transition to uav
 		s_d3d12cmdlist->barrier(res12, resource_usage::render_target, resource_usage::unordered_access);
 
-		resource_view_desc uav_desc;
+		//TODO: these views are leaking
+		resource_view_desc uav_desc(format::b8g8r8a8_unorm);
 		resource_view uav;
 		s_d3d12device->create_resource_view(res12, resource_usage::unordered_access, uav_desc, &uav);
 
 		resource_view_desc tlas_srv_desc;
+		tlas_srv_desc.type = resource_view_type::acceleration_structure;
+		tlas_srv_desc.acceleration_structure.offset = 0;
+		tlas_srv_desc.acceleration_structure.resource = s_tlas;
 		resource_view tlas_srv;
-		s_d3d12device->create_resource_view(s_tlas, resource_usage::shader_resource, tlas_srv_desc, &tlas_srv);
+		s_d3d12device->create_resource_view(s_tlas, resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
 
 		//update descriptors
 		descriptor_set_update updates[] = {
 			{
 				.count = 1,
-				.type = descriptor_type::shader_resource_view,
+				.type = descriptor_type::acceleration_structure,
 				.descriptors = nullptr, // bind tlas srv
 			},
 			{
