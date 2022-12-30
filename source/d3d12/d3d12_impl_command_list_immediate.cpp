@@ -46,7 +46,7 @@ reshade::d3d12::command_list_immediate_impl::~command_list_immediate_impl()
 	_orig = nullptr;
 }
 
-bool reshade::d3d12::command_list_immediate_impl::flush()
+bool reshade::d3d12::command_list_immediate_impl::flush(uint64_t *out_signal, uint64_t *out_fence)
 {
 	if (!_has_commands)
 		return true;
@@ -75,7 +75,19 @@ bool reshade::d3d12::command_list_immediate_impl::flush()
 
 	if (const UINT64 sync_value = _fence_value[_cmd_index] + NUM_COMMAND_FRAMES;
 		SUCCEEDED(_parent_queue->Signal(_fence[_cmd_index].get(), sync_value)))
+	{
 		_fence_value[_cmd_index] = sync_value;
+
+		if (out_signal)
+		{
+			*out_signal = sync_value;
+		}
+		if (out_fence)
+		{
+			*out_fence = reinterpret_cast<uint64_t>(_fence[_cmd_index].get());
+		}
+	}
+		
 
 	// Continue with next command list now that the current one was submitted
 	_cmd_index = (_cmd_index + 1) % NUM_COMMAND_FRAMES;

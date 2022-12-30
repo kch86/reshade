@@ -74,7 +74,7 @@ reshade::api::device *reshade::opengl::render_context_impl::get_device()
 	return _device_impl;
 }
 
-void reshade::opengl::render_context_impl::flush_immediate_command_list() const
+void reshade::opengl::render_context_impl::flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const
 {
 	gl.Flush();
 }

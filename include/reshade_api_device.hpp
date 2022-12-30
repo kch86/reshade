@@ -950,7 +950,7 @@ namespace reshade::api
 		/// Flushes and executes the special immediate command list returned by <see cref="get_immediate_command_list"/> immediately.
 		/// This can be used to force commands to execute right away instead of waiting for the runtime to flush it automatically at some point.
 		/// </summary>
-		virtual void flush_immediate_command_list() const = 0;
+		virtual void flush_immediate_command_list(uint64_t* out_signal = nullptr, uint64_t* out_fence = nullptr) const = 0;
 
 		/// <summary>
 		/// Gets a special command list, on which all issued commands are executed as soon as possible (or right before the application executes its next command list on this queue).

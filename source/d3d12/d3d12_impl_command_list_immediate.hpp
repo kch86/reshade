@@ -17,7 +17,7 @@ namespace reshade::d3d12
 		command_list_immediate_impl(device_impl *device, ID3D12CommandQueue *queue);
 		~command_list_immediate_impl();
 
-		bool flush();
+		bool flush(uint64_t *out_signal = nullptr, uint64_t *out_fence = nullptr);
 		bool flush_and_wait();
 
 	private:

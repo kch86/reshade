@@ -38,9 +38,10 @@ reshade::api::command_list *reshade::d3d11::device_context_impl::get_immediate_c
 	return this;
 }
 
-void reshade::d3d11::device_context_impl::flush_immediate_command_list() const
+void reshade::d3d11::device_context_impl::flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const
 {
 	assert(_orig->GetType() == D3D11_DEVICE_CONTEXT_IMMEDIATE);
-
+	(void)out_signal;
+	(void)out_fence;
 	_orig->Flush();
 }

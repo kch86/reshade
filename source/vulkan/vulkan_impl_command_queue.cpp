@@ -73,8 +73,11 @@ void reshade::vulkan::command_queue_impl::wait_idle() const
 #endif
 }
 
-void reshade::vulkan::command_queue_impl::flush_immediate_command_list() const
+void reshade::vulkan::command_queue_impl::flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const
 {
+	//TODO: implement for vulkan
+	(void)out_signal;
+	(void)out_fence;
 	uint32_t num_wait_semaphores = 0; // No semaphores to wait on
 	if (_immediate_cmd_list != nullptr)
 		_immediate_cmd_list->flush(nullptr, num_wait_semaphores);

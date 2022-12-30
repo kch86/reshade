@@ -95,10 +95,10 @@ void reshade::d3d12::command_queue_impl::wait_idle() const
 		WaitForSingleObject(_wait_idle_fence_event, INFINITE);
 }
 
-void reshade::d3d12::command_queue_impl::flush_immediate_command_list() const
+void reshade::d3d12::command_queue_impl::flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const
 {
 	if (_immediate_cmd_list != nullptr)
-		_immediate_cmd_list->flush();
+		_immediate_cmd_list->flush(out_signal, out_fence);
 }
 
 void reshade::d3d12::command_queue_impl::begin_debug_event(const char *label, const float color[4])

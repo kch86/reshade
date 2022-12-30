@@ -22,7 +22,8 @@ namespace reshade::d3d12
 
 		void wait_idle() const final;
 
-		void flush_immediate_command_list() const final;
+		void flush_immediate_command_list() const { flush_immediate_command_list(nullptr, nullptr); }
+		void flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const final;
 
 		api::command_list *get_immediate_command_list() final { return _immediate_cmd_list; }
 

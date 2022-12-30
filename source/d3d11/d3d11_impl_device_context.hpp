@@ -81,7 +81,7 @@ namespace reshade::d3d11
 
 		void wait_idle() const final { /* no-op */ }
 
-		void flush_immediate_command_list() const final;
+		void flush_immediate_command_list(uint64_t *out_signal, uint64_t *out_fence) const final;
 
 		api::command_list *get_immediate_command_list() final;
 
