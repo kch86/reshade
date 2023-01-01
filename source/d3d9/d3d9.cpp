@@ -551,7 +551,7 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 		args.Enable9On12 = TRUE;
 		args.pD3D12Device = device;
 		args.ppD3D12Queues[0] = queue;
-		args.NumQueues = 1;
+		args.NumQueues = queue ? 1 : 0;
 		args.NodeMask = 0;
 
 		IDirect3D9 *res = nullptr;
