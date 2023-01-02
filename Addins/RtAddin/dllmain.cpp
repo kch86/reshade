@@ -63,6 +63,9 @@ namespace
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
 	RtBindings s_bindings;
+	scopedresource s_output;
+	resource_view s_output_uav, s_output_srv;
+	uint32_t s_width = 0, s_height = 0;
 
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
@@ -458,9 +461,60 @@ static void update_rt()
 	}
 }
 
-static void do_trace()
+static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 {
-	s_d3d12cmdqueue->flush_immediate_command_list();
+	if (s_width != width || s_height != height)
+	{
+		s_output.free();
+		//todo: create scoped resource for views
+		s_d3d12device->destroy_resource_view(s_output_uav);
+		s_d3d12device->destroy_resource_view(s_output_srv);
+
+		resource_desc desc = src_desc;
+		desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
+		desc.heap = memory_heap::gpu_only;
+
+		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &s_output);
+
+		resource_view_desc uav(src_desc.texture.format);
+		s_d3d12device->create_resource_view(s_output, resource_usage::unordered_access, uav, &s_output_uav);
+		s_d3d12device->create_resource_view(s_output, resource_usage::shader_resource, uav, &s_output_srv);
+	}
+	else
+	{
+
+		s_d3d12cmdlist->barrier(s_output, resource_usage::shader_resource, resource_usage::unordered_access);
+	}
+
+	resource_view_desc tlas_srv_desc;
+	tlas_srv_desc.type = resource_view_type::acceleration_structure;
+	tlas_srv_desc.acceleration_structure.offset = 0;
+	tlas_srv_desc.acceleration_structure.resource = s_tlas;
+	resource_view tlas_srv;
+	s_d3d12device->create_resource_view(s_tlas, resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
+
+	//update descriptors
+	descriptor_set_update updates[] = {
+		{
+			.count = 1,
+			.type = descriptor_type::acceleration_structure,
+			.descriptors = &tlas_srv, // bind tlas srv
+		},
+		{
+			.count = 1,
+			.type = descriptor_type::unordered_access_view,
+			.descriptors = &s_output_uav, // bind output uav
+		},
+	};
+
+	s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
+	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
+	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
+
+	// dispatch
+	const uint32_t groupX = (width + 7) / 8;
+	const uint32_t groupY = (height + 7) / 8;
+	s_d3d12cmdlist->dispatch(groupX, groupY, 1);
 }
 
 void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
@@ -498,50 +552,30 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 
 	update_rt();
 
+	if (s_tlas.handle == 0)
+	{
+		return false;
+	}
+
 	resource output_target = resources[0];
 
 	resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, output_target);
 	{
 		// res12 is a render target, transition to uav
-		s_d3d12cmdlist->barrier(res12, resource_usage::render_target, resource_usage::unordered_access);
+		//s_d3d12cmdlist->barrier(res12, resource_usage::render_target, resource_usage::unordered_access);
+
+		resource_desc src_desc = s_d3d12device->get_resource_desc(res12);
 
 		//TODO: these views are leaking
-		resource_view_desc uav_desc(format::b8g8r8a8_unorm);
+		/*resource_view_desc uav_desc(format::b8g8r8a8_unorm);
 		resource_view uav;
-		s_d3d12device->create_resource_view(res12, resource_usage::unordered_access, uav_desc, &uav);
+		s_d3d12device->create_resource_view(res12, resource_usage::unordered_access, uav_desc, &uav);*/
 
-		resource_view_desc tlas_srv_desc;
-		tlas_srv_desc.type = resource_view_type::acceleration_structure;
-		tlas_srv_desc.acceleration_structure.offset = 0;
-		tlas_srv_desc.acceleration_structure.resource = s_tlas;
-		resource_view tlas_srv;
-		s_d3d12device->create_resource_view(s_tlas, resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
-
-		//update descriptors
-		descriptor_set_update updates[] = {
-			{
-				.count = 1,
-				.type = descriptor_type::acceleration_structure,
-				.descriptors = nullptr, // bind tlas srv
-			},
-			{
-				.count = 1,
-				.type = descriptor_type::unordered_access_view,
-				.descriptors = nullptr, // bind output uav
-			},
-		};
-
-		s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
-		s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
-		s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
-
-		// dispatch
 		uint32_t width, height;
 		runtime->get_screenshot_width_and_height(&width, &height);
+		do_trace(width, height, src_desc);
 
-		const uint32_t groupX = (width + 7) / 8;
-		const uint32_t groupY = (height + 7) / 8;
-		s_d3d12cmdlist->dispatch(groupX, groupY, 1);
+		//s_d3d12cmdlist->barrier(res12, resource_usage::unordered_access, resource_usage::render_target);
 	}
 
 	uint64_t signal = 0, fence = 0;
