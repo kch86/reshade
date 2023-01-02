@@ -474,7 +474,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
 		desc.heap = memory_heap::gpu_only;
 
-		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &s_output);
+		resource res;
+		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
+		s_output = scopedresource(s_d3d12device, res);
 
 		resource_view_desc uav(src_desc.texture.format);
 		s_d3d12device->create_resource_view(s_output, resource_usage::unordered_access, uav, &s_output_uav);
@@ -482,7 +484,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	}
 	else
 	{
-
 		s_d3d12cmdlist->barrier(s_output, resource_usage::shader_resource, resource_usage::unordered_access);
 	}
 
@@ -515,6 +516,8 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	const uint32_t groupX = (width + 7) / 8;
 	const uint32_t groupY = (height + 7) / 8;
 	s_d3d12cmdlist->dispatch(groupX, groupY, 1);
+
+	s_d3d12cmdlist->barrier(s_output, resource_usage::unordered_access, resource_usage::shader_resource);
 }
 
 void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
@@ -561,21 +564,13 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 
 	resource res12 = lock_resource(runtime->get_device(), s_d3d12cmdqueue, output_target);
 	{
-		// res12 is a render target, transition to uav
-		//s_d3d12cmdlist->barrier(res12, resource_usage::render_target, resource_usage::unordered_access);
-
 		resource_desc src_desc = s_d3d12device->get_resource_desc(res12);
-
-		//TODO: these views are leaking
-		/*resource_view_desc uav_desc(format::b8g8r8a8_unorm);
-		resource_view uav;
-		s_d3d12device->create_resource_view(res12, resource_usage::unordered_access, uav_desc, &uav);*/
 
 		uint32_t width, height;
 		runtime->get_screenshot_width_and_height(&width, &height);
 		do_trace(width, height, src_desc);
 
-		//s_d3d12cmdlist->barrier(res12, resource_usage::unordered_access, resource_usage::render_target);
+		//TODO: blit to render target
 	}
 
 	uint64_t signal = 0, fence = 0;
