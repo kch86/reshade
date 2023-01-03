@@ -222,11 +222,12 @@ void testCompilePso(device *device)
 
 struct DeferDeleteData
 {
-	std::vector<std::pair<device*, resource>> todelete;
+	std::vector<std::pair<device*, uint64_t>> todelete;
 };
 
 constexpr uint32_t MaxDeferredFrames = 4;
-static DeferDeleteData s_frameDeleteData[MaxDeferredFrames];
+constexpr uint32_t HandleTypeCount = 2;
+static DeferDeleteData s_frameDeleteData[MaxDeferredFrames][HandleTypeCount];
 static uint32_t s_frameIndex = 0;
 static std::shared_mutex s_mutex;
 
@@ -238,27 +239,48 @@ void doDeferredDeletes()
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
 
-	for (auto &pair : s_frameDeleteData[deleteIndex].todelete)
+	for (int i = 0; i < HandleTypeCount; i++)
 	{
-		device *device = pair.first;
-		device->destroy_resource(pair.second);
+		for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
+		{
+			device *device = pair.first;
+			if (i == 0)
+			{
+				device->destroy_resource((resource)pair.second);
+			}
+			else if (i == 1)
+			{
+				device->destroy_resource_view((resource_view)pair.second);
+			}
+			else
+			{
+				assert(false);
+			}
+		}
+		s_frameDeleteData[deleteIndex][i].todelete.clear();
 	}
-	s_frameDeleteData[deleteIndex].todelete.clear();
+
+	
 
 	s_frameIndex++;
 }
 
-void deferDestroyResource(device* device, resource res)
+void deferDestroyHandle(device* device, resource res)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 
-	s_frameDeleteData[index].todelete.push_back({ device,res });
+	s_frameDeleteData[index][0].todelete.push_back({device,res.handle});
 }
 
-void deferDestroyResource(device *device, resource_view view)
+void deferDestroyHandle(device *device, resource_view view)
 {
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	const uint32_t index = s_frameIndex % MaxDeferredFrames;
+
+	s_frameDeleteData[index][1].todelete.push_back({ device, view.handle });
 }
 
 resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)

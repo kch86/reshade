@@ -13,8 +13,8 @@ namespace reshade::api
 }
 
 void doDeferredDeletes();
-void deferDestroyResource(reshade::api::device *device, reshade::api::resource res);
-void deferDestroyResource(reshade::api::device *device, reshade::api::resource_view view);
+void deferDestroyHandle(reshade::api::device *device, reshade::api::resource res);
+void deferDestroyHandle(reshade::api::device *device, reshade::api::resource_view view);
 
 template<class T> 
 struct delayFreedHandle
@@ -51,7 +51,7 @@ struct delayFreedHandle
 	{
 		if (_handle.handle)
 		{
-			deferDestroyResource(_device, _handle);
+			deferDestroyHandle(_device, _handle);
 		}
 	}
 
