@@ -55,6 +55,12 @@
     <FxCompile Include="Shaders\Raytracing_inline.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Raytracing_blit_vs.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Raytracing_blit_ps.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="Shaders\Simple.fx">
