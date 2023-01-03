@@ -257,6 +257,10 @@ void deferDestroyResource(device* device, resource res)
 	s_frameDeleteData[index].todelete.push_back({ device,res });
 }
 
+void deferDestroyResource(device *device, resource_view view)
+{
+}
+
 resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)
 {
 	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
@@ -511,10 +515,3 @@ void unlock_resource(reshade::api::device *device9, uint64_t signal, ID3D12Fence
 	returnd3d12resource(d3d9on12, signal, fence, d3d9resource);
 }
 
-void scopedresource::free()
-{
-	if (handle)
-	{
-		deferDestroyResource(_device, *this);
-	}
-}

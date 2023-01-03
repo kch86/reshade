@@ -13,45 +13,62 @@ namespace reshade::api
 }
 
 void doDeferredDeletes();
+void deferDestroyResource(reshade::api::device *device, reshade::api::resource res);
+void deferDestroyResource(reshade::api::device *device, reshade::api::resource_view view);
 
-struct scopedresource : public reshade::api::resource
+template<class T> 
+struct delayFreedHandle
 {
-	using base = reshade::api::resource;
-	scopedresource() = default;
-	scopedresource(reshade::api::device *d, base res)
+	delayFreedHandle() = default;
+	delayFreedHandle(reshade::api::device *d, T res)
 		: _device(d)
-		, base(res)
+		, _handle(res)
 	{
 
 	}
 
-	scopedresource(scopedresource &&other)
+	delayFreedHandle(delayFreedHandle<T> &&other)
 	{
-		handle = other.handle;
+		_handle = other._handle;
 		_device = other._device;
-		other.handle = 0;
+		other._handle.handle = 0;
 	}
 
-	scopedresource &operator=(scopedresource &&other)
+	delayFreedHandle<T> &operator=(delayFreedHandle<T> &&other)
 	{
-		handle = other.handle;
+		_handle = other._handle;
 		_device = other._device;
-		other.handle = 0;
+		other._handle.handle = 0;
 		return *this;
 	}
 
-	~scopedresource()
+	~delayFreedHandle()
 	{
 		free();
 	}
 
-	void free();
+	void free()
+	{
+		if (_handle.handle)
+		{
+			deferDestroyResource(_device, _handle);
+		}
+	}
 
-	scopedresource(scopedresource &) = delete;
-	scopedresource& operator=(scopedresource &) = delete;
+	operator T() { return _handle; }
+	T handle() { return _handle;  }
+
+private:
+
+	delayFreedHandle(delayFreedHandle<T> &) = delete;
+	delayFreedHandle<T> &operator=(delayFreedHandle<T> &) = delete;
 
 	reshade::api::device *_device;
+	T _handle;
 };
+
+using scopedresource = delayFreedHandle<reshade::api::resource>;
+using scopedresourceview = delayFreedHandle<reshade::api::resource_view>;
 
 void createDxrDevice(reshade::api::device *device);
 void testCompilePso(reshade::api::device *device);

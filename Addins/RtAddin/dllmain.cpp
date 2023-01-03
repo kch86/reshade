@@ -466,7 +466,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	if (s_width != width || s_height != height)
 	{
 		s_output.free();
-		//todo: create scoped resource for views
 		s_d3d12device->destroy_resource_view(s_output_uav);
 		s_d3d12device->destroy_resource_view(s_output_srv);
 
@@ -493,6 +492,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	tlas_srv_desc.acceleration_structure.resource = s_tlas;
 	resource_view tlas_srv;
 	s_d3d12device->create_resource_view(s_tlas, resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
+	scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -539,7 +539,6 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	name.resize(nameLength);
 	runtime->get_technique_name(technique, name.data(), &nameLength);
 
-	//if (name != "Raytracing" || pass_index != 0)
 	if (strstr(name.c_str(), "Raytracing") == nullptr || pass_index != 0)
 	{
 		return false;
@@ -555,7 +554,7 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 
 	update_rt();
 
-	if (s_tlas.handle == 0)
+	if (s_tlas.handle() == 0)
 	{
 		return false;
 	}
