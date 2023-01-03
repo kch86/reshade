@@ -16,6 +16,8 @@
 //ray tracing includes
 #include "raytracing.h"
 #include "CompiledShaders\Raytracing_inline.hlsl.h"
+#include "CompiledShaders\Raytracing_blit_vs.hlsl.h"
+#include "CompiledShaders\Raytracing_blit_ps.hlsl.h"
 
 using namespace reshade::api;
 
@@ -62,7 +64,12 @@ namespace
 	scopedresource s_tlas;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
+
+	pipeline_layout s_blit_layout;
+	pipeline s_blit_pipeline;
+
 	RtBindings s_bindings;
+
 	scopedresource s_output;
 	resource_view s_output_uav, s_output_srv;
 	uint32_t s_width = 0, s_height = 0;
@@ -94,30 +101,61 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 
 static void init_pipeline()
 {
-	// create compute pipeline
-	pipeline_layout_param params[] = {
-		//srv... need a accel structure type here?
-		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::acceleration_structure}),
-		pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .type = descriptor_type::unordered_access_view})
-	};
-	s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout);
+	// init rt pipeline
+	{
+		// create compute pipeline
+		pipeline_layout_param params[] = {
+			//srv... need a accel structure type here?
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view})
+		};
+		s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout);
 
 
-	shader_desc shader_desc = {
-		.code = g_pRaytracing_inline,
-		.code_size = ARRAYSIZE(g_pRaytracing_inline)
-	};
-	pipeline_subobject objects[] = {
+		shader_desc shader_desc = {
+			.code = g_pRaytracing_inline,
+			.code_size = ARRAYSIZE(g_pRaytracing_inline)
+		};
+		pipeline_subobject objects[] = {
+			{
+				.type = pipeline_subobject_type::compute_shader,
+				.count = 1,
+				.data = &shader_desc,
+			}
+		};
+		s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline);
+
+		s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
+		s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
+	}
+
+	// init blit pipeline
+	{
+		format fmt = format::b8g8r8a8_unorm;
+		pipeline_layout_param params[1];
+		params[0] = descriptor_range{ .binding = 0, .count = 1, .visibility = shader_stage::all_graphics, .type = descriptor_type::shader_resource_view };
+
+		shader_desc vs_desc = {
+			.code = g_pRaytracing_blit_vs,
+			.code_size = ARRAYSIZE(g_pRaytracing_blit_vs)
+		};
+
+		shader_desc ps_desc = {
+			.code = g_pRaytracing_blit_ps,
+			.code_size = ARRAYSIZE(g_pRaytracing_blit_ps)
+		};
+
+		std::vector<pipeline_subobject> subobjects;
+		subobjects.push_back({ pipeline_subobject_type::vertex_shader, 1, &vs_desc });
+		subobjects.push_back({ pipeline_subobject_type::pixel_shader, 1, &ps_desc });
+		subobjects.push_back({ pipeline_subobject_type::render_target_formats, 1, &fmt });
+
+		if (!s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_blit_layout) ||
+			!s_d3d12device->create_pipeline(s_blit_layout, static_cast<uint32_t>(subobjects.size()), subobjects.data(), &s_blit_pipeline))
 		{
-			.type = pipeline_subobject_type::compute_shader,
-			.count = 1,
-			.data = &shader_desc,
+			assert(false);
 		}
-	};
-	s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline);
-
-	s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
-	s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
+	}
 }
 
 static void on_init_device(device *device)
@@ -520,6 +558,31 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	s_d3d12cmdlist->barrier(s_output, resource_usage::unordered_access, resource_usage::shader_resource);
 }
 
+void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource target)
+{
+	resource_view rtv;
+	{
+		resource_view_desc rtv_desc(target_desc.texture.format);
+		s_d3d12device->create_resource_view(target, resource_usage::render_target, rtv_desc, &rtv);
+		scopedresourceview delayfree(s_d3d12device, rtv);
+	}
+
+	s_d3d12cmdlist->bind_pipeline(pipeline_stage::all_graphics, s_blit_pipeline);
+	s_d3d12cmdlist->push_descriptors(shader_stage::pixel, s_blit_layout, 0, descriptor_set_update{ {}, 0, 0, 1, descriptor_type::shader_resource_view, &s_output_srv });
+
+	const viewport viewport = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+	s_d3d12cmdlist->bind_viewports(0, 1, &viewport);
+	const rect scissor_rect = { 0, 0, static_cast<int32_t>(width), static_cast<int32_t>(height) };
+	s_d3d12cmdlist->bind_scissor_rects(0, 1, &scissor_rect);
+
+	const bool srgb_write_enable = false;// (_back_buffer_format == format::r8g8b8a8_unorm_srgb || _back_buffer_format == format::b8g8r8a8_unorm_srgb);
+	s_d3d12cmdlist->bind_render_targets_and_depth_stencil(1, &rtv);
+
+	s_d3d12cmdlist->draw(3, 1, 0, 0);
+
+	//s_d3d12cmdlist->barrier(2, resources, state_new, state_final);
+}
+
 void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
 {
 	//const auto tech = reinterpret_cast<const technique *>(technique.handle);
@@ -568,8 +631,7 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 		uint32_t width, height;
 		runtime->get_screenshot_width_and_height(&width, &height);
 		do_trace(width, height, src_desc);
-
-		//TODO: blit to render target
+		blit(width, height, src_desc, res12);
 	}
 
 	uint64_t signal = 0, fence = 0;
