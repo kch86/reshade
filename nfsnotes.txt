@@ -12,6 +12,8 @@ todo:
 - convert to list of barriers for bvhs built the current frame
 - make warning disable list configurable through the .ini
 - go through reshade for wrap/unwrap commands
+- crash with execute command list goes away when using my own render target :-/
+-- this occurs when i have the debug layer enabled... :-|
 
 vertex shader uniform structures:
 
