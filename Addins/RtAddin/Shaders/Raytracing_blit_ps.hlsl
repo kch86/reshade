@@ -27,7 +27,7 @@ float4 blit_ps(in float4 position : SV_Position, in float2 texcoord : TEXCOORD0)
 
 	uint2 index = uint2(texcoord * float2(width, height) + 0.5);
 	//return float4(texture[index].rgb, 1.0);
-	return float4(1.0, 0.2, 0.2, 1.0);
+	return float4(1.0, 0.2, 1.0, 1.0);
 	//return float4(texture.Sample(sampler0, texcoord).rgb, 1.0);
 }
 

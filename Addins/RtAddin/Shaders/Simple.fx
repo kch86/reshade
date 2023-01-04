@@ -38,7 +38,8 @@ void RtRayGen(uint3 tid : SV_GroupThreadID)
 
 void RtDummyPs(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 color : SV_Target)
 {
-	color = float4(1.0, 0.2, 0.2, 1.0);
+	//color = float4(1.0, 0.2, 0.2, 1.0);
+	color = 1.0;
 }
 
 void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 color : SV_Target)
@@ -50,9 +51,9 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 	color = depth * fogcolor + (Fog_Additive - depth) * color;*/
 
 	color = tex2D(samplerColor, texcoord);
-	//float4 modifier = tex2D(samplerRtTexture, texcoord);
-	//color = float4(1.0, 0.2, 0.2, 1.0) * color;
-	//color = modifier * color;
+	
+	const float4 modifier = tex2D(samplerRtTexture, texcoord);
+	color = modifier * color;
 }
 
 technique Raytracing < enabled = true; >
