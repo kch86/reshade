@@ -258,9 +258,7 @@ void doDeferredDeletes()
 			}
 		}
 		s_frameDeleteData[deleteIndex][i].todelete.clear();
-	}
-
-	
+	}	
 
 	s_frameIndex++;
 }
@@ -302,7 +300,6 @@ void returnd3d12resource(Direct3DDevice9On12 *device, uint64_t signal, ID3D12Fen
 {
 	IDirect3DResource9 *d3d9res = reinterpret_cast<IDirect3DResource9 *>(res.handle);
 
-	// TODO: pass valid values for the signal/fences
 	IDirect3DDevice9On12 *d3d9on12 = device->_orig;
 
 	uint32_t signal_count = 0;
@@ -471,13 +468,13 @@ scopedresource buildBlas(device* device9,
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
 	asDesc.Inputs = inputs;
-	asDesc.DestData = { .buffer = bvh };
-	asDesc.ScratchData = { .buffer = scratch };
+	asDesc.DestData = { .buffer = bvh.handle()};
+	asDesc.ScratchData = { .buffer = scratch.handle()};
 
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
-	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
+	cmdlist->barrier(bvh.handle(), resource_usage::unordered_access, resource_usage::unordered_access);
 
 #endif
 
@@ -514,13 +511,13 @@ scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::comm
 	asDesc.Inputs = inputs;
 	asDesc.Inputs.instances.instance_descs = desc.instances.data();
 	asDesc.Inputs.instances.instances_buffer = { .buffer = instances };
-	asDesc.DestData = { .buffer = bvh };
-	asDesc.ScratchData = { .buffer = scratch };
+	asDesc.DestData = { .buffer = bvh.handle()};
+	asDesc.ScratchData = { .buffer = scratch.handle()};
 
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 
 	// We need to insert a UAV barrier before using the acceleration structures in a raytracing operation
-	cmdlist->barrier(bvh, resource_usage::unordered_access, resource_usage::unordered_access);
+	cmdlist->barrier(bvh.handle(), resource_usage::unordered_access, resource_usage::unordered_access);
 
 	return bvh;
 }

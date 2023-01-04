@@ -32,6 +32,7 @@ struct delayFreedHandle
 		_handle = other._handle;
 		_device = other._device;
 		other._handle.handle = 0;
+		other._device = nullptr;
 	}
 
 	delayFreedHandle<T> &operator=(delayFreedHandle<T> &&other)
@@ -39,6 +40,7 @@ struct delayFreedHandle
 		_handle = other._handle;
 		_device = other._device;
 		other._handle.handle = 0;
+		other._device = nullptr;
 		return *this;
 	}
 
@@ -55,16 +57,15 @@ struct delayFreedHandle
 		}
 	}
 
-	operator T() { return _handle; }
-	T handle() { return _handle;  }
+	T& handle() { return _handle;  }
 
 private:
 
 	delayFreedHandle(delayFreedHandle<T> &) = delete;
 	delayFreedHandle<T> &operator=(delayFreedHandle<T> &) = delete;
 
-	reshade::api::device *_device;
 	T _handle;
+	reshade::api::device *_device;
 };
 
 using scopedresource = delayFreedHandle<reshade::api::resource>;

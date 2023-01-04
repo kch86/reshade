@@ -71,7 +71,7 @@ namespace
 	RtBindings s_bindings;
 
 	scopedresource s_output;
-	resource_view s_output_uav, s_output_srv;
+	scopedresourceview s_output_uav, s_output_srv;
 	uint32_t s_width = 0, s_height = 0;
 
 	pipeline s_currentInputLayout;
@@ -131,9 +131,10 @@ static void init_pipeline()
 
 	// init blit pipeline
 	{
-		format fmt = format::b8g8r8a8_unorm;
 		pipeline_layout_param params[1];
-		params[0] = descriptor_range{ .binding = 0, .count = 1, .visibility = shader_stage::all_graphics, .type = descriptor_type::shader_resource_view };
+		//params[0] = descriptor_range{ .binding = 0, .count = 1, .visibility = shader_stage::pixel, .type = descriptor_type::shader_resource_view };
+
+		params[0] = descriptor_range{ 0, 0, 0, 1, shader_stage::all, 1, descriptor_type::shader_resource_view };
 
 		shader_desc vs_desc = {
 			.code = g_pRaytracing_blit_vs,
@@ -148,7 +149,19 @@ static void init_pipeline()
 		std::vector<pipeline_subobject> subobjects;
 		subobjects.push_back({ pipeline_subobject_type::vertex_shader, 1, &vs_desc });
 		subobjects.push_back({ pipeline_subobject_type::pixel_shader, 1, &ps_desc });
+
+		format fmt = format::b8g8r8a8_unorm;
 		subobjects.push_back({ pipeline_subobject_type::render_target_formats, 1, &fmt });
+
+		rasterizer_desc raster = {
+			.cull_mode = cull_mode::none,
+		};
+		subobjects.push_back({ pipeline_subobject_type::rasterizer_state, 1, &raster });
+
+		depth_stencil_desc ds = {
+			.depth_enable = false
+		};
+		subobjects.push_back({ pipeline_subobject_type::depth_stencil_state, 1, &ds });
 
 		if (!s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_blit_layout) ||
 			!s_d3d12device->create_pipeline(s_blit_layout, static_cast<uint32_t>(subobjects.size()), subobjects.data(), &s_blit_pipeline))
@@ -485,7 +498,7 @@ static void update_rt()
 		{
 			rt_instance_desc &instance = instances[i];
 			instance = {};
-			instance.acceleration_structure = { .buffer = s_bvhs[i] };
+			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
 			instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
 			instance.instance_mask = 0xff;
 			instance.instance_id = i;
@@ -504,8 +517,8 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	if (s_width != width || s_height != height)
 	{
 		s_output.free();
-		s_d3d12device->destroy_resource_view(s_output_uav);
-		s_d3d12device->destroy_resource_view(s_output_srv);
+		s_output_srv.free();
+		s_output_uav.free();
 
 		resource_desc desc = src_desc;
 		desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
@@ -515,21 +528,26 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
 		s_output = scopedresource(s_d3d12device, res);
 
-		resource_view_desc uav(src_desc.texture.format);
-		s_d3d12device->create_resource_view(s_output, resource_usage::unordered_access, uav, &s_output_uav);
-		s_d3d12device->create_resource_view(s_output, resource_usage::shader_resource, uav, &s_output_srv);
+		resource_view_desc view_desc(src_desc.texture.format);
+
+		resource_view srv, uav;
+		s_d3d12device->create_resource_view(res, resource_usage::unordered_access, view_desc, &uav);
+		s_d3d12device->create_resource_view(res, resource_usage::shader_resource, view_desc, &srv);
+
+		s_output_srv = scopedresourceview(s_d3d12device, srv);
+		s_output_uav = scopedresourceview(s_d3d12device, uav);
 	}
 	else
 	{
-		s_d3d12cmdlist->barrier(s_output, resource_usage::shader_resource, resource_usage::unordered_access);
+		s_d3d12cmdlist->barrier(s_output.handle(), resource_usage::shader_resource, resource_usage::unordered_access);
 	}
 
 	resource_view_desc tlas_srv_desc;
 	tlas_srv_desc.type = resource_view_type::acceleration_structure;
 	tlas_srv_desc.acceleration_structure.offset = 0;
-	tlas_srv_desc.acceleration_structure.resource = s_tlas;
+	tlas_srv_desc.acceleration_structure.resource = s_tlas.handle();
 	resource_view tlas_srv;
-	s_d3d12device->create_resource_view(s_tlas, resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
+	s_d3d12device->create_resource_view(s_tlas.handle(), resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
 	scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 
 	//update descriptors
@@ -555,7 +573,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	const uint32_t groupY = (height + 7) / 8;
 	s_d3d12cmdlist->dispatch(groupX, groupY, 1);
 
-	s_d3d12cmdlist->barrier(s_output, resource_usage::unordered_access, resource_usage::shader_resource);
+	s_d3d12cmdlist->barrier(s_output.handle(), resource_usage::unordered_access, resource_usage::shader_resource);
 }
 
 void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource target)
@@ -568,17 +586,29 @@ void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource t
 	}
 
 	s_d3d12cmdlist->bind_pipeline(pipeline_stage::all_graphics, s_blit_pipeline);
-	s_d3d12cmdlist->push_descriptors(shader_stage::pixel, s_blit_layout, 0, descriptor_set_update{ {}, 0, 0, 1, descriptor_type::shader_resource_view, &s_output_srv });
+
+	render_pass_render_target_desc rt_desc = {
+		.view = rtv,
+	};
+	s_d3d12cmdlist->begin_render_pass(1, &rt_desc, nullptr);
+
+	descriptor_set_update updates[] = {
+	   {
+		   .count = 1,
+		   .type = descriptor_type::shader_resource_view,
+		   .descriptors = &s_output_srv, // bind tlas srv
+	   },
+	};
+	s_d3d12cmdlist->push_descriptors(shader_stage::pixel, s_blit_layout, 0, updates[0]);
 
 	const viewport viewport = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
 	s_d3d12cmdlist->bind_viewports(0, 1, &viewport);
 	const rect scissor_rect = { 0, 0, static_cast<int32_t>(width), static_cast<int32_t>(height) };
 	s_d3d12cmdlist->bind_scissor_rects(0, 1, &scissor_rect);
 
-	const bool srgb_write_enable = false;// (_back_buffer_format == format::r8g8b8a8_unorm_srgb || _back_buffer_format == format::b8g8r8a8_unorm_srgb);
-	s_d3d12cmdlist->bind_render_targets_and_depth_stencil(1, &rtv);
-
 	s_d3d12cmdlist->draw(3, 1, 0, 0);
+
+	s_d3d12cmdlist->end_render_pass();
 
 	//s_d3d12cmdlist->barrier(2, resources, state_new, state_final);
 }
