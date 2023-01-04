@@ -56,14 +56,29 @@
 RaytracingAccelerationStructure Scene : register(t0, space0);
 RWTexture2D<float4> RenderTarget : register(u0);
 
+float3 genRayDir(uint3 tid, float2 dims)
+{
+	float2 crd = float2(tid.xy);
+	//float2 dims = float2(launchDim.xy);
+
+	float2 d = ((crd / dims) * 2.f - 1.f);
+	float aspectRatio = dims.x / dims.y;
+
+	return normalize(float3(d.x * aspectRatio, -d.y, -1));
+}
 
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
     //trace
-#if 0
+#if 1
+
+	uint width, height;
+	RenderTarget.GetDimensions(width, height);
+
 	 // a. Configure
-	RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
+	//RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
+	RayQuery<RAY_FLAG_NONE> query;
 
 	uint ray_flags = 0; // Any this ray requires in addition those above.
 	uint ray_instance_mask = 0xffffffff;
@@ -72,8 +87,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	RayDesc ray;
 	ray.TMin = 1e-5f;
 	ray.TMax = 1e10f;
-	ray.Origin = float3(0, 0, 0);
-	ray.Direction = float3(0, 0, 1);
+	ray.Origin = float3(0, 0, -1);
+	ray.Direction = genRayDir(tid, float2(width, height));
 	query.TraceRayInline(Scene, ray_flags, ray_instance_mask, ray);
 
 	// c. Cast 
@@ -82,8 +97,11 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	// In this simplest of scenarios, Proceed() only needs to be called once rather than a loop.
 	// Based on the template specialization above, traversal completion is guaranteed.
 
-	float4 value = 0.0;
-	while (query.Proceed())
+	float4 value = float4(1.0, 0.2, 1.0, 1.0);
+
+	const uint MaxIter = 512;
+	uint iter = 0;
+	while (query.Proceed() && iter < MaxIter)
 	{
 		// d. Examine and act on the result of the traversal.
 
@@ -100,17 +118,19 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				query.CommittedTriangleFrontFace() );*/
 
 			value = float4(0, 1, 0, 1);
+			//TODO: call commit hit here
 			break;
 		}
-		else
-		{
-			// COMMITTED_NOTHING. From template specialization above, COMMITTED_PROCEDURAL_PRIMITIVE can't happen so no need to check for that.
+		iter++;
+	}
 
-			// Miss shading - sample the environment.
-			// Environment_Sample(query.WorldRayOrigin(), query.WorldRayDirection()); 
-
-			value = float4(0, 0, 1, 1);
-		}
+	if (iter > 0)
+	{
+		value = 1.0;
+	}
+	else if (iter == 0)
+	{
+		value = float4(0, 0, 0, 1);
 	}
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
