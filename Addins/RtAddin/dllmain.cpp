@@ -103,14 +103,10 @@ static void init_pipeline()
 {
 	// init rt pipeline
 	{
-		// create compute pipeline
 		pipeline_layout_param params[] = {
-			//srv... need a accel structure type here?
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view})
 		};
-		s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout);
-
 
 		shader_desc shader_desc = {
 			.code = g_pRaytracing_inline,
@@ -123,18 +119,21 @@ static void init_pipeline()
 				.data = &shader_desc,
 			}
 		};
-		s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline);
 
-		s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
-		s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
+		ThrowIfFailed(s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout));
+		ThrowIfFailed(s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline));
+
+		//s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
+		//s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
 	}
 
 	// init blit pipeline
 	{
-		pipeline_layout_param params[1];
-		//params[0] = descriptor_range{ .binding = 0, .count = 1, .visibility = shader_stage::pixel, .type = descriptor_type::shader_resource_view };
+		pipeline_layout_param params[] = {
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::pixel, .type = descriptor_type::shader_resource_view }),
+		};
 
-		params[0] = descriptor_range{ 0, 0, 0, 1, shader_stage::all, 1, descriptor_type::shader_resource_view };
+		//params[0] = descriptor_range{ 0, 0, 0, 1, shader_stage::all, 1, descriptor_type::shader_resource_view };
 
 		shader_desc vs_desc = {
 			.code = g_pRaytracing_blit_vs,
@@ -163,11 +162,8 @@ static void init_pipeline()
 		};
 		subobjects.push_back({ pipeline_subobject_type::depth_stencil_state, 1, &ds });
 
-		if (!s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_blit_layout) ||
-			!s_d3d12device->create_pipeline(s_blit_layout, static_cast<uint32_t>(subobjects.size()), subobjects.data(), &s_blit_pipeline))
-		{
-			assert(false);
-		}
+		ThrowIfFailed(s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_blit_layout));
+		ThrowIfFailed(s_d3d12device->create_pipeline(s_blit_layout, static_cast<uint32_t>(subobjects.size()), subobjects.data(), &s_blit_pipeline));
 	}
 }
 
@@ -542,13 +538,16 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		s_d3d12cmdlist->barrier(s_output.handle(), resource_usage::shader_resource, resource_usage::unordered_access);
 	}
 
-	resource_view_desc tlas_srv_desc;
-	tlas_srv_desc.type = resource_view_type::acceleration_structure;
-	tlas_srv_desc.acceleration_structure.offset = 0;
-	tlas_srv_desc.acceleration_structure.resource = s_tlas.handle();
 	resource_view tlas_srv;
-	s_d3d12device->create_resource_view(s_tlas.handle(), resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
-	scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
+	{
+		resource_view_desc tlas_srv_desc;
+		tlas_srv_desc.type = resource_view_type::acceleration_structure;
+		tlas_srv_desc.acceleration_structure.offset = 0;
+		tlas_srv_desc.acceleration_structure.resource = s_tlas.handle();
+
+		s_d3d12device->create_resource_view(s_tlas.handle(), resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
+		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
+	}	
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -596,7 +595,7 @@ void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource t
 	   {
 		   .count = 1,
 		   .type = descriptor_type::shader_resource_view,
-		   .descriptors = &s_output_srv, // bind tlas srv
+		   .descriptors = &s_output_srv, // bind output of trace pass
 	   },
 	};
 	s_d3d12cmdlist->push_descriptors(shader_stage::pixel, s_blit_layout, 0, updates[0]);
