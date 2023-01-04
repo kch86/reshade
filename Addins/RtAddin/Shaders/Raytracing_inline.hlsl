@@ -58,7 +58,7 @@ RWTexture2D<float4> RenderTarget : register(u0);
 
 
 [numthreads(8, 8, 1)]
-void ray_gen(uint3 tid : SV_GroupThreadID)
+void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
     //trace
 #if 0
@@ -113,7 +113,7 @@ void ray_gen(uint3 tid : SV_GroupThreadID)
 		}
 	}
 #else
-	float4 value = float4(1.0, 0.2, 0.2, 1.0);
+	float4 value = float4(1.0, 0.2, 1.0, 1.0);
 #endif
 
     // Write the raytraced color to the output texture.

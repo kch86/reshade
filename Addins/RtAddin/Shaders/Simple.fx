@@ -7,8 +7,6 @@ sampler samplerColor
 	Texture = texColorBuffer;
 };
 
-
-
 texture rtTexture
 { 
 	Width = BUFFER_WIDTH;
