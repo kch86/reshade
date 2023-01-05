@@ -20,7 +20,7 @@
 //{
 //    "DescriptorTable( UAV( u0 ) ),"                        // Output texture
 //    "SRV( t0 ),"                                           // Acceleration structure
-//    "CBV( b0 ),"                                           // Scene constants
+//    "CBV( b0 ),"                                           // g_rtScene constants
 //    "DescriptorTable( SRV( t1, numDescriptors = 2 ) )"     // Static index and vertex buffers.
 //};
 //
@@ -53,8 +53,13 @@
 //};
 
 
-RaytracingAccelerationStructure Scene : register(t0, space0);
-RWTexture2D<float4> RenderTarget : register(u0);
+RaytracingAccelerationStructure g_rtScene : register(t0);
+RWTexture2D<float4> g_rtOutput : register(u0);
+
+cbuffer RtConstants : register(b0)
+{
+	float4x4 g_viewMatrix;
+}
 
 float3 genRayDir(uint3 tid, float2 dims)
 {
@@ -74,7 +79,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 #if 1
 
 	uint width, height;
-	RenderTarget.GetDimensions(width, height);
+	g_rtOutput.GetDimensions(width, height);
 
 	 // a. Configure
 	//RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
@@ -89,7 +94,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	ray.TMax = 1e10f;
 	ray.Origin = float3(0, 0, -1);
 	ray.Direction = genRayDir(tid, float2(width, height));
-	query.TraceRayInline(Scene, ray_flags, ray_instance_mask, ray);
+	query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
 
 	// c. Cast 
 
@@ -132,13 +137,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	{
 		value = float4(0, 0, 0, 1);
 	}
+
+	if (g_viewMatrix[0][0] == 1.0 && g_viewMatrix[1][1] == 1.0 && g_viewMatrix[2][2])
+	{
+		value = float4(1, 0, 0, 1);
+	}
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
 #endif
 
     // Write the raytraced color to the output texture.
-    //RenderTarget[tid.xy] = float4(1.0, 0.2, 0.2, 1.0);
-	RenderTarget[tid.xy] = value;
+    //g_rtOutput[tid.xy] = float4(1.0, 0.2, 0.2, 1.0);
+	g_rtOutput[tid.xy] = value;
 }
 
 

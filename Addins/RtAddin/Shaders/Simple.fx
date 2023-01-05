@@ -51,7 +51,11 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 	color = tex2D(samplerColor, texcoord);
 	
 	const float4 modifier = tex2D(samplerRtTexture, texcoord);
-	color = modifier * color;
+
+	if (pos.x >= 512)
+	{
+		color = modifier;
+	}
 }
 
 technique Raytracing < enabled = true; >
