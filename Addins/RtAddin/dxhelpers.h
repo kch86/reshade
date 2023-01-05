@@ -6,6 +6,7 @@
 #include <iosfwd>
 
 #include "d3dx12.h"
+#include <DirectXMath.h>
 
 using namespace Microsoft::WRL;
 

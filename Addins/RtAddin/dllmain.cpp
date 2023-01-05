@@ -1,4 +1,5 @@
 // dllmain.cpp : Defines the entry point for the DLL application
+#include <imgui.h>
 #include <reshade.hpp>
 #include "state_tracking.hpp"
 
@@ -20,6 +21,7 @@
 #include "CompiledShaders\Raytracing_blit_ps.hlsl.h"
 
 using namespace reshade::api;
+using namespace DirectX;
 
 namespace
 {
@@ -81,6 +83,11 @@ namespace
 	device* s_d3d12device = nullptr;
 	command_list *s_d3d12cmdlist = nullptr;
 	command_queue *s_d3d12cmdqueue = nullptr;
+
+	float s_ui_view_rot_x = 0.0;
+	float s_ui_view_rot_y = 0.0;
+	float s_ui_view_rot_z = 0.0;
+	float s_ui_fov = 60.0;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -105,7 +112,8 @@ static void init_pipeline()
 	{
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view})
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
+			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(XMMATRIX)/sizeof(int), .visibility = shader_stage::compute}),
 		};
 
 		shader_desc shader_desc = {
@@ -508,6 +516,11 @@ static void update_rt()
 	}
 }
 
+XMMATRIX getViewMatrix()
+{
+	return XMMatrixRotationRollPitchYaw(s_ui_view_rot_x, s_ui_view_rot_y, s_ui_view_rot_z);
+}
+
 static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 {
 	if (s_width != width || s_height != height)
@@ -547,7 +560,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 		s_d3d12device->create_resource_view(s_tlas.handle(), resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
-	}	
+	}
+
+	XMMATRIX viewMatrix = getViewMatrix();
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -560,12 +575,13 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 			.count = 1,
 			.type = descriptor_type::unordered_access_view,
 			.descriptors = &s_output_uav, // bind output uav
-		},
+		}
 	};
 
 	s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
+	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, 2, 0, sizeof(XMMATRIX)/sizeof(int), &viewMatrix);
 
 	// dispatch
 	const uint32_t groupX = (width + 7) / 8;
@@ -672,6 +688,13 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	return true;
 }
 
+static void draw_ui(reshade::api::effect_runtime *)
+{
+	ImGui::SliderFloat("ViewRotX: ", &s_ui_view_rot_x, -180.0f, 180.0f);
+	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
+	ImGui::SliderFloat("ViewRotZ: ", &s_ui_view_rot_z, -180.0f, 180.0f);
+}
+
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
 extern "C" __declspec(dllexport) const char *DESCRIPTION = "Provide ray tracing functionality.";
 
@@ -704,6 +727,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
+
+		reshade::register_overlay(nullptr, draw_ui);
 		
 		register_state_tracking();
 		break;
