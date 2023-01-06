@@ -56,6 +56,12 @@ namespace
 		descriptor_set outputs;
 	};
 
+	struct CameraCb
+	{
+		XMMATRIX view;
+		XMVECTOR pos;
+	};
+
 	std::shared_mutex s_mutex;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
@@ -88,6 +94,13 @@ namespace
 	float s_ui_view_rot_y = 0.0;
 	float s_ui_view_rot_z = 0.0;
 	float s_ui_fov = 60.0;
+	float s_cam_pitch = 0.0;
+	float s_cam_yaw = 0.0;
+	XMVECTOR s_cam_pos = XMVectorZero();
+
+	uint32_t s_mouse_x = 0;
+	uint32_t s_mouse_y = 0;
+	bool s_ctrl_down = false;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -113,7 +126,7 @@ static void init_pipeline()
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
-			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(XMMATRIX)/sizeof(int), .visibility = shader_stage::compute}),
+			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(CameraCb)/sizeof(int), .visibility = shader_stage::compute}),
 		};
 
 		shader_desc shader_desc = {
@@ -489,6 +502,8 @@ static void on_present(effect_runtime *runtime)
 	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
+
+	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 }
 
 static void update_rt()
@@ -516,9 +531,66 @@ static void update_rt()
 	}
 }
 
+void updateCamera(effect_runtime *runtime)
+{
+	uint32_t mousex, mousey;
+	runtime->get_mouse_cursor_position(&mousex, &mousey);
+	float deltaX = float((int)s_mouse_x - (int)mousex) * 0.004f;
+	float deltaY = float((int)s_mouse_y - (int)mousey) * 0.004f;
+	s_mouse_x = mousex;
+	s_mouse_y = mousey;
+
+	if (s_ctrl_down)
+	{
+		s_cam_pitch += deltaY;
+		s_cam_yaw += deltaX;
+	}	
+
+	/*constexpr float limit = XM_PIDIV2 - 0.01f;
+	s_cam_pitch = max(-limit, s_cam_pitch);
+	s_cam_pitch = min(+limit, s_cam_pitch);*/
+
+	// keep longitude in sane range by wrapping
+	if (s_cam_yaw > XM_PI)
+	{
+		s_cam_yaw -= XM_2PI;
+	}
+	else if (s_cam_yaw < -XM_PI)
+	{
+		s_cam_yaw += XM_2PI;
+	}
+
+	float y = sinf(s_cam_pitch);
+	float r = cosf(s_cam_pitch);
+	float z = r * cosf(s_cam_yaw);
+	float x = r * sinf(s_cam_yaw);
+
+	XMVECTOR dir = XMVectorSet(x, y, z, 0.0f) * XMVectorReplicate(1.0f);
+
+	if (runtime->is_key_down('W'))
+	{
+		s_cam_pos += dir;
+	}
+	if (runtime->is_key_down('S'))
+	{
+		s_cam_pos -= dir;
+	}
+}
+
 XMMATRIX getViewMatrix()
 {
-	return XMMatrixRotationRollPitchYaw(s_ui_view_rot_x, s_ui_view_rot_y, s_ui_view_rot_z);
+	/*float y = sinf(s_cam_pitch);
+	float r = cosf(s_cam_pitch);
+	float z = r * cosf(s_cam_yaw);
+	float x = r * sinf(s_cam_yaw);*/
+
+	/*const float to_radians = XM_PI / 180.0f;
+	return XMMatrixRotationRollPitchYaw(
+		s_ui_view_rot_x * to_radians,
+		s_ui_view_rot_y * to_radians,
+		s_ui_view_rot_z * to_radians);*/
+
+	return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
 }
 
 static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
@@ -562,7 +634,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 	}
 
-	XMMATRIX viewMatrix = getViewMatrix();
+	CameraCb cb;
+	cb.view = getViewMatrix();
+	cb.pos = s_cam_pos;
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -581,7 +655,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
-	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, 2, 0, sizeof(XMMATRIX)/sizeof(int), &viewMatrix);
+	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, 2, 0, sizeof(CameraCb)/sizeof(int), &cb);
 
 	// dispatch
 	const uint32_t groupX = (width + 7) / 8;
@@ -666,6 +740,8 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	{
 		return false;
 	}
+
+	updateCamera(runtime);
 
 	resource output_target = resources[0];
 

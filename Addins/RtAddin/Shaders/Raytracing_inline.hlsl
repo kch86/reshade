@@ -59,6 +59,7 @@ RWTexture2D<float4> g_rtOutput : register(u0);
 cbuffer RtConstants : register(b0)
 {
 	float4x4 g_viewMatrix;
+	float4 g_viewPos;
 }
 
 float3 genRayDir(uint3 tid, float2 dims)
@@ -72,6 +73,59 @@ float3 genRayDir(uint3 tid, float2 dims)
 	return normalize(float3(d.x * aspectRatio, -d.y, -1));
 }
 
+float3 hsv2rgb(float h, float s, float v)
+{
+	float3 _HSV = float3(h, s, v);
+	_HSV.x = fmod(100.0 + _HSV.x, 1.0);                                       // Ensure [0,1[
+
+	float   HueSlice = 6.0 * _HSV.x;                                            // In [0,6[
+	float   HueSliceInteger = floor(HueSlice);
+	float   HueSliceInterpolant = HueSlice - HueSliceInteger;                   // In [0,1[ for each hue slice
+
+	float3  TempRGB = float3(_HSV.z * (1.0 - _HSV.y),
+		_HSV.z * (1.0 - _HSV.y * HueSliceInterpolant),
+		_HSV.z * (1.0 - _HSV.y * (1.0 - HueSliceInterpolant)));
+
+	// The idea here to avoid conditions is to notice that the conversion code can be rewritten:
+	//    if      ( var_i == 0 ) { R = V         ; G = TempRGB.z ; B = TempRGB.x }
+	//    else if ( var_i == 2 ) { R = TempRGB.x ; G = V         ; B = TempRGB.z }
+	//    else if ( var_i == 4 ) { R = TempRGB.z ; G = TempRGB.x ; B = V     }
+	// 
+	//    else if ( var_i == 1 ) { R = TempRGB.y ; G = V         ; B = TempRGB.x }
+	//    else if ( var_i == 3 ) { R = TempRGB.x ; G = TempRGB.y ; B = V     }
+	//    else if ( var_i == 5 ) { R = V         ; G = TempRGB.x ; B = TempRGB.y }
+	//
+	// This shows several things:
+	//  . A separation between even and odd slices
+	//  . If slices (0,2,4) and (1,3,5) can be rewritten as basically being slices (0,1,2) then
+	//      the operation simply amounts to performing a "rotate right" on the RGB components
+	//  . The base value to rotate is either (V, B, R) for even slices or (G, V, R) for odd slices
+	//
+	float   IsOddSlice = fmod(HueSliceInteger, 2.0);                          // 0 if even (slices 0, 2, 4), 1 if odd (slices 1, 3, 5)
+	float   ThreeSliceSelector = 0.5 * (HueSliceInteger - IsOddSlice);          // (0, 1, 2) corresponding to slices (0, 2, 4) and (1, 3, 5)
+
+	float3  ScrollingRGBForEvenSlices = float3(_HSV.z, TempRGB.zx);           // (V, Temp Blue, Temp Red) for even slices (0, 2, 4)
+	float3  ScrollingRGBForOddSlices = float3(TempRGB.y, _HSV.z, TempRGB.x);  // (Temp Green, V, Temp Red) for odd slices (1, 3, 5)
+	float3  ScrollingRGB = lerp(ScrollingRGBForEvenSlices, ScrollingRGBForOddSlices, IsOddSlice);
+
+	float   IsNotFirstSlice = saturate(ThreeSliceSelector);                   // 1 if NOT the first slice (true for slices 1 and 2)
+	float   IsNotSecondSlice = saturate(ThreeSliceSelector - 1.0);              // 1 if NOT the first or second slice (true only for slice 2)
+
+	return  lerp(ScrollingRGB.xyz, lerp(ScrollingRGB.zxy, ScrollingRGB.yzx, IsNotSecondSlice), IsNotFirstSlice);
+}
+
+float3 instanceIdToColor(uint id)
+{
+	/*float r = id < 256 ? 255 - id : id < 512 ? 0 : id - 512;
+	float g = id < 256 ? id : id < 512 ? 512 - id : 0;
+	float b = id < 256 ? 0 : id < 512 ? id - 256 : 768 - id;
+
+	return float3(r, g, b) / 255.0;*/
+
+	float hue = ((id * 13) % 360) / 360.0;
+	return hsv2rgb(hue, 0.7, 0.99);
+}
+
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
@@ -83,17 +137,20 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	 // a. Configure
 	//RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
-	RayQuery<RAY_FLAG_NONE> query;
+	RayQuery<RAY_FLAG_FORCE_OPAQUE> query;
 
 	uint ray_flags = 0; // Any this ray requires in addition those above.
 	uint ray_instance_mask = 0xffffffff;
+
+	float3 raydir = genRayDir(tid, float2(width, height));
+	raydir = mul(float4(raydir, 0.0), g_viewMatrix).xyz;
 
 	// b. Initialize  - hardwired here to deliver minimal sample code.
 	RayDesc ray;
 	ray.TMin = 1e-5f;
 	ray.TMax = 1e10f;
-	ray.Origin = float3(0, 0, -1);
-	ray.Direction = genRayDir(tid, float2(width, height));
+	ray.Origin = g_viewPos.xyz;
+	ray.Direction = raydir;
 	query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
 
 	// c. Cast 
@@ -138,9 +195,14 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		value = float4(0, 0, 0, 1);
 	}
 
-	if (g_viewMatrix[0][0] == 1.0 && g_viewMatrix[1][1] == 1.0 && g_viewMatrix[2][2])
+	/*if (g_viewMatrix[0][0] == 1.0 && g_viewMatrix[1][1] == 1.0 && g_viewMatrix[2][2])
 	{
 		value = float4(1, 0, 0, 1);
+	}*/
+
+	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+	{
+		value.rgb = instanceIdToColor(query.CommittedInstanceID());
 	}
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
