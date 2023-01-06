@@ -59,7 +59,11 @@ RWTexture2D<float4> g_rtOutput : register(u0);
 cbuffer RtConstants : register(b0)
 {
 	float4x4 g_viewMatrix;
+
 	float4 g_viewPos;
+
+	float g_fov;
+	uint3 pad0;
 }
 
 float3 genRayDir(uint3 tid, float2 dims)
@@ -70,7 +74,7 @@ float3 genRayDir(uint3 tid, float2 dims)
 	float2 d = ((crd / dims) * 2.f - 1.f);
 	float aspectRatio = dims.x / dims.y;
 
-	return normalize(float3(d.x * aspectRatio, -d.y, -1));
+	return normalize(float3(d.x * aspectRatio * g_fov, -d.y, -1));
 }
 
 float3 hsv2rgb(float h, float s, float v)

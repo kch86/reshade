@@ -59,8 +59,14 @@ namespace
 	struct CameraCb
 	{
 		XMMATRIX view;
+
 		XMVECTOR pos;
+
+		float fov;
+		int pad[3];
 	};
+
+	constexpr bool BlasPerGeometry = true;
 
 	std::shared_mutex s_mutex;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
@@ -68,6 +74,7 @@ namespace
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
+	std::vector<BlasBuildDesc> s_geometry;
 	std::vector<scopedresource> s_bvhs;
 	scopedresource s_tlas;
 	pipeline_layout s_pipeline_layout;
@@ -464,10 +471,26 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
+	if (!BlasPerGeometry)
+	{
+		// build whole vb/ib
+		resource_desc vb_desc = cmd_list->get_device()->get_resource_desc(s_currentVB.vb);
+		resource_desc ib_desc = cmd_list->get_device()->get_resource_desc(s_currentIB.ib);
+
+		uint32_t vb_count = uint32_t(vb_desc.buffer.size / s_currentVB.stride);
+		uint32_t ib_count = uint32_t(ib_desc.buffer.size / s_currentIB.stride);
+
+		assert(vb_count >= vertex_count);
+		assert(ib_count >= index_count);
+		vertex_count = vb_count;
+		index_count = ib_count;	
+	}	
+
 	BlasBuildDesc desc = {
 		.vb = {
 			.res = s_shadow_resources[s_currentVB.vb.handle],
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
+			//.offset = 0,
 			.count = vertex_count,
 			.stride = s_currentVB.stride,
 			.fmt = s_currentVB.fmt
@@ -475,18 +498,42 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.ib = {
 			.res = s_shadow_resources[s_currentIB.ib.handle],
 			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
+			//.offset = 0,
 			.count = index_count,
 			.fmt = s_currentIB.fmt
 		}
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
-	if (s_needsBvhBuild[s_currentVB.vb.handle])
+	if (!BlasPerGeometry)
 	{
-		scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+		if (s_needsBvhBuild[s_currentVB.vb.handle])
+		{
+			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
 
-		s_bvhs.push_back(std::move(bvh));
+			s_bvhs.push_back(std::move(bvh));
+			s_needsBvhBuild[s_currentVB.vb.handle] = false;
+		}
+	}
+	else
+	{
 		s_needsBvhBuild[s_currentVB.vb.handle] = false;
+		auto result = std::find_if(s_geometry.begin(), s_geometry.end(), [&](const BlasBuildDesc &d) {
+			return
+			d.vb.count == desc.vb.count &&
+				d.vb.offset == desc.vb.offset &&
+				d.vb.res == desc.vb.res &&
+				d.ib.count == desc.ib.count &&
+				d.ib.offset == desc.ib.offset &&
+				d.ib.res == desc.ib.res;
+		});
+		if (result == s_geometry.end())
+		{
+			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
+
+			s_bvhs.push_back(std::move(bvh));
+			s_geometry.push_back(desc);
+		}
 	}	
 
 	// should I reset the vb/ib data now?
@@ -515,6 +562,7 @@ static void update_rt()
 		std::vector<rt_instance_desc> instances(s_bvhs.size());
 		for (size_t i = 0; i < instances.size(); i++)
 		{
+			assert(s_bvhs[i].handle().handle != 0);
 			rt_instance_desc &instance = instances[i];
 			instance = {};
 			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
@@ -637,6 +685,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	CameraCb cb;
 	cb.view = getViewMatrix();
 	cb.pos = s_cam_pos;
+	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -769,6 +818,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderFloat("ViewRotX: ", &s_ui_view_rot_x, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotZ: ", &s_ui_view_rot_z, -180.0f, 180.0f);
+	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
