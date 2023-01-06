@@ -893,7 +893,7 @@ static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances
 		return filter;
 
 	std::stringstream s;
-	s << "draw_indexed(" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
+	s << "draw_indexed " << drawCallCount << " (" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
