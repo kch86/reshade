@@ -1216,7 +1216,15 @@ static void on_build_acceleration_structure(command_list *cmd_list, const rt_bui
 		return;
 
 	std::stringstream s;
-	s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ")";
+	if (desc.Inputs.Type == rt_acceleration_structure_type::top_level)
+	{
+		s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ", instances: " << desc.Inputs.NumDescs << ")";
+	}
+	else
+	{
+		s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ")";
+	}
+	
 
 	reshade::log_message(3, s.str().c_str());
 }
