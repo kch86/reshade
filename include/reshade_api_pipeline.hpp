@@ -1162,9 +1162,9 @@ namespace reshade::api
 
 	struct rt_acceleration_structure_prebuild_info
 	{
-		uint64_t ResultDataMaxSizeInBytes;
-		uint64_t ScratchDataSizeInBytes;
-		uint64_t UpdateScratchDataSizeInBytes;
+		uint64_t result_data_max_size_in_bytes;
+		uint64_t scratch_data_size_in_bytes;
+		uint64_t update_scratch_data_size_in_bytes;
 	};
 
 	enum class rt_acceleration_structure_postbuild_info_type : uint32_t
