@@ -452,11 +452,11 @@ scopedresource buildBlas(device* device9,
 
 	// Get the size requirements for the scratch and AS buffers
 	rt_build_acceleration_structure_inputs inputs = {};
-	inputs.DescsLayout = rt_elements_layout::array;
-	inputs.Flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
-	inputs.NumDescs = 1;
-	inputs.pGeometryDescs = &geomDesc;
-	inputs.Type = rt_acceleration_structure_type::bottom_level;
+	inputs.descs_layout = rt_elements_layout::array;
+	inputs.flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
+	inputs.desc_count = 1;
+	inputs.geometry_desc_array = &geomDesc;
+	inputs.type = rt_acceleration_structure_type::bottom_level;
 
 	rt_acceleration_structure_prebuild_info info = {};
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
@@ -486,10 +486,10 @@ scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::comm
 	device *device12 = cmdlist->get_device();
 
 	rt_build_acceleration_structure_inputs inputs = {};
-	inputs.DescsLayout = rt_elements_layout::array;
-	inputs.Flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
-	inputs.NumDescs = desc.instances.size();
-	inputs.Type = rt_acceleration_structure_type::top_level;
+	inputs.descs_layout = rt_elements_layout::array;
+	inputs.flags = rt_acceleration_structure_build_flags::prefer_fast_trace;
+	inputs.desc_count = desc.instances.size();
+	inputs.type = rt_acceleration_structure_type::top_level;
 
 	rt_acceleration_structure_prebuild_info info = {};
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
