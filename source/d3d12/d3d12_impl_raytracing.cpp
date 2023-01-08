@@ -148,7 +148,7 @@ void reshade::d3d12::convert_rt_post_build_info_array(span<api::rt_acceleration_
 
 	for (uint32_t i = 0; i < input.size(); i++)
 	{
-		output[i].DestBuffer = to_native_gpu(input[i].DestBuffer.buffer) + input[i].DestBuffer.offset;
-		output[i].InfoType = to_native(input[i].InfoType);
+		output[i].DestBuffer = to_native_gpu(input[i].dest_buffer.buffer) + input[i].dest_buffer.offset;
+		output[i].InfoType = to_native(input[i].info_type);
 	}
 }

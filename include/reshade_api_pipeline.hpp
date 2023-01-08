@@ -1177,7 +1177,7 @@ namespace reshade::api
 
 	struct rt_acceleration_structure_postbuild_info_desc
 	{
-		buffer_range DestBuffer;
-		rt_acceleration_structure_postbuild_info_type InfoType;
+		buffer_range dest_buffer;
+		rt_acceleration_structure_postbuild_info_type info_type;
 	};
 }
