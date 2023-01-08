@@ -14,6 +14,8 @@ todo:
 - go through reshade for wrap/unwrap commands
 - crash with execute command list goes away when using my own render target :-/
 -- this occurs when i have the debug layer enabled... :-|
+- find view proj matrix
+- categorize/bin vs, ps, blend states
 
 vertex shader uniform structures:
 
