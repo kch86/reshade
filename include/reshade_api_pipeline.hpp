@@ -1154,10 +1154,10 @@ namespace reshade::api
 
 	struct rt_build_acceleration_structure_desc
 	{
-		buffer_range DestData;
-		rt_build_acceleration_structure_inputs Inputs;
-		buffer_range SourceData;
-		buffer_range ScratchData;
+		rt_build_acceleration_structure_inputs inputs;
+		buffer_range dest_data;
+		buffer_range source_data;
+		buffer_range scratch_data;
 	};
 
 	struct rt_acceleration_structure_prebuild_info

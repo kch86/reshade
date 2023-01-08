@@ -130,12 +130,12 @@ auto reshade::d3d12::convert_rt_build_desc(
 	const api::rt_build_acceleration_structure_desc &desc,
 	span<D3D12_RAYTRACING_GEOMETRY_DESC> geom_desc_storage) -> D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC
 {
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = convert_rt_build_inputs(device, desc.Inputs, geom_desc_storage);
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = convert_rt_build_inputs(device, desc.inputs, geom_desc_storage);
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC asDesc = {};
 	asDesc.Inputs = inputs;
-	asDesc.DestAccelerationStructureData = to_native_gpu(desc.DestData.buffer) + desc.DestData.offset;
-	asDesc.ScratchAccelerationStructureData = to_native_gpu(desc.ScratchData.buffer) + desc.ScratchData.offset;
+	asDesc.DestAccelerationStructureData = to_native_gpu(desc.dest_data.buffer) + desc.dest_data.offset;
+	asDesc.ScratchAccelerationStructureData = to_native_gpu(desc.scratch_data.buffer) + desc.scratch_data.offset;
 
 	return asDesc;
 }
