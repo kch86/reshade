@@ -53,20 +53,20 @@ auto reshade::d3d12::convert_rt_build_inputs(
 {
 	// todo: support different layouts?
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-	inputs.DescsLayout = to_native(input.DescsLayout);
-	inputs.Flags = to_native(input.Flags);
-	inputs.NumDescs = input.NumDescs;
-	inputs.Type = to_native(input.Type);
+	inputs.DescsLayout = to_native(input.descs_layout);
+	inputs.Flags = to_native(input.flags);
+	inputs.NumDescs = input.desc_count;
+	inputs.Type = to_native(input.type);
 
-	if (input.Type == api::rt_acceleration_structure_type::top_level)
+	if (input.type == api::rt_acceleration_structure_type::top_level)
 	{
 		if (input.instances.instances_buffer.buffer.handle != 0)
 		{
 			D3D12_RAYTRACING_INSTANCE_DESC *instancesPtr;
-			uint64_t size_to_map = sizeof(api::rt_instance_desc) * input.NumDescs;
+			uint64_t size_to_map = sizeof(api::rt_instance_desc) * input.desc_count;
 			device->map_buffer_region(input.instances.instances_buffer.buffer, input.instances.instances_buffer.offset, size_to_map, api::map_access::write_only, (void **)&instancesPtr);
 
-			for (uint32_t i = 0; i < input.NumDescs; i++)
+			for (uint32_t i = 0; i < input.desc_count; i++)
 			{
 				const api::rt_instance_desc &src = input.instances.instance_descs[i];
 
@@ -87,10 +87,10 @@ auto reshade::d3d12::convert_rt_build_inputs(
 	}
 	else
 	{
-		assert(geom_desc_storage.size() == input.NumDescs);
-		for (uint32_t i = 0; i < input.NumDescs; i++)
+		assert(geom_desc_storage.size() == input.desc_count);
+		for (uint32_t i = 0; i < input.desc_count; i++)
 		{
-			const api::rt_geometry_desc &desc = input.pGeometryDescs[i];
+			const api::rt_geometry_desc &desc = input.geometry_desc_array[i];
 
 			D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
 			if (desc.Type == api::rt_geometry_type::procedural)

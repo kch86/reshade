@@ -1365,7 +1365,7 @@ void reshade::d3d12::device_impl::get_rt_acceleration_structure_prebuild_info(
 		return;
 	}
 
-	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(pDesc->NumDescs);
+	temp_mem<D3D12_RAYTRACING_GEOMETRY_DESC> geomDescs(pDesc->desc_count);
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = convert_rt_build_inputs(this, *pDesc, { geomDescs.p, geomDescs.count });
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};

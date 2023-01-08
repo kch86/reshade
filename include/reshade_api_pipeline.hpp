@@ -1137,18 +1137,18 @@ namespace reshade::api
 
 	struct rt_build_acceleration_structure_inputs
 	{
-		rt_acceleration_structure_type Type;
-		rt_acceleration_structure_build_flags Flags;
-		uint32_t NumDescs;
-		rt_elements_layout DescsLayout;
+		rt_acceleration_structure_type type;
+		rt_acceleration_structure_build_flags flags;
+		uint32_t desc_count;
+		rt_elements_layout descs_layout;
 		union
 		{
 			struct {
 				buffer_range instances_buffer;
 				const rt_instance_desc *instance_descs;
 			} instances;
-			const rt_geometry_desc *pGeometryDescs;
-			const rt_geometry_desc *const *ppGeometryDescs;
+			const rt_geometry_desc *geometry_desc_array;
+			const rt_geometry_desc *const *geometry_desc_ptr_array;
 		};
 	};
 
