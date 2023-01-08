@@ -3,6 +3,7 @@
 #include "d3d12_impl_type_convert.hpp"
 #include "addon.hpp"
 
+//TODO: assert that values are the same and can be casted
 namespace reshade::d3d12
 {
 	D3D12_ELEMENTS_LAYOUT to_native(api::rt_elements_layout layout)
@@ -96,9 +97,9 @@ auto reshade::d3d12::convert_rt_build_inputs(
 			if (desc.Type == api::rt_geometry_type::procedural)
 			{
 				const api::rt_geometry_aabb_desc &aabb = desc.AABBs;
-				geomDesc.AABBs.AABBCount = aabb.AABBCount;
-				geomDesc.AABBs.AABBs.StartAddress = to_native_gpu(aabb.AABBs.buffer) + aabb.AABBs.offset;
-				geomDesc.AABBs.AABBs.StrideInBytes = aabb.AABBs.stride;
+				geomDesc.AABBs.AABBCount = aabb.aabb_count;
+				geomDesc.AABBs.AABBs.StartAddress = to_native_gpu(aabb.aabb_buffer.buffer) + aabb.aabb_buffer.offset;
+				geomDesc.AABBs.AABBs.StrideInBytes = aabb.aabb_buffer.stride;
 			}
 			else
 			{

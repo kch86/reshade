@@ -1065,8 +1065,8 @@ namespace reshade::api
 
 	struct rt_geometry_aabb_desc
 	{
-		uint64_t AABBCount;
-		buffer_stride AABBs;
+		uint64_t aabb_count;
+		buffer_stride aabb_buffer;
 	};
 
 	enum class rt_geometry_type : uint32_t
@@ -1132,7 +1132,7 @@ namespace reshade::api
 	enum class rt_elements_layout : uint32_t
 	{
 		array = 0,
-		arrayofpointers = 0x1
+		array_of_pointers = 0x1
 	};
 
 	struct rt_build_acceleration_structure_inputs
