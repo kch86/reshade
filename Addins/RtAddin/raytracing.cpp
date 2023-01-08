@@ -462,8 +462,8 @@ scopedresource buildBlas(device* device9,
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes, resource_usage::unordered_access);
-	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes, resource_usage::acceleration_structure);
+	scopedresource scratch = allocateUAVBuffer(device12, info.scratch_data_size_in_bytes, resource_usage::unordered_access);
+	scopedresource bvh = allocateUAVBuffer(device12, info.result_data_max_size_in_bytes, resource_usage::acceleration_structure);
 
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
@@ -495,8 +495,8 @@ scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::comm
 	device12->get_rt_acceleration_structure_prebuild_info(&inputs, &info);
 
 	// Create the buffers. They need to support UAV, and since we are going to immediately use them, we create them with an unordered-access state
-	scopedresource scratch = allocateUAVBuffer(device12, info.ScratchDataSizeInBytes, resource_usage::unordered_access);
-	scopedresource bvh = allocateUAVBuffer(device12, info.ResultDataMaxSizeInBytes, resource_usage::acceleration_structure);
+	scopedresource scratch = allocateUAVBuffer(device12, info.scratch_data_size_in_bytes, resource_usage::unordered_access);
+	scopedresource bvh = allocateUAVBuffer(device12, info.result_data_max_size_in_bytes, resource_usage::acceleration_structure);
 
 	const uint32_t instancesSizeBytes = sizeof(rt_instance_desc) * desc.instances.size();
 	resource instances;
