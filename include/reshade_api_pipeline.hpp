@@ -1084,12 +1084,12 @@ namespace reshade::api
 
 	struct rt_geometry_desc
 	{
-		rt_geometry_type Type;
-		rt_geometry_flags Flags;
+		rt_geometry_type type;
+		rt_geometry_flags flags;
 		union
 		{
-			rt_geometry_triangle_desc Triangles;
-			rt_geometry_aabb_desc AABBs;
+			rt_geometry_triangle_desc triangle_geo_descs;
+			rt_geometry_aabb_desc procedural_geo_descs;
 		};
 	};
 

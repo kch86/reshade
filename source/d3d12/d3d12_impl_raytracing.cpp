@@ -94,16 +94,16 @@ auto reshade::d3d12::convert_rt_build_inputs(
 			const api::rt_geometry_desc &desc = input.geometry_desc_array[i];
 
 			D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
-			if (desc.Type == api::rt_geometry_type::procedural)
+			if (desc.type == api::rt_geometry_type::procedural)
 			{
-				const api::rt_geometry_aabb_desc &aabb = desc.AABBs;
+				const api::rt_geometry_aabb_desc &aabb = desc.procedural_geo_descs;
 				geomDesc.AABBs.AABBCount = aabb.aabb_count;
 				geomDesc.AABBs.AABBs.StartAddress = to_native_gpu(aabb.aabb_buffer.buffer) + aabb.aabb_buffer.offset;
 				geomDesc.AABBs.AABBs.StrideInBytes = aabb.aabb_buffer.stride;
 			}
 			else
 			{
-				const api::rt_geometry_triangle_desc &triangle = desc.Triangles;
+				const api::rt_geometry_triangle_desc &triangle = desc.triangle_geo_descs;
 				geomDesc.Triangles.VertexBuffer.StartAddress = to_native_gpu(triangle.vertex_buffer.buffer) + triangle.vertex_buffer.offset;
 				geomDesc.Triangles.VertexBuffer.StrideInBytes = triangle.vertex_buffer.stride;
 				geomDesc.Triangles.VertexFormat = to_native(triangle.vertex_format);
@@ -114,8 +114,8 @@ auto reshade::d3d12::convert_rt_build_inputs(
 				geomDesc.Triangles.Transform3x4 = to_native_gpu(triangle.transform3x4_buffer.buffer) + triangle.transform3x4_buffer.offset;
 			}
 
-			geomDesc.Type = to_native(desc.Type);
-			geomDesc.Flags = to_native(desc.Flags);
+			geomDesc.Type = to_native(desc.type);
+			geomDesc.Flags = to_native(desc.flags);
 
 			geom_desc_storage[i] = geomDesc;
 		}
