@@ -434,21 +434,21 @@ scopedresource buildBlas(device* device9,
 	scopedresource bvh(device12, (resource)uint64_t(nativebvh));
 #else
 	rt_geometry_desc geomDesc = {};
-	geomDesc.Type = rt_geometry_type::triangles;
-	geomDesc.Triangles.vertex_buffer = {
+	geomDesc.type = rt_geometry_type::triangles;
+	geomDesc.triangle_geo_descs.vertex_buffer = {
 		.buffer = desc.vb.res,
 		.offset = desc.vb.offset,
 		.stride = desc.vb.stride,
 	};
-	geomDesc.Triangles.vertex_format = desc.vb.fmt;
-	geomDesc.Triangles.vertex_count = desc.vb.count;
-	geomDesc.Triangles.index_buffer = {
+	geomDesc.triangle_geo_descs.vertex_format = desc.vb.fmt;
+	geomDesc.triangle_geo_descs.vertex_count = desc.vb.count;
+	geomDesc.triangle_geo_descs.index_buffer = {
 		.buffer = desc.ib.res,
 		.offset = desc.ib.offset,
 	};
-	geomDesc.Triangles.index_count = desc.ib.count;
-	geomDesc.Triangles.index_format = desc.ib.fmt;
-	geomDesc.Flags = rt_geometry_flags::opaque;
+	geomDesc.triangle_geo_descs.index_count = desc.ib.count;
+	geomDesc.triangle_geo_descs.index_format = desc.ib.fmt;
+	geomDesc.flags = rt_geometry_flags::opaque;
 
 	// Get the size requirements for the scratch and AS buffers
 	rt_build_acceleration_structure_inputs inputs = {};
