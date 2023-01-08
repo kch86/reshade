@@ -467,9 +467,9 @@ scopedresource buildBlas(device* device9,
 
 	// Create the bottom-level AS
 	rt_build_acceleration_structure_desc asDesc = {};
-	asDesc.Inputs = inputs;
-	asDesc.DestData = { .buffer = bvh.handle()};
-	asDesc.ScratchData = { .buffer = scratch.handle()};
+	asDesc.inputs = inputs;
+	asDesc.dest_data = { .buffer = bvh.handle()};
+	asDesc.scratch_data = { .buffer = scratch.handle()};
 
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 
@@ -508,11 +508,11 @@ scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::comm
 	scopedresource instancelifetime(device12, instances);
 
 	rt_build_acceleration_structure_desc asDesc = {};
-	asDesc.Inputs = inputs;
-	asDesc.Inputs.instances.instance_descs = desc.instances.data();
-	asDesc.Inputs.instances.instances_buffer = { .buffer = instances };
-	asDesc.DestData = { .buffer = bvh.handle()};
-	asDesc.ScratchData = { .buffer = scratch.handle()};
+	asDesc.inputs = inputs;
+	asDesc.inputs.instances.instance_descs = desc.instances.data();
+	asDesc.inputs.instances.instances_buffer = { .buffer = instances };
+	asDesc.dest_data = { .buffer = bvh.handle()};
+	asDesc.scratch_data = { .buffer = scratch.handle()};
 
 	cmdlist->build_acceleration_structure(&asDesc, 0, nullptr);
 

@@ -1212,13 +1212,13 @@ static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, 
 
 static void on_build_acceleration_structure(command_list *cmd_list, const rt_build_acceleration_structure_desc &desc, const buffer_range &buffer)
 {
-	if (!do_capture() && desc.Inputs.type == rt_acceleration_structure_type::top_level)
+	if (!do_capture() && desc.inputs.type == rt_acceleration_structure_type::top_level)
 		return;
 
 	std::stringstream s;
-	if (desc.Inputs.type == rt_acceleration_structure_type::top_level)
+	if (desc.inputs.type == rt_acceleration_structure_type::top_level)
 	{
-		s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ", instances: " << desc.Inputs.desc_count << ")";
+		s << "build_acceleration_structure(" << (void *)buffer.buffer.handle << ", offset: " << buffer.offset << ", size: " << buffer.size << ", instances: " << desc.inputs.desc_count << ")";
 	}
 	else
 	{
