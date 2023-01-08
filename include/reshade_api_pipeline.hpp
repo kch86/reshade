@@ -1055,12 +1055,12 @@ namespace reshade::api
 
 	struct rt_aabb
 	{
-		float MinX;
-		float MinY;
-		float MinZ;
-		float MaxX;
-		float MaxY;
-		float MaxZ;
+		float min_x;
+		float min_y;
+		float min_z;
+		float max_x;
+		float max_y;
+		float max_z;
 	};
 
 	struct rt_geometry_aabb_desc
