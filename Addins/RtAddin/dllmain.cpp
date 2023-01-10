@@ -358,9 +358,19 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
-	if (s_resources.find(resource.handle) != s_resources.end())
+	resource_desc desc = device->get_resource_desc(resource);
+
+	if (desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer)
 	{
-		s_mapped_resources[resource.handle] = *data;
+		if (s_resources.find(resource.handle) != s_resources.end())
+		{
+			s_mapped_resources[resource.handle] = *data;
+		}
+
+		if (desc.usage == resource_usage::vertex_buffer)
+		{
+			s_needsBvhBuild[resource.handle] = true;
+		}
 	}	
 }
 
@@ -389,6 +399,15 @@ void on_unmap_buffer_region(device *device, resource handle)
 		s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
 		memcpy(ptr, data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
+
+		auto prev_shadow = s_shadow_resources.find(handle.handle);
+		if (prev_shadow != s_shadow_resources.end())
+		{
+			//erase from our geometry list
+			std::erase_if(s_geometry, [&](const BlasBuildDesc &desc) {
+				return desc.vb.res == handle;
+			});
+		}
 
 		s_shadow_resources[handle.handle] = d3d12res.handle;
 		s_mapped_resources.erase(handle.handle);
