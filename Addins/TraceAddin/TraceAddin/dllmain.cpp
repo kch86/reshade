@@ -9,6 +9,7 @@
 #include <sstream>
 #include <shared_mutex>
 #include <unordered_set>
+#include <d3dcompiler.h>
 
 using namespace reshade::api;
 
@@ -18,6 +19,7 @@ namespace
 	bool s_do_capture = s_capture_continuous;
 	bool ui_filterDraws = false;
 	bool ui_filterDrawIndexes = false;
+	bool ui_alwaysTraceBlasBuilds = false;
 	int ui_drawCallBegin = 0;
 	int ui_drawCallEnd = 4095;
 	int drawCallCount = 0;
@@ -626,6 +628,30 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	s_pipelines.emplace(handle.handle);
+
+	for (uint32_t i = 0; i < subObjectCount; i++)
+	{
+		const pipeline_subobject &object = subObjects[i];
+
+		if (object.type == pipeline_subobject_type::vertex_shader)
+		{
+			shader_desc *shader_data = (shader_desc*)object.data;
+			ID3DBlob *blob;
+			HRESULT result = D3DDisassemble(shader_data->code, shader_data->code_size, 0, 0, &blob);
+
+			if (SUCCEEDED(result))
+			{
+				char *str = (char *)blob->GetBufferPointer();
+
+				std::stringstream s;
+				s << "vertex shader (" << (void *)handle.handle << " ):\n" << str;
+
+				reshade::log_message(3, s.str().c_str());
+			}
+
+			
+		}
+	}
 }
 static void on_destroy_pipeline(device *device, pipeline handle)
 {
@@ -1115,7 +1141,7 @@ static bool on_clear_unordered_access_view_uint(command_list *, resource_view ua
 #ifndef NDEBUG
 	{	const std::shared_lock<std::shared_mutex> lock(s_mutex);
 
-	assert(s_resource_views.find(uav.handle) != s_resource_views.end());
+assert(s_resource_views.find(uav.handle) != s_resource_views.end());
 	}
 #endif
 
@@ -1212,8 +1238,13 @@ static bool on_copy_query_pool_results(command_list *cmd_list, query_pool pool, 
 
 static void on_build_acceleration_structure(command_list *cmd_list, const rt_build_acceleration_structure_desc &desc, const buffer_range &buffer)
 {
-	if (!do_capture() && desc.inputs.type == rt_acceleration_structure_type::top_level)
-		return;
+	if (!do_capture())
+	{
+		if (!(ui_alwaysTraceBlasBuilds && desc.inputs.type == rt_acceleration_structure_type::bottom_level))
+		{
+			return;
+		}
+	}
 
 	std::stringstream s;
 	if (desc.inputs.type == rt_acceleration_structure_type::top_level)
@@ -1257,6 +1288,7 @@ static void on_present(effect_runtime *runtime)
 static void draw_ui(reshade::api::effect_runtime *)
 {
 	ImGui::Checkbox("FilterDraws", &ui_filterDraws);
+	ImGui::Checkbox("AlwaysTraceBlasBuilds", &ui_alwaysTraceBlasBuilds);
 	ImGui::Value("DrawIndexCount: ", drawCallCount);
 	ImGui::SliderInt("DrawCallBegin: ", &ui_drawCallBegin, 0, drawCallCount);
 	ImGui::SliderInt("DrawCallEnd: ", &ui_drawCallEnd, 0, drawCallCount);
