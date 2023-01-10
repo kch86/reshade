@@ -16,6 +16,9 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{593298e1-2659-4c62-99e1-4d1288b4499c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Config">
+      <UniqueIdentifier>{2f524aee-7629-4034-b79b-cd968246f4e9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -65,6 +68,9 @@
   <ItemGroup>
     <CopyFileToFolders Include="Shaders\Simple.fx">
       <Filter>Shaders</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="Config\Reshade.ini">
+      <Filter>Config</Filter>
     </CopyFileToFolders>
   </ItemGroup>
 </Project>
