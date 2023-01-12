@@ -67,7 +67,8 @@ namespace
 		XMVECTOR pos;
 
 		float fov;
-		int pad[3];
+		uint32_t usePrebuiltCamMat;
+		int pad[2];
 	};
 
 	constexpr bool BlasPerGeometry = true;
@@ -105,6 +106,7 @@ namespace
 	float s_ui_view_rot_y = 0.0;
 	float s_ui_view_rot_z = 0.0;
 	float s_ui_fov = 60.0;
+	bool s_ui_use_viewproj = false;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -119,6 +121,7 @@ namespace
 	bool s_vspipeline_is_bound = false;
 
 	XMMATRIX s_viewproj;
+	XMMATRIX s_view;
 	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
@@ -486,7 +489,9 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		//extract our viewproj matrix. it is the 1st value in the array
 		s_got_viewproj = true;
 
-		s_viewproj = *((XMMATRIX*)values);
+		XMMATRIX *matrices = (XMMATRIX *)values;
+		s_viewproj = matrices[0];
+		s_view = matrices[1];
 	}
 }
 
@@ -660,9 +665,9 @@ void updateCamera(effect_runtime *runtime)
 		s_cam_yaw += deltaX;
 	}	
 
-	/*constexpr float limit = XM_PIDIV2 - 0.01f;
+	constexpr float limit = XM_PIDIV2 - 0.01f;
 	s_cam_pitch = max(-limit, s_cam_pitch);
-	s_cam_pitch = min(+limit, s_cam_pitch);*/
+	s_cam_pitch = min(+limit, s_cam_pitch);
 
 	// keep longitude in sane range by wrapping
 	if (s_cam_yaw > XM_PI)
@@ -693,16 +698,10 @@ void updateCamera(effect_runtime *runtime)
 
 XMMATRIX getViewMatrix()
 {
-	/*float y = sinf(s_cam_pitch);
-	float r = cosf(s_cam_pitch);
-	float z = r * cosf(s_cam_yaw);
-	float x = r * sinf(s_cam_yaw);*/
-
-	/*const float to_radians = XM_PI / 180.0f;
-	return XMMatrixRotationRollPitchYaw(
-		s_ui_view_rot_x * to_radians,
-		s_ui_view_rot_y * to_radians,
-		s_ui_view_rot_z * to_radians);*/
+	if (s_ui_use_viewproj)
+	{
+		return XMMatrixInverse(0, s_viewproj);
+	}
 
 	return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
 }
@@ -752,6 +751,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.view = getViewMatrix();
 	cb.pos = s_cam_pos;
 	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
+	cb.usePrebuiltCamMat = s_ui_use_viewproj;
+	if (cb.usePrebuiltCamMat)
+	{
+		//cb.pos = 
+	}
 
 	//update descriptors
 	descriptor_set_update updates[] = {
@@ -885,6 +889,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotZ: ", &s_ui_view_rot_z, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
+
+	ImGui::Checkbox("UseViewProjMat", &s_ui_use_viewproj);
 }
 
 static void do_shutdown()
