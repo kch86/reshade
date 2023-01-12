@@ -59,6 +59,26 @@ namespace
 			return "unknown";
 		}
 	}
+	inline auto to_string(pipeline_subobject_type value)
+	{
+		switch (value)
+		{
+		case pipeline_subobject_type::vertex_shader:
+			return "vertex";
+		case pipeline_subobject_type::hull_shader:
+			return "hull";
+		case pipeline_subobject_type::domain_shader:
+			return "domain";
+		case pipeline_subobject_type::geometry_shader:
+			return "geometry";
+		case pipeline_subobject_type::pixel_shader:
+			return "pixel";
+		case pipeline_subobject_type::compute_shader:
+			return "compute";
+		default:
+			return "unknown";
+		}
+	}
 	inline auto to_string(pipeline_stage value)
 	{
 		switch (value)
@@ -639,7 +659,8 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 	{
 		const pipeline_subobject &object = subObjects[i];
 
-		if (object.type == pipeline_subobject_type::vertex_shader)
+		if (object.type == pipeline_subobject_type::vertex_shader ||
+			object.type == pipeline_subobject_type::pixel_shader)
 		{
 			shader_desc *shader_data = (shader_desc*)object.data;
 			ComPtr<ID3DBlob> blob;
@@ -652,7 +673,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
 
 				std::stringstream s;
-				s << "vertex shader (" << (void *)handle.handle << ", hash: " << hash << "):\n" << str;
+				s << "init_pipeline(" << to_string(object.type) << ", " << (void *)handle.handle << ", hash: " << hash << "):\n" << str;
 
 				reshade::log_message(3, s.str().c_str());
 			}
