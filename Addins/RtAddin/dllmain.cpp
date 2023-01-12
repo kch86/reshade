@@ -20,6 +20,10 @@
 #include "CompiledShaders\Raytracing_blit_vs.hlsl.h"
 #include "CompiledShaders\Raytracing_blit_ps.hlsl.h"
 
+#define XXH_STATIC_LINKING_ONLY   /* access advanced declarations */
+#define XXH_IMPLEMENTATION
+#include <xxhash/xxhash.h>
+
 using namespace reshade::api;
 using namespace DirectX;
 
@@ -108,6 +112,16 @@ namespace
 	uint32_t s_mouse_x = 0;
 	uint32_t s_mouse_y = 0;
 	bool s_ctrl_down = false;
+
+	const uint64_t VsHash = 18047787432603860385;
+	pipeline s_vspipeline = { 0 };
+	std::unordered_set<uint64_t> s_vspipelines;
+	bool s_vspipeline_is_bound = false;
+
+	XMMATRIX s_viewproj;
+	bool s_got_viewproj = false;
+
+	int s_draw_count = 0;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -301,6 +315,19 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				return;
 			}
 		}
+		else if (object.type == pipeline_subobject_type::vertex_shader)
+		{
+			//if (s_vspipeline == 0)
+			{
+				shader_desc *shader_data = (shader_desc *)object.data;
+				XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+				if (hash == VsHash)
+				{
+					s_vspipeline = handle;
+					s_vspipelines.insert(handle.handle);
+				}
+			}
+		}
 	}
 #endif
 }
@@ -316,6 +343,11 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 	if (type == pipeline_stage::input_assembler)
 	{
 		s_currentInputLayout = pipeline;
+	}
+	else if(type == pipeline_stage::vertex_shader)
+	{
+		//s_vspipeline_is_bound = pipeline == s_vspipeline;
+		s_vspipeline_is_bound = s_vspipelines.contains(pipeline.handle);
 	}
 }
 
@@ -447,6 +479,16 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 		s_currentVB.fmt = posStreamInfo.format;
 	}	
 }
+static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
+{
+	if (s_vspipeline_is_bound && !s_got_viewproj && s_draw_count == 134)
+	{
+		//extract our viewproj matrix. it is the 1st value in the array
+		s_got_viewproj = true;
+
+		s_viewproj = *((XMMATRIX*)values);
+	}
+}
 
 bool g_drawBeforeUi = false;
 static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
@@ -484,6 +526,7 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	return false;
 }
+;
 static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
@@ -553,7 +596,9 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			s_bvhs.push_back(std::move(bvh));
 			s_geometry.push_back(desc);
 		}
-	}	
+	}
+
+	s_draw_count++;
 
 	// should I reset the vb/ib data now?
 	// there could be multiple draws with the same vb/ib data
@@ -570,6 +615,8 @@ static void on_present(effect_runtime *runtime)
 	doDeferredDeletes();
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
+	s_got_viewproj = false;
+	s_draw_count = 0;
 }
 
 static void update_rt()
@@ -882,6 +929,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::bind_index_buffer>(on_bind_index_buffer);
 		reshade::register_event<reshade::addon_event::bind_vertex_buffers>(on_bind_vertex_buffers);
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
+		reshade::register_event<reshade::addon_event::push_constants>(on_push_constants);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
 
