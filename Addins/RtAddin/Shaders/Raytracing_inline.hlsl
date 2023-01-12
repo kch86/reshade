@@ -77,6 +77,30 @@ float3 genRayDir(uint3 tid, float2 dims)
 	return normalize(float3(d.x * aspectRatio * g_fov, -d.y, -1));
 }
 
+uint MurmurMix(uint Hash)
+{
+	Hash ^= Hash >> 16;
+	Hash *= 0x85ebca6b;
+	Hash ^= Hash >> 13;
+	Hash *= 0xc2b2ae35;
+	Hash ^= Hash >> 16;
+	return Hash;
+}
+
+float3 IntToColor(uint Index)
+{
+	uint Hash = MurmurMix(Index);
+
+	float3 Color = float3
+	(
+		(Hash >> 0) & 255,
+		(Hash >> 8) & 255,
+		(Hash >> 16) & 255
+	);
+
+	return Color * (1.0f / 255.0f);
+}
+
 float3 hsv2rgb(float h, float s, float v)
 {
 	float3 _HSV = float3(h, s, v);
@@ -126,8 +150,9 @@ float3 instanceIdToColor(uint id)
 
 	return float3(r, g, b) / 255.0;*/
 
-	float hue = ((id * 13) % 360) / 360.0;
-	return hsv2rgb(hue, 0.7, 0.99);
+	/*float hue = ((id * 13) % 360) / 360.0;
+	return hsv2rgb(hue, 0.7, 0.99);*/
+	return IntToColor(id);
 }
 
 [numthreads(8, 8, 1)]
