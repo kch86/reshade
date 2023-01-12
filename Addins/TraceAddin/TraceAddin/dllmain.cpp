@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: BSD-3-Clause OR MIT
  */
 
-#include <imgui.h>
+#include <imgui/imgui.h>
 #include <reshade.hpp>
 #include <cassert>
 #include <sstream>
@@ -11,10 +11,11 @@
 #include <unordered_set>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
+#include <scope_guard/scope_guard.h>
 
 #define XXH_STATIC_LINKING_ONLY   /* access advanced declarations */
 #define XXH_IMPLEMENTATION
-#include <xxhash.h>
+#include <xxhash/xxhash.h>
 
 using namespace reshade::api;
 using namespace Microsoft::WRL;
@@ -550,7 +551,10 @@ namespace
 
 static bool do_capture()
 {
-	return s_do_capture;// && (drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
+	// add 1 for the filter because the draw call index is only incremented on the draw
+	// so all the bound state is 1 behind
+	int drawId = drawCallCount;// +1;
+	return s_do_capture && (drawId >= (ui_drawCallBegin) && drawId <= ui_drawCallEnd);
 }
 
 static void on_init_swapchain(swapchain *swapchain)
@@ -937,7 +941,11 @@ static bool on_draw(command_list *, uint32_t vertices, uint32_t instances, uint3
 static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
 {
 	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
-	drawCallCount++;
+	int drawId = drawCallCount;
+
+	auto on_exit = sg::make_scope_guard([&]() {
+		drawCallCount++;
+	});
 
 	if (filter)
 		return true;
@@ -946,7 +954,7 @@ static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances
 		return filter;
 
 	std::stringstream s;
-	s << "draw_indexed " << drawCallCount << " (" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
+	s << "draw_indexed " << drawId << " (" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
