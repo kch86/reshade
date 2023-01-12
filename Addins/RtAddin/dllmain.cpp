@@ -840,6 +840,18 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 }
 
+static void do_shutdown()
+{
+	s_bvhs.clear();
+	s_tlas.free();
+	s_output.free();
+
+	s_output_uav.free();
+	s_output_srv.free();
+
+	doDeferredDeletes();
+}
+
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
 extern "C" __declspec(dllexport) const char *DESCRIPTION = "Provide ray tracing functionality.";
 
@@ -878,6 +890,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		register_state_tracking();
 		break;
     case DLL_PROCESS_DETACH:
+		do_shutdown();
 		unregister_state_tracking();
 
 		reshade::unregister_addon(hModule);
