@@ -10,8 +10,14 @@
 #include <shared_mutex>
 #include <unordered_set>
 #include <d3dcompiler.h>
+#include <wrl/client.h>
+
+#define XXH_STATIC_LINKING_ONLY   /* access advanced declarations */
+#define XXH_IMPLEMENTATION
+#include <xxhash.h>
 
 using namespace reshade::api;
+using namespace Microsoft::WRL;
 
 namespace
 {
@@ -636,20 +642,20 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 		if (object.type == pipeline_subobject_type::vertex_shader)
 		{
 			shader_desc *shader_data = (shader_desc*)object.data;
-			ID3DBlob *blob;
-			HRESULT result = D3DDisassemble(shader_data->code, shader_data->code_size, 0, 0, &blob);
+			ComPtr<ID3DBlob> blob;
+			HRESULT result = D3DDisassemble(shader_data->code, shader_data->code_size, 0, 0, blob.GetAddressOf());
 
 			if (SUCCEEDED(result))
 			{
 				char *str = (char *)blob->GetBufferPointer();
 
+				XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+
 				std::stringstream s;
-				s << "vertex shader (" << (void *)handle.handle << " ):\n" << str;
+				s << "vertex shader (" << (void *)handle.handle << ", hash: " << hash << "):\n" << str;
 
 				reshade::log_message(3, s.str().c_str());
 			}
-
-			
 		}
 	}
 }
