@@ -39,18 +39,11 @@ void RtRayGen(uint3 tid : SV_GroupThreadID)
 
 void RtDummyPs(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 color : SV_Target)
 {
-	//color = float4(1.0, 0.2, 0.2, 1.0);
 	color = 1.0;
 }
 
 void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 color : SV_Target)
 {
-	/*float4 fogcolor = float4(FogRGBBalance.r, FogRGBBalance.g, FogRGBBalance.b,	Fog_Intensity);
-	float depth = tex2D(samplerDepth, texcoord).r;
-	depth = Fog_Intensity / (-99.0 * depth + 101.0);
-	color = tex2D(samplerColor, texcoord);
-	color = depth * fogcolor + (Fog_Additive - depth) * color;*/
-
 	color = tex2D(samplerColor, texcoord);
 	
 	const float4 modifier = tex2D(samplerRtTexture, texcoord);
