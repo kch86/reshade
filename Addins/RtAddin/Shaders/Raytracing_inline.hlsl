@@ -175,24 +175,32 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	float3 raydir = genRayDir(tid, float2(width, height));
 	raydir = mul(float4(raydir, 0.0), g_viewMatrix).xyz;
 
-	float3 rayOrigin = g_viewPos.xyz;
+	float3 rayorigin = g_viewPos.xyz;
 
 	if (g_usePrebuiltCamMat)
 	{
+		{
+			float4 ndc = float4(0.0.xx, 0.0, 1.0);
+			float4 worldpos = mul(ndc, g_viewMatrix);
+			worldpos.xyz /= worldpos.w;
+
+			rayorigin = worldpos.xyz;
+		}
+
 		//get far end of the ray
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);
-		float4 ndc = float4(d, 1.0, 1.0);
+		float4 ndc = float4(d.x, -d.y, 1.0, 1.0);
 		float4 worldpos = mul(ndc, g_viewMatrix);
 		worldpos.xyz /= worldpos.w;
 
-		raydir = normalize(worldpos.xyz - rayOrigin);
+		raydir = normalize(worldpos.xyz - rayorigin);
 	}
 
 	// b. Initialize  - hardwired here to deliver minimal sample code.
 	RayDesc ray;
 	ray.TMin = 1e-5f;
 	ray.TMax = 1e10f;
-	ray.Origin = g_viewPos.xyz;
+	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 
 	query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
