@@ -16,6 +16,7 @@ todo:
 -- this occurs when i have the debug layer enabled... :-|
 - find view proj matrix
 - categorize/bin vs, ps, blend states
+- mapped/updated geometry should do a blas update, not a full rebuild and allocation if possible
 
 vertex shader uniform structures:
 
