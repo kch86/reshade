@@ -435,14 +435,34 @@ void on_unmap_buffer_region(device *device, resource handle)
 		memcpy(ptr, data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		auto prev_shadow = s_shadow_resources.find(handle.handle);
-		if (prev_shadow != s_shadow_resources.end())
+		if (BlasPerGeometry)
 		{
-			//erase from our geometry list
-			std::erase_if(s_geometry, [&](const BlasBuildDesc &desc) {
-				return desc.vb.res == handle;
-			});
+			auto prev_shadow = s_shadow_resources.find(handle.handle);
+			if (prev_shadow != s_shadow_resources.end())
+			{
+				//erase from our geometry and bvh list
+				uint32_t count = s_geometry.size();
+				for (uint32_t i = 0; i < count; i++)
+				{
+					if (s_geometry[i].vb.res == prev_shadow->second)
+					{
+						s_geometry[i] = s_geometry[count - 1];
+
+						s_bvhs[i].free();
+						s_bvhs[i] = std::move(s_bvhs[count - 1]);
+
+						//since we moved the last one here, we need to check i again
+						--i;
+
+						// decrement count to match erasing 1 element
+						--count;
+					}
+				}
+				s_geometry.resize(count);
+				s_bvhs.resize(count);
+			}
 		}
+		
 
 		s_shadow_resources[handle.handle] = d3d12res.handle;
 		s_mapped_resources.erase(handle.handle);
