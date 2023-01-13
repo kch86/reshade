@@ -106,7 +106,9 @@ namespace
 	float s_ui_view_rot_y = 0.0;
 	float s_ui_view_rot_z = 0.0;
 	float s_ui_fov = 60.0;
-	bool s_ui_use_viewproj = false;
+	bool s_ui_use_viewproj = true;
+	bool s_ui_show_rt_full = false;
+	bool s_ui_show_rt_half = false;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -837,8 +839,6 @@ void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource t
 	s_d3d12cmdlist->draw(3, 1, 0, 0);
 
 	s_d3d12cmdlist->end_render_pass();
-
-	//s_d3d12cmdlist->barrier(2, resources, state_new, state_final);
 }
 
 void on_tech_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, resource_view rtv, resource_view rtv_srgb)
@@ -860,8 +860,21 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	name.resize(nameLength);
 	runtime->get_technique_name(technique, name.data(), &nameLength);
 
-	if (strstr(name.c_str(), "Raytracing") == nullptr || pass_index != 0)
+	//make sure this is the right technique
+	if (strstr(name.c_str(), "Raytracing") == nullptr)
 	{
+		return false;
+	}
+
+	//we replace the "dummy" technique pass at index 0
+	if (pass_index != 0)
+	{
+		//update the pass uniforms 1st before returning
+		auto full = runtime->find_uniform_variable("Simple.fx", "g_showRtResultFull");
+		auto half = runtime->find_uniform_variable("Simple.fx", "g_showRtResultHalf");
+
+		runtime->set_uniform_value_bool(full, &s_ui_show_rt_full, 1);
+		runtime->set_uniform_value_bool(half, &s_ui_show_rt_half, 1);
 		return false;
 	}
 
@@ -900,6 +913,7 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	ID3D12Fence *fence12 = reinterpret_cast<ID3D12Fence *>(fence);
 	unlock_resource(runtime->get_device(), signal, fence12, output_target);
 
+	//return true to skip the reshade runtime from drawing the pass
 	return true;
 }
 
@@ -911,6 +925,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 
 	ImGui::Checkbox("UseViewProjMat", &s_ui_use_viewproj);
+	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
+	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
 }
 
 static void do_shutdown()

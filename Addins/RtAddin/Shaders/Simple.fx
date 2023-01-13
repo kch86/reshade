@@ -1,5 +1,8 @@
 #include "ReShade.fxh"
 
+uniform bool g_showRtResultFull <ui_tooltip = "Show Rt Result Fullscreen";> = false;
+uniform bool g_showRtResultHalf <ui_tooltip = "Show Rt Result Halfscreen";> = false;
+
 texture texColorBuffer : COLOR;
 
 sampler samplerColor
@@ -52,7 +55,11 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 	
 	const float4 modifier = tex2D(samplerRtTexture, texcoord);
 
-	if (pos.x >= 512)
+	if (g_showRtResultFull)
+	{
+		color = modifier;
+	}
+	else if (pos.x >= 512 && g_showRtResultHalf)
 	{
 		color = modifier;
 	}
@@ -60,12 +67,7 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 
 technique Raytracing < enabled = true; >
 {		
-	/*pass p0
-	{
-		DispatchSizeX = (BUFFER_WIDTH + 7) / 8;
-		DispatchSizeY = (BUFFER_HEIGHT + 7) / 8;
-		ComputeShader = RtRayGen<8, 8, 1>;
-	}*/
+	// pass 0 is the dummy place holder pass we will render/replace
 	pass p0
 	{
 		RenderTarget = rtTexture;
