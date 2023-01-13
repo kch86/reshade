@@ -179,13 +179,13 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (g_usePrebuiltCamMat)
 	{
-		{
+		/*{
 			float4 ndc = float4(0.0.xx, 0.0, 1.0);
 			float4 worldpos = mul(ndc, g_viewMatrix);
 			worldpos.xyz /= worldpos.w;
 
 			rayorigin = worldpos.xyz;
-		}
+		}*/
 
 		//get far end of the ray
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);

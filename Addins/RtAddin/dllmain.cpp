@@ -513,7 +513,15 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 		XMMATRIX *matrices = (XMMATRIX *)values;
 		s_viewproj = matrices[0];
-		s_view = matrices[1];
+
+		XMFLOAT3X4 viewAffine = *((XMFLOAT3X4 *)&matrices[1]);
+		s_view = XMMATRIX(
+			XMLoadFloat4((XMFLOAT4*)viewAffine.m[0]),
+			XMLoadFloat4((XMFLOAT4*)viewAffine.m[1]),
+			XMLoadFloat4((XMFLOAT4*)viewAffine.m[2]),
+			XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f));
+		s_view = XMMatrixTranspose(s_view);
+		s_view = XMMatrixInverse(0, s_view);
 	}
 }
 
@@ -776,7 +784,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
 	if (cb.usePrebuiltCamMat)
 	{
-		//cb.pos = 
+		cb.pos = s_view.r[3];
 	}
 
 	//update descriptors
