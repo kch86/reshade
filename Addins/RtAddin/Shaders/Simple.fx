@@ -59,7 +59,7 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 	{
 		color = modifier;
 	}
-	else if (pos.x >= 512 && g_showRtResultHalf)
+	else if (pos.x >= (BUFFER_WIDTH/2) && g_showRtResultHalf)
 	{
 		color = modifier;
 	}
