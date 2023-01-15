@@ -81,6 +81,7 @@ namespace
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
 	std::vector<BlasBuildDesc> s_geometry;
 	std::vector<scopedresource> s_bvhs;
+	std::vector<XMMATRIX> s_transforms;
 	scopedresource s_tlas;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
@@ -121,9 +122,11 @@ namespace
 	pipeline s_vspipeline = { 0 };
 	std::unordered_set<uint64_t> s_vspipelines;
 	bool s_vspipeline_is_bound = false;
+	pipeline s_current_vs_pipeline;
 
 	XMMATRIX s_viewproj;
 	XMMATRIX s_view;
+	XMMATRIX s_current_wvp = XMMatrixIdentity();
 	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
@@ -345,6 +348,8 @@ static void on_destroy_pipeline(device *device, pipeline handle)
 }
 static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipeline)
 {
+	s_current_vs_pipeline = { 0 };
+
 	if (type == pipeline_stage::input_assembler)
 	{
 		s_currentInputLayout = pipeline;
@@ -353,6 +358,8 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 	{
 		//s_vspipeline_is_bound = pipeline == s_vspipeline;
 		s_vspipeline_is_bound = s_vspipelines.contains(pipeline.handle);
+
+		s_current_vs_pipeline = pipeline;
 	}
 }
 
@@ -453,6 +460,8 @@ void on_unmap_buffer_region(device *device, resource handle)
 						s_bvhs[i].free();
 						s_bvhs[i] = std::move(s_bvhs[count - 1]);
 
+						s_transforms[i] = s_transforms[count - 1];
+
 						//since we moved the last one here, we need to check i again
 						--i;
 
@@ -462,9 +471,9 @@ void on_unmap_buffer_region(device *device, resource handle)
 				}
 				s_geometry.resize(count);
 				s_bvhs.resize(count);
+				s_transforms.resize(count);
 			}
-		}
-		
+		}		
 
 		s_shadow_resources[handle.handle] = d3d12res.handle;
 		s_mapped_resources.erase(handle.handle);
@@ -522,6 +531,12 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 			XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f));
 		s_view = XMMatrixTranspose(s_view);
 		s_view = XMMatrixInverse(0, s_view);
+	}
+	else if(s_current_vs_pipeline.handle != 0)
+	{
+		//most vs have the same layout, assume so for now
+		XMMATRIX *matrices = (XMMATRIX *)values;
+		s_current_wvp = matrices[0];
 	}
 }
 
@@ -629,6 +644,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
 
 			s_bvhs.push_back(std::move(bvh));
+			s_transforms.push_back(s_current_wvp);
 			s_geometry.push_back(desc);
 		}
 	}
@@ -664,6 +680,7 @@ static void update_rt()
 		for (size_t i = 0; i < instances.size(); i++)
 		{
 			assert(s_bvhs[i].handle().handle != 0);
+
 			rt_instance_desc &instance = instances[i];
 			instance = {};
 			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
@@ -671,6 +688,17 @@ static void update_rt()
 			instance.instance_mask = 0xff;
 			instance.instance_id = i;
 			instance.flags = rt_instance_flags::none;
+
+			if (s_got_viewproj)
+			{
+				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
+				XMMATRIX wvp = s_transforms[i];
+				//XMMATRIX world = wvp * inv_viewproj;
+				XMMATRIX world = inv_viewproj * wvp;
+				//world = XMMatrixTranspose(world);
+
+				memcpy(instance.transform, &world, sizeof(instance.transform));
+			}
 		}
 
 		TlasBuildDesc desc = {
