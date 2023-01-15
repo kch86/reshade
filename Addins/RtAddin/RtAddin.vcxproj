@@ -173,7 +173,7 @@
     </FxCompile>
     <CopyFileToFolders Include="Shaders\Simple.fx">
       <FileType>Document</FileType>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)reshade-shaders\Shaders;%(DestinationFolders)</DestinationFolders>
+      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)reshade-shaders\Shaders;</DestinationFolders>
     </CopyFileToFolders>
     <FxCompile Include="Shaders\Raytracing_blit_ps.hlsl">
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">blit_ps</EntryPointName>
