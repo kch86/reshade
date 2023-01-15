@@ -148,6 +148,13 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 	uint32_t current_render_pass_index = 0;
 };
 
+static void clear_bvhs()
+{
+	s_geometry.clear();
+	s_bvhs.clear();
+	s_transforms.clear();
+}
+
 static void init_pipeline()
 {
 	// init rt pipeline
@@ -668,6 +675,13 @@ static void on_present(effect_runtime *runtime)
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
 	s_draw_count = 0;
+
+
+	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
+	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
+	{
+		clear_bvhs();
+	}
 }
 
 static void update_rt()
@@ -693,8 +707,8 @@ static void update_rt()
 			{
 				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
 				XMMATRIX wvp = s_transforms[i];
-				//XMMATRIX world = wvp * inv_viewproj;
-				XMMATRIX world = inv_viewproj * wvp;
+				XMMATRIX world = wvp * inv_viewproj;
+				//XMMATRIX world = inv_viewproj * wvp;
 				//world = XMMatrixTranspose(world);
 
 				memcpy(instance.transform, &world, sizeof(instance.transform));
