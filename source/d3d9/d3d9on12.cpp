@@ -49,6 +49,7 @@ extern "C" IDirect3D9 *WINAPI Direct3DCreate9On12(UINT SDKVersion, D3D9ON12_ARGS
 		<< ", NumOverrideEntries = " << NumOverrideEntries
 		<< ')' << " ...";
 
+	// TODO: do not pass the _orig ptrs here, pass our proxies
 	temp_mem<D3D9ON12_ARGS> override_list(NumOverrideEntries);
 	for (UINT i = 0; i < NumOverrideEntries; ++i)
 	{
