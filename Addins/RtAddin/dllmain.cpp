@@ -755,6 +755,11 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			s_transforms.push_back(s_current_wvp);
 			s_geometry.push_back(desc);
 		}
+		else
+		{
+			uint32_t index = result - s_geometry.begin();
+			s_transforms[index] = s_current_wvp;
+		}
 	}
 
 	// should I reset the vb/ib data now?
@@ -805,8 +810,8 @@ static void update_rt()
 			{
 				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
 				XMMATRIX wvp = s_transforms[i];
-				XMMATRIX world = wvp * inv_viewproj;
-		
+				XMMATRIX world = inv_viewproj * wvp;
+
 				memcpy(instance.transform, &world, sizeof(instance.transform));
 			}
 		}
