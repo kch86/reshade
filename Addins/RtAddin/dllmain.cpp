@@ -75,6 +75,7 @@ namespace
 	constexpr bool BlasPerGeometry = true;
 
 	std::shared_mutex s_mutex;
+	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
@@ -99,6 +100,7 @@ namespace
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
 	VertexData s_currentVB;
+	resource_view s_current_rtv = { 0 };
 
 	device* s_d3d12device = nullptr;
 	command_list *s_d3d12cmdlist = nullptr;
@@ -164,6 +166,20 @@ static bool filter_command()
 	// so all the bound state is 1 behind
 	const int drawId = s_draw_count;
 	return  !(drawId >= (s_ui_drawCallBegin) && drawId <= s_ui_drawCallEnd);
+}
+
+static void on_init_swapchain(swapchain *swapchain)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	const device_api api = swapchain->get_device()->get_api();
+
+	for (uint32_t i = 0; i < swapchain->get_back_buffer_count(); ++i)
+	{
+		const resource buffer = swapchain->get_back_buffer(i);
+
+		s_backbuffers.emplace(buffer.handle);
+	}
 }
 
 static void init_pipeline()
@@ -512,6 +528,17 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 	data.has_multiple_rtvs = count > 1;
 	data.current_main_rtv = new_main_rtv;
 	data.current_dsv = dsv;
+
+	// the scene draws straight to the backbuffer.
+	// any other target is for secondary effects
+	if (s_backbuffers.contains(new_main_rtv.handle))
+	{
+		s_current_rtv = new_main_rtv;
+	}
+	else
+	{
+		s_current_rtv.handle = 0;
+	}
 }
 static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offset, uint32_t index_size)
 {
@@ -618,6 +645,11 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	if (filter_command())
 		return false;
 
+	if (s_current_rtv.handle == 0)
+	{
+		return false;
+	}
+
 	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
@@ -704,7 +736,6 @@ static void on_present(effect_runtime *runtime)
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
 	s_draw_count = 0;
-
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
@@ -1033,6 +1064,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
     case DLL_PROCESS_ATTACH:
 		if (!reshade::register_addon(hModule))
 			return FALSE;
+		reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
 		reshade::register_event<reshade::addon_event::init_device>(on_init_device);
 		reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
 		reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
