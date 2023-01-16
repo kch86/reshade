@@ -123,10 +123,11 @@ namespace
 	uint32_t s_mouse_y = 0;
 	bool s_ctrl_down = false;
 
-	const uint64_t VsHash = 18047787432603860385;
-	pipeline s_vspipeline = { 0 };
-	std::unordered_set<uint64_t> s_vspipelines;
-	bool s_vspipeline_is_bound = false;
+	const uint64_t StaticGeoVsHash = 18047787432603860385;
+	std::unordered_set<uint64_t> s_static_geo_vs_pipelines;
+	std::unordered_map<uint64_t, uint32_t> s_vs_transform_map;
+	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
+	bool s_staticgeo_vs_pipeline_is_bound = false;
 	pipeline s_current_vs_pipeline;
 
 	XMMATRIX s_viewproj;
@@ -152,6 +153,25 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 	resource_view current_dsv = { 0 };
 	uint32_t current_render_pass_index = 0;
 };
+
+static void init_vs_mappings()
+{
+	struct VsTransformMap
+	{
+		uint64_t hash;
+		uint32_t offset;
+	};
+
+	static VsTransformMap hashes[] = {
+		{6550593362979704143, 74},
+		{5461187419696972836, 10},
+	};
+
+	for (const VsTransformMap& mapping : hashes)
+	{
+		s_vs_transform_map[mapping.hash] = mapping.offset;
+	}
+}
 
 static void clear_bvhs()
 {
@@ -359,15 +379,13 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 		}
 		else if (object.type == pipeline_subobject_type::vertex_shader)
 		{
-			//if (s_vspipeline == 0)
+			shader_desc *shader_data = (shader_desc *)object.data;
+			XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+
+			s_vs_hash_map[handle.handle] = hash;
+			if (hash == StaticGeoVsHash)
 			{
-				shader_desc *shader_data = (shader_desc *)object.data;
-				XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
-				if (hash == VsHash)
-				{
-					s_vspipeline = handle;
-					s_vspipelines.insert(handle.handle);
-				}
+				s_static_geo_vs_pipelines.insert(handle.handle);
 			}
 		}
 	}
@@ -393,8 +411,7 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 	}
 	else if(type == pipeline_stage::vertex_shader)
 	{
-		//s_vspipeline_is_bound = pipeline == s_vspipeline;
-		s_vspipeline_is_bound = s_vspipelines.contains(pipeline.handle);
+		s_staticgeo_vs_pipeline_is_bound = s_static_geo_vs_pipelines.contains(pipeline.handle);
 
 		s_current_vs_pipeline = pipeline;
 	}
@@ -572,7 +589,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 	if (filter_command())
 		return;
 
-	if (s_vspipeline_is_bound && !s_got_viewproj && s_draw_count == 134)
+	if (s_staticgeo_vs_pipeline_is_bound && !s_got_viewproj && s_draw_count == 134)
 	{
 		//extract our viewproj matrix. it is the 1st value in the array
 		s_got_viewproj = true;
@@ -590,12 +607,33 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		s_view = XMMatrixInverse(0, s_view);
 	}
 
-	if(s_current_vs_pipeline.handle != 0)
+	if (s_current_vs_pipeline.handle != 0)
 	{
-		//most vs have the same layout, assume so for now
-		XMMATRIX *matrices = (XMMATRIX *)values;
-		s_current_wvp = matrices[0];
-	}
+		bool is_static_vs_layout = true;
+
+		// some vs do not have the WVP at slot 0
+		// we hashes those shaders earlier and check them here
+		auto hash = s_vs_hash_map.find(s_current_vs_pipeline.handle);
+		if (hash != s_vs_hash_map.end())
+		{
+			if (auto offset = s_vs_transform_map.find(hash->second); offset != s_vs_transform_map.end())
+			{
+				//found a mapping, index by vector4 slot
+				XMVECTOR *vectors = (XMVECTOR *)values;
+
+				s_current_wvp = *((XMMATRIX *)&vectors[offset->second]);
+
+				is_static_vs_layout = false;
+			}
+		}		
+
+		if (is_static_vs_layout)
+		{
+			//most vs have the same layout, assume so for now
+			XMMATRIX *matrices = (XMMATRIX *)values;
+			s_current_wvp = matrices[0];
+		}
+	}	
 }
 
 bool g_drawBeforeUi = false;
@@ -767,10 +805,8 @@ static void update_rt()
 			{
 				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
 				XMMATRIX wvp = s_transforms[i];
-				XMMATRIX world2 = wvp * inv_viewproj;
-				XMMATRIX world = inv_viewproj * wvp;
-				//world = XMMatrixTranspose(world);
-
+				XMMATRIX world = wvp * inv_viewproj;
+		
 				memcpy(instance.transform, &world, sizeof(instance.transform));
 			}
 		}
@@ -1042,6 +1078,11 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
 }
 
+static void do_init()
+{
+	init_vs_mappings();
+}
+
 static void do_shutdown()
 {
 	s_bvhs.clear();
@@ -1090,7 +1131,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
 
 		reshade::register_overlay(nullptr, draw_ui);
-		
+
+		do_init();
 		register_state_tracking();
 		break;
     case DLL_PROCESS_DETACH:
