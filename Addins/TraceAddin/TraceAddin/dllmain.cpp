@@ -549,12 +549,10 @@ namespace
 	}
 }
 
-static bool do_capture()
+static bool do_capture(bool limit_to_range=true)
 {
-	// add 1 for the filter because the draw call index is only incremented on the draw
-	// so all the bound state is 1 behind
-	int drawId = drawCallCount;// +1;
-	return s_do_capture && (drawId >= (ui_drawCallBegin) && drawId <= ui_drawCallEnd);
+	int drawId = drawCallCount;
+	return s_do_capture && (!limit_to_range || (drawId >= (ui_drawCallBegin) && drawId <= ui_drawCallEnd));
 }
 
 static void on_init_swapchain(swapchain *swapchain)
@@ -570,6 +568,11 @@ static void on_init_swapchain(swapchain *swapchain)
 		s_resources.emplace(buffer.handle);
 		if (api == device_api::d3d9 || api == device_api::opengl)
 			s_resource_views.emplace(buffer.handle);
+
+		std::stringstream s;
+		s << "create_render_target_view(" << (void *)buffer.handle << ")";
+
+		reshade::log_message(3, s.str().c_str());
 	}
 }
 static void on_destroy_swapchain(swapchain *swapchain)
@@ -615,20 +618,35 @@ static bool on_create_resource(device *device, resource_desc& desc, subresource_
 
 	return false;
 }
-static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage, resource handle)
+static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage usage_type, resource handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	if (do_capture())
 	{
 		std::stringstream s;
-		s << "on_init_resource: " << (void *)handle.handle << ", type: " << to_string(desc.type, desc.texture.depth_or_layers) << ", usage : " << to_string(desc.usage);
+		s << "init_resource: " << (void *)handle.handle << ", type: " << to_string(desc.type, desc.texture.depth_or_layers) << ", usage : " << to_string(desc.usage);
 		if (desc.type == resource_type::texture_2d)
 		{
 			s << ", format: " << to_string(desc.texture.format);
 		}
 		reshade::log_message(3, s.str().c_str());
-	}	
+	}
+
+	if (usage_type == resource_usage::render_target)
+	{
+		std::stringstream s;
+		s << "create_render_target(" << (void *)handle.handle << ")";
+
+		reshade::log_message(3, s.str().c_str());
+	}
+	else if (usage_type == resource_usage::depth_stencil)
+	{
+		std::stringstream s;
+		s << "create_depth_stencil(" << (void *)handle.handle << ")";
+
+		reshade::log_message(3, s.str().c_str());
+	}
 
 	s_resources.emplace(handle.handle);
 }
@@ -645,6 +663,21 @@ static void on_init_resource_view(device *device, resource resource, resource_us
 
 	assert(resource == 0 || s_resources.find(resource.handle) != s_resources.end());
 	s_resource_views.emplace(handle.handle);
+
+	if (usage_type == resource_usage::render_target)
+	{
+		std::stringstream s;
+		s << "create_render_target_view( texture(" << (void *)resource.handle << "), view(" << (void *)handle.handle << "))";
+
+		reshade::log_message(3, s.str().c_str());
+	}
+	else if (usage_type == resource_usage::depth_stencil)
+	{
+		std::stringstream s;
+		s << "create_depth_stencil_view( texture(" << (void*)resource.handle << "), view(" << (void*)handle.handle << "))";
+
+		reshade::log_message(3, s.str().c_str());
+	}
 }
 static void on_destroy_resource_view(device *device, resource_view handle)
 {
@@ -737,7 +770,7 @@ static void on_end_render_pass(command_list *)
 }
 static void on_bind_render_targets_and_depth_stencil(command_list *, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
-	if (!do_capture())
+	if (!do_capture(false))
 		return;
 
 #ifndef NDEBUG
