@@ -613,10 +613,10 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 		// some vs do not have the WVP at slot 0
 		// we hashes those shaders earlier and check them here
-		auto hash = s_vs_hash_map.find(s_current_vs_pipeline.handle);
-		if (hash != s_vs_hash_map.end())
 		{
-			if (auto offset = s_vs_transform_map.find(hash->second); offset != s_vs_transform_map.end())
+			assert(s_vs_hash_map.contains(s_current_vs_pipeline.handle));
+			const uint64_t hash = s_vs_hash_map[s_current_vs_pipeline.handle];
+			if (auto offset = s_vs_transform_map.find(hash); offset != s_vs_transform_map.end())
 			{
 				//found a mapping, index by vector4 slot
 				XMVECTOR *vectors = (XMVECTOR *)values;
@@ -625,14 +625,13 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 				is_static_vs_layout = false;
 			}
-		}		
-
-		if (is_static_vs_layout)
-		{
-			//most vs have the same layout, assume so for now
-			XMMATRIX *matrices = (XMMATRIX *)values;
-			s_current_wvp = matrices[0];
-		}
+			else
+			{
+				//most vs have the same layout, assume so for now
+				XMMATRIX *matrices = (XMMATRIX *)values;
+				s_current_wvp = matrices[0];
+			}
+		}	
 	}	
 }
 
