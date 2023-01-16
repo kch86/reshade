@@ -2,6 +2,7 @@
 #include <imgui/imgui.h>
 #include <reshade.hpp>
 #include "state_tracking.hpp"
+#include <scope_guard/scope_guard.h>
 
 // std
 #include <assert.h>
@@ -107,6 +108,8 @@ namespace
 	float s_ui_view_rot_y = 0.0;
 	float s_ui_view_rot_z = 0.0;
 	float s_ui_fov = 60.0;
+	int s_ui_drawCallBegin = 0;
+	int s_ui_drawCallEnd = 4095;
 	bool s_ui_use_viewproj = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -153,6 +156,14 @@ static void clear_bvhs()
 	s_geometry.clear();
 	s_bvhs.clear();
 	s_transforms.clear();
+}
+
+static bool filter_command()
+{
+	// add 1 for the filter because the draw call index is only incremented on the draw
+	// so all the bound state is 1 behind
+	const int drawId = s_draw_count;
+	return  !(drawId >= (s_ui_drawCallBegin) && drawId <= s_ui_drawCallEnd);
 }
 
 static void init_pipeline()
@@ -355,6 +366,9 @@ static void on_destroy_pipeline(device *device, pipeline handle)
 }
 static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipeline)
 {
+	if (filter_command())
+		return;
+
 	s_current_vs_pipeline = { 0 };
 
 	if (type == pipeline_stage::input_assembler)
@@ -501,6 +515,9 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 }
 static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offset, uint32_t index_size)
 {
+	if (filter_command())
+		return;
+
 	s_currentIB.ib = buffer;
 	s_currentIB.offset = (uint32_t)offset;
 	s_currentIB.stride = index_size;
@@ -508,6 +525,9 @@ static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offse
 }
 static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
+	if (filter_command())
+		return;
+
 	const PosStreamInfo &posStreamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
 
 	//assert((int)count > posStreamInfo.streamIndex);
@@ -522,6 +542,9 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 }
 static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
 {
+	if (filter_command())
+		return;
+
 	if (s_vspipeline_is_bound && !s_got_viewproj && s_draw_count == 134)
 	{
 		//extract our viewproj matrix. it is the 1st value in the array
@@ -539,7 +562,8 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		s_view = XMMatrixTranspose(s_view);
 		s_view = XMMatrixInverse(0, s_view);
 	}
-	else if(s_current_vs_pipeline.handle != 0)
+
+	if(s_current_vs_pipeline.handle != 0)
 	{
 		//most vs have the same layout, assume so for now
 		XMMATRIX *matrices = (XMMATRIX *)values;
@@ -587,6 +611,13 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
+	auto on_exit = sg::make_scope_guard([&]() {
+		s_draw_count++;
+	});
+
+	if (filter_command())
+		return false;
+
 	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
@@ -656,8 +687,6 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	}
 
-	s_draw_count++;
-
 	// should I reset the vb/ib data now?
 	// there could be multiple draws with the same vb/ib data
 	return false;
@@ -707,8 +736,8 @@ static void update_rt()
 			{
 				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
 				XMMATRIX wvp = s_transforms[i];
-				XMMATRIX world = wvp * inv_viewproj;
-				//XMMATRIX world = inv_viewproj * wvp;
+				XMMATRIX world2 = wvp * inv_viewproj;
+				XMMATRIX world = inv_viewproj * wvp;
 				//world = XMMatrixTranspose(world);
 
 				memcpy(instance.transform, &world, sizeof(instance.transform));
@@ -977,6 +1006,9 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("UseViewProjMat", &s_ui_use_viewproj);
 	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
 	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
+
+	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
+	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
 }
 
 static void do_shutdown()
