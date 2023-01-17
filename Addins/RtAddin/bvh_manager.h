@@ -6,11 +6,6 @@
 #include <DirectXMath.h>
 #include "raytracing.h"
 
-namespace reshade::api
-{
-	//struct resource;
-}
-
 class bvh_manager
 {
 public:
@@ -34,10 +29,10 @@ public:
 	scopedresource build_tlas(DirectX::XMMATRIX *base_transform, reshade::api::command_list *cmd_list, reshade::api::command_queue *cmd_queue);
 
 private:
-	std::vector<BlasBuildDesc> s_geometry;
-	std::vector<scopedresource> s_bvhs;
-	std::vector<std::vector<DirectX::XMMATRIX>> s_instances;
-	std::unordered_map<uint64_t, uint32_t> s_per_frame_instance_counts;
+	std::vector<BlasBuildDesc> m_geometry;
+	std::vector<scopedresource> m_bvhs;
+	std::vector<std::vector<DirectX::XMMATRIX>> m_instances;
+	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
 	uint64_t s_current_draw_stream_hash = 0;
 };
