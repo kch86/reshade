@@ -565,6 +565,16 @@ namespace reshade::api
 		/// </summary>
 		/// <param name="stages">Pipeline stages to update with state from the pipeline state object.</param>
 		/// <param name="pipeline">Pipeline state object to bind.</param>
+		virtual void bind_pipeline_layout(pipeline_stage stages, pipeline_layout layout) {
+			(void)stages;
+			(void)layout;
+		}
+
+		/// <summary>
+		/// Binds a pipeline state object.
+		/// </summary>
+		/// <param name="stages">Pipeline stages to update with state from the pipeline state object.</param>
+		/// <param name="pipeline">Pipeline state object to bind.</param>
 		virtual void bind_pipeline(pipeline_stage stages, pipeline pipeline) = 0;
 		/// <summary>
 		/// Updates the specfified pipeline <paramref name="state"/> to the specified <paramref name="value"/>.

@@ -838,6 +838,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		}
 	};
 
+	s_d3d12cmdlist->bind_pipeline_layout(pipeline_stage::compute_shader, s_pipeline_layout);
 	s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
 	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
