@@ -20,6 +20,8 @@ todo:
 - the proxies are not being passed to the d3d9on12 create function
 - only one wheel is showing. maybe these are using the skinning matrices?
 -- this is because it's the same draw call but with different constants. i'm not detecting this.
+-- plan: hash bound vb/ib and draw state. a repeat of this bumps instance count.
+-- these will share bvh and just be an instanced bvh with different transform
 
 vertex shader uniform structures:
 
