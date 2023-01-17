@@ -77,7 +77,7 @@ namespace
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
-	std::unordered_map<uint64_t, uint64_t> s_shadow_resources;
+	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
@@ -501,16 +501,16 @@ void on_unmap_buffer_region(device *device, resource handle)
 		memcpy(ptr, data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		if (BlasPerGeometry)
+		auto prev_shadow = s_shadow_resources.find(handle.handle);
+		if (prev_shadow != s_shadow_resources.end())
 		{
-			auto prev_shadow = s_shadow_resources.find(handle.handle);
-			if (prev_shadow != s_shadow_resources.end())
+			if (BlasPerGeometry)
 			{
 				//erase from our geometry and bvh list
 				uint32_t count = s_geometry.size();
 				for (uint32_t i = 0; i < count; i++)
 				{
-					if (s_geometry[i].vb.res == prev_shadow->second)
+					if (s_geometry[i].vb.res == prev_shadow->second.handle())
 					{
 						s_geometry[i] = s_geometry[count - 1];
 
@@ -530,9 +530,11 @@ void on_unmap_buffer_region(device *device, resource handle)
 				s_bvhs.resize(count);
 				s_instances.resize(count);
 			}
-		}		
 
-		s_shadow_resources[handle.handle] = d3d12res.handle;
+			prev_shadow->second.free();
+		}
+
+		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
 		s_mapped_resources.erase(handle.handle);
 	}
 }
@@ -711,7 +713,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 
 	BlasBuildDesc desc = {
 		.vb = {
-			.res = s_shadow_resources[s_currentVB.vb.handle],
+			.res = s_shadow_resources[s_currentVB.vb.handle].handle().handle,
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
 			//.offset = 0,
 			.count = vertex_count,
@@ -719,7 +721,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.fmt = s_currentVB.fmt
 		},
 		.ib = {
-			.res = s_shadow_resources[s_currentIB.ib.handle],
+			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
 			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
 			//.offset = 0,
 			.count = index_count,
@@ -798,8 +800,6 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	}
 
-	// should I reset the vb/ib data now?
-	// there could be multiple draws with the same vb/ib data
 	return false;
 }
 

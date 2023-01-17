@@ -64,8 +64,8 @@ private:
 	delayFreedHandle(delayFreedHandle<T> &) = delete;
 	delayFreedHandle<T> &operator=(delayFreedHandle<T> &) = delete;
 
-	T _handle;
-	reshade::api::device *_device;
+	T _handle = { 0 };
+	reshade::api::device *_device = nullptr;
 };
 
 using scopedresource = delayFreedHandle<reshade::api::resource>;
