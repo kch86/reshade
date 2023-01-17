@@ -770,7 +770,7 @@ static void on_end_render_pass(command_list *)
 }
 static void on_bind_render_targets_and_depth_stencil(command_list *, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
-	if (!do_capture(false))
+	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
