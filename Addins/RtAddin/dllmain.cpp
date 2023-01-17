@@ -83,7 +83,7 @@ namespace
 	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
 	std::vector<BlasBuildDesc> s_geometry;
 	std::vector<scopedresource> s_bvhs;
-	std::vector<XMMATRIX> s_transforms;
+	std::vector<std::vector<XMMATRIX>> s_instances;
 	scopedresource s_tlas;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
@@ -129,6 +129,9 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	bool s_staticgeo_vs_pipeline_is_bound = false;
 	pipeline s_current_vs_pipeline;
+	std::unordered_map<uint64_t, uint32_t> s_per_frame_instance_counts;
+
+	uint64_t s_current_draw_stream_hash = 0;
 
 	XMMATRIX s_viewproj;
 	XMMATRIX s_view;
@@ -177,7 +180,7 @@ static void clear_bvhs()
 {
 	s_geometry.clear();
 	s_bvhs.clear();
-	s_transforms.clear();
+	s_instances.clear();
 }
 
 static bool filter_command()
@@ -514,7 +517,7 @@ void on_unmap_buffer_region(device *device, resource handle)
 						s_bvhs[i].free();
 						s_bvhs[i] = std::move(s_bvhs[count - 1]);
 
-						s_transforms[i] = s_transforms[count - 1];
+						s_instances[i] = s_instances[count - 1];
 
 						//since we moved the last one here, we need to check i again
 						--i;
@@ -525,7 +528,7 @@ void on_unmap_buffer_region(device *device, resource handle)
 				}
 				s_geometry.resize(count);
 				s_bvhs.resize(count);
-				s_transforms.resize(count);
+				s_instances.resize(count);
 			}
 		}		
 
@@ -574,7 +577,6 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 
 	const PosStreamInfo &posStreamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
 
-	//assert((int)count > posStreamInfo.streamIndex);
 	if (first <= posStreamInfo.streamIndex && count > (posStreamInfo.streamIndex - first))
 	{
 		s_currentVB.vb = buffers[posStreamInfo.streamIndex];
@@ -582,7 +584,9 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 		s_currentVB.count = 0;
 		s_currentVB.stride = strides[posStreamInfo.streamIndex];
 		s_currentVB.fmt = posStreamInfo.format;
-	}	
+	}
+
+	s_current_draw_stream_hash = XXH3_64bits(buffers, count * sizeof(resource));
 }
 static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
 {
@@ -632,7 +636,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				s_current_wvp = matrices[0];
 			}
 		}	
-	}	
+	}
 }
 
 bool g_drawBeforeUi = false;
@@ -723,6 +727,30 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	};
 
+	struct
+	{
+		BlasBuildDesc desc;
+		uint64_t stream_hash;
+	} combinedHashData = {
+			.desc = desc,
+			.stream_hash = s_current_draw_stream_hash
+	};
+
+	// combine the stream and draw data into one hash
+	// use this to track instance count per frame
+	XXH64_hash_t combined_hash = XXH3_64bits(&combinedHashData, sizeof(combinedHashData));
+	uint32_t instanceIndex = 0;
+	if (auto iter = s_per_frame_instance_counts.find(combined_hash); iter != s_per_frame_instance_counts.end())
+	{
+		instanceIndex = iter->second;
+		iter->second++;
+	}
+	else
+	{
+		instanceIndex = 0;
+		s_per_frame_instance_counts[combined_hash] = 0;
+	}
+
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 	if (!BlasPerGeometry)
 	{
@@ -751,13 +779,22 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
 
 			s_bvhs.push_back(std::move(bvh));
-			s_transforms.push_back(s_current_wvp);
+			s_instances.push_back({});
+			s_instances.back().push_back(s_current_wvp); assert(instanceIndex == 0);
 			s_geometry.push_back(desc);
 		}
 		else
 		{
 			uint32_t index = result - s_geometry.begin();
-			s_transforms[index] = s_current_wvp;
+			if (instanceIndex < s_instances[index].size())
+			{
+				s_instances[index][instanceIndex] = s_current_wvp;
+			}
+			else
+			{
+				s_instances[index].push_back(s_current_wvp);
+
+			}
 		}
 	}
 
@@ -778,6 +815,7 @@ static void on_present(effect_runtime *runtime)
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
 	s_draw_count = 0;
+	s_per_frame_instance_counts.clear();
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
@@ -792,12 +830,42 @@ static void update_rt()
 
 	if (s_bvhs.size() > 0)
 	{
-		std::vector<rt_instance_desc> instances(s_bvhs.size());
-		for (size_t i = 0; i < instances.size(); i++)
+		std::vector<rt_instance_desc> instances;
+		instances.reserve(s_bvhs.size());
+
+		assert(s_bvhs.size() == s_instances.size());
+		int totalInstanceCount = 0;
+		for (size_t i = 0; i < s_instances.size(); i++)
 		{
 			assert(s_bvhs[i].handle().handle != 0);
 
-			rt_instance_desc &instance = instances[i];
+			rt_instance_desc instance{};
+			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
+			instance.instance_mask = 0xff;
+			instance.flags = rt_instance_flags::none;
+
+			const auto &instanceDatas = s_instances[i];
+			for (const auto &instanceData : instanceDatas)
+			{
+				if (s_got_viewproj)
+				{
+					XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
+					XMMATRIX wvp = instanceData;
+					XMMATRIX world = inv_viewproj * wvp;
+
+					memcpy(instance.transform, &world, sizeof(instance.transform));
+				}
+				else
+				{
+					instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
+				}
+				instance.instance_id = totalInstanceCount;
+				totalInstanceCount++;
+
+				instances.push_back(instance);
+			}
+
+			/*rt_instance_desc &instance = instances[i];
 			instance = {};
 			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
 			instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
@@ -808,11 +876,11 @@ static void update_rt()
 			if (s_got_viewproj)
 			{
 				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
-				XMMATRIX wvp = s_transforms[i];
+				XMMATRIX wvp = s_instances[i];
 				XMMATRIX world = inv_viewproj * wvp;
 
 				memcpy(instance.transform, &world, sizeof(instance.transform));
-			}
+			}*/
 		}
 
 		TlasBuildDesc desc = {
