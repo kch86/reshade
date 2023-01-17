@@ -595,7 +595,13 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 	if (filter_command())
 		return;
 
-	if (s_staticgeo_vs_pipeline_is_bound && !s_got_viewproj && s_draw_count == 134)
+	// early out for the wrong rtv bound
+	if (s_current_rtv.handle == 0)
+	{
+		return;
+	}
+
+	if (s_staticgeo_vs_pipeline_is_bound && !s_got_viewproj)
 	{
 		//extract our viewproj matrix. it is the 1st value in the array
 		s_got_viewproj = true;
