@@ -19,6 +19,7 @@ todo:
 - mapped/updated geometry should do a blas update, not a full rebuild and allocation if possible
 - the proxies are not being passed to the d3d9on12 create function
 - only one wheel is showing. maybe these are using the skinning matrices?
+-- this is because it's the same draw call but with different constants. i'm not detecting this.
 
 vertex shader uniform structures:
 
