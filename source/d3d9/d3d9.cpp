@@ -483,6 +483,31 @@ std::pair<ComPtr<ID3D12Device>, ComPtr<ID3D12CommandQueue>> createDevice()
 	));
 	assert(SUCCEEDED(hr2));
 
+	//check feature support
+	//TODO: make this x-platform
+	{
+		D3D12_FEATURE_DATA_D3D12_OPTIONS5 options{};
+		if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options, sizeof(options))))
+		{
+			if (options.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
+			{
+				LOG(ERROR) << "Hardware does not support ray tracing tier 1.1.";
+				assert(false);
+			}
+		}
+	}
+	{
+		D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
+		if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+		{
+			if (options.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3)
+			{
+				LOG(ERROR) << "Hardware does not support resource binding tier 3.";
+				assert(false);
+			}
+		}
+	}
+
 	if (config.get("APP", "EnableGraphicsDebugLayer"))
 	{
 		ID3D12InfoQueue *d3dInfoQueue = nullptr;
