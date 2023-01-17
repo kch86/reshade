@@ -151,13 +151,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="bvh_manager.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="hash.cpp" />
     <ClCompile Include="raytracing.cpp" />
     <ClCompile Include="state_tracking.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bvh_manager.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="dxhelpers.h" />
+    <ClInclude Include="hash.h" />
     <ClInclude Include="raytracing.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />
     <ClInclude Include="Shaders\RayTracingHlslCompat.h" />

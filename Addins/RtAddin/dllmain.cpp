@@ -9,6 +9,7 @@
 #include <shared_mutex>
 #include <unordered_set>
 #include <vector>
+#include <span>
 
 // dx12
 #include <d3d12.h>
@@ -17,13 +18,11 @@
 
 //ray tracing includes
 #include "raytracing.h"
+#include "bvh_manager.h"
 #include "CompiledShaders\Raytracing_inline.hlsl.h"
 #include "CompiledShaders\Raytracing_blit_vs.hlsl.h"
 #include "CompiledShaders\Raytracing_blit_ps.hlsl.h"
-
-#define XXH_STATIC_LINKING_ONLY   /* access advanced declarations */
-#define XXH_IMPLEMENTATION
-#include <xxhash/xxhash.h>
+#include "hash.h"
 
 using namespace reshade::api;
 using namespace DirectX;
@@ -72,18 +71,12 @@ namespace
 		int pad[2];
 	};
 
-	constexpr bool BlasPerGeometry = true;
-
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
 	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
-	std::unordered_map<uint64_t, bool> s_needsBvhBuild;
-	std::vector<BlasBuildDesc> s_geometry;
-	std::vector<scopedresource> s_bvhs;
-	std::vector<std::vector<XMMATRIX>> s_instances;
 	scopedresource s_tlas;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
@@ -129,7 +122,7 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	bool s_staticgeo_vs_pipeline_is_bound = false;
 	pipeline s_current_vs_pipeline;
-	std::unordered_map<uint64_t, uint32_t> s_per_frame_instance_counts;
+	bvh_manager s_bvh_manager;
 
 	uint64_t s_current_draw_stream_hash = 0;
 
@@ -178,9 +171,7 @@ static void init_vs_mappings()
 
 static void clear_bvhs()
 {
-	s_geometry.clear();
-	s_bvhs.clear();
-	s_instances.clear();
+	s_bvh_manager.destroy();
 }
 
 static bool filter_command()
@@ -443,9 +434,6 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 
 	assert(s_resources.find(handle.handle) == s_resources.end());
 	s_resources[handle.handle] = desc;
-
-	if(desc.usage == resource_usage::vertex_buffer)
-		s_needsBvhBuild[handle.handle] = true;
 }
 static void on_destroy_resource(device *device, resource handle)
 {
@@ -466,11 +454,6 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 		if (s_resources.find(resource.handle) != s_resources.end())
 		{
 			s_mapped_resources[resource.handle] = *data;
-		}
-
-		if (desc.usage == resource_usage::vertex_buffer)
-		{
-			s_needsBvhBuild[resource.handle] = true;
 		}
 	}	
 }
@@ -504,32 +487,7 @@ void on_unmap_buffer_region(device *device, resource handle)
 		auto prev_shadow = s_shadow_resources.find(handle.handle);
 		if (prev_shadow != s_shadow_resources.end())
 		{
-			if (BlasPerGeometry)
-			{
-				//erase from our geometry and bvh list
-				uint32_t count = s_geometry.size();
-				for (uint32_t i = 0; i < count; i++)
-				{
-					if (s_geometry[i].vb.res == prev_shadow->second.handle())
-					{
-						s_geometry[i] = s_geometry[count - 1];
-
-						s_bvhs[i].free();
-						s_bvhs[i] = std::move(s_bvhs[count - 1]);
-
-						s_instances[i] = s_instances[count - 1];
-
-						//since we moved the last one here, we need to check i again
-						--i;
-
-						// decrement count to match erasing 1 element
-						--count;
-					}
-				}
-				s_geometry.resize(count);
-				s_bvhs.resize(count);
-				s_instances.resize(count);
-			}
+			s_bvh_manager.on_geo_updated(prev_shadow->second.handle());
 
 			prev_shadow->second.free();
 		}
@@ -588,7 +546,7 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 		s_currentVB.fmt = posStreamInfo.format;
 	}
 
-	s_current_draw_stream_hash = XXH3_64bits(buffers, count * sizeof(resource));
+	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
 }
 static void on_push_constants(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, uint32_t first, uint32_t count, const uint32_t *values)
 {
@@ -621,10 +579,8 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 	if (s_current_vs_pipeline.handle != 0)
 	{
-		bool is_static_vs_layout = true;
-
 		// some vs do not have the WVP at slot 0
-		// we hashes those shaders earlier and check them here
+		// we hashed those shaders earlier and check them here
 		{
 			assert(s_vs_hash_map.contains(s_current_vs_pipeline.handle));
 			const uint64_t hash = s_vs_hash_map[s_current_vs_pipeline.handle];
@@ -634,8 +590,6 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				XMVECTOR *vectors = (XMVECTOR *)values;
 
 				s_current_wvp = *((XMMATRIX *)&vectors[offset->second]);
-
-				is_static_vs_layout = false;
 			}
 			else
 			{
@@ -702,26 +656,10 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
-	if (!BlasPerGeometry)
-	{
-		// build whole vb/ib
-		resource_desc vb_desc = cmd_list->get_device()->get_resource_desc(s_currentVB.vb);
-		resource_desc ib_desc = cmd_list->get_device()->get_resource_desc(s_currentIB.ib);
-
-		uint32_t vb_count = uint32_t(vb_desc.buffer.size / s_currentVB.stride);
-		uint32_t ib_count = uint32_t(ib_desc.buffer.size / s_currentIB.stride);
-
-		assert(vb_count >= vertex_count);
-		assert(ib_count >= index_count);
-		vertex_count = vb_count;
-		index_count = ib_count;	
-	}	
-
 	BlasBuildDesc desc = {
 		.vb = {
 			.res = s_shadow_resources[s_currentVB.vb.handle].handle().handle,
 			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
-			//.offset = 0,
 			.count = vertex_count,
 			.stride = s_currentVB.stride,
 			.fmt = s_currentVB.fmt
@@ -729,82 +667,21 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.ib = {
 			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
 			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
-			//.offset = 0,
 			.count = index_count,
 			.fmt = s_currentIB.fmt
 		}
 	};
 
-	struct
-	{
-		BlasBuildDesc desc;
-		uint64_t stream_hash;
-	} combinedHashData = {
-			.desc = desc,
-			.stream_hash = s_current_draw_stream_hash
+	bvh_manager::DrawDesc draw_desc = {
+		.d3d9device = cmd_list->get_device(),
+		.cmd_list = s_d3d12cmdlist,
+		.cmd_queue = s_d3d12cmdqueue,
+		.blas_desc = desc,
+		.transform = s_current_wvp
 	};
 
-	// combine the stream and draw data into one hash
-	// use this to track instance count per frame
-	XXH64_hash_t combined_hash = XXH3_64bits(&combinedHashData, sizeof(combinedHashData));
-	uint32_t instanceIndex = 0;
-	if (auto iter = s_per_frame_instance_counts.find(combined_hash); iter != s_per_frame_instance_counts.end())
-	{
-		instanceIndex = iter->second;
-		iter->second++;
-	}
-	else
-	{
-		instanceIndex = 0;
-		s_per_frame_instance_counts[combined_hash] = 0;
-	}
-
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
-	if (!BlasPerGeometry)
-	{
-		if (s_needsBvhBuild[s_currentVB.vb.handle])
-		{
-			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
-
-			s_bvhs.push_back(std::move(bvh));
-			s_needsBvhBuild[s_currentVB.vb.handle] = false;
-		}
-	}
-	else
-	{
-		s_needsBvhBuild[s_currentVB.vb.handle] = false;
-		auto result = std::find_if(s_geometry.begin(), s_geometry.end(), [&](const BlasBuildDesc &d) {
-			return
-			d.vb.count == desc.vb.count &&
-				d.vb.offset == desc.vb.offset &&
-				d.vb.res == desc.vb.res &&
-				d.ib.count == desc.ib.count &&
-				d.ib.offset == desc.ib.offset &&
-				d.ib.res == desc.ib.res;
-		});
-		if (result == s_geometry.end())
-		{
-			scopedresource bvh = buildBlas(cmd_list->get_device(), s_d3d12cmdlist, s_d3d12cmdqueue, desc);
-
-			s_bvhs.push_back(std::move(bvh));
-			s_instances.push_back({});
-			s_instances.back().push_back(s_current_wvp); assert(instanceIndex == 0);
-			s_geometry.push_back(desc);
-		}
-		else
-		{
-			uint32_t index = result - s_geometry.begin();
-			if (instanceIndex < s_instances[index].size())
-			{
-				s_instances[index][instanceIndex] = s_current_wvp;
-			}
-			else
-			{
-				s_instances[index].push_back(s_current_wvp);
-
-			}
-		}
-	}
+	s_bvh_manager.on_geo_draw(draw_desc);	
 
 	return false;
 }
@@ -821,12 +698,12 @@ static void on_present(effect_runtime *runtime)
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
 	s_draw_count = 0;
-	s_per_frame_instance_counts.clear();
+	s_bvh_manager.update();
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
 	{
-		clear_bvhs();
+		s_bvh_manager.destroy();
 	}
 }
 
@@ -834,66 +711,10 @@ static void update_rt()
 {
 	s_tlas.free();
 
-	if (s_bvhs.size() > 0)
-	{
-		std::vector<rt_instance_desc> instances;
-		instances.reserve(s_bvhs.size());
-
-		assert(s_bvhs.size() == s_instances.size());
-		int totalInstanceCount = 0;
-		for (size_t i = 0; i < s_instances.size(); i++)
-		{
-			assert(s_bvhs[i].handle().handle != 0);
-
-			rt_instance_desc instance{};
-			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
-			instance.instance_mask = 0xff;
-			instance.flags = rt_instance_flags::none;
-
-			const auto &instanceDatas = s_instances[i];
-			for (const auto &instanceData : instanceDatas)
-			{
-				if (s_got_viewproj)
-				{
-					XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
-					XMMATRIX wvp = instanceData;
-					XMMATRIX world = inv_viewproj * wvp;
-
-					memcpy(instance.transform, &world, sizeof(instance.transform));
-				}
-				else
-				{
-					instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
-				}
-				instance.instance_id = totalInstanceCount;
-				totalInstanceCount++;
-
-				instances.push_back(instance);
-			}
-
-			/*rt_instance_desc &instance = instances[i];
-			instance = {};
-			instance.acceleration_structure = { .buffer = s_bvhs[i].handle() };
-			instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
-			instance.instance_mask = 0xff;
-			instance.instance_id = i;
-			instance.flags = rt_instance_flags::none;
-
-			if (s_got_viewproj)
-			{
-				XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, s_viewproj);
-				XMMATRIX wvp = s_instances[i];
-				XMMATRIX world = inv_viewproj * wvp;
-
-				memcpy(instance.transform, &world, sizeof(instance.transform));
-			}*/
-		}
-
-		TlasBuildDesc desc = {
-			.instances = {instances.data(), instances.size() }
-		};
-		s_tlas = buildTlas(s_d3d12cmdlist, s_d3d12cmdqueue, desc);
-	}
+	s_tlas = s_bvh_manager.build_tlas(
+		s_got_viewproj ? &s_viewproj : nullptr,
+		s_d3d12cmdlist,
+		s_d3d12cmdqueue);
 }
 
 void updateCamera(effect_runtime *runtime)
@@ -1163,12 +984,14 @@ static void do_init()
 
 static void do_shutdown()
 {
-	s_bvhs.clear();
+	//s_bvhs.clear();
 	s_tlas.free();
 	s_output.free();
 
 	s_output_uav.free();
 	s_output_srv.free();
+
+	s_bvh_manager.destroy();
 
 	doDeferredDeletes();
 }

@@ -3,12 +3,14 @@
 #include "addon.hpp"
 #include "dxhelpers.h"
 #include <reshade_api_resource.hpp>
+#include <span>
 
 namespace reshade::api
 {
 	struct device;
 	struct command_list;
 	struct command_queue;
+	struct rt_instance_desc;
 	enum class format : uint32_t;
 }
 
@@ -102,7 +104,7 @@ struct TlasInstance
 
 struct TlasBuildDesc
 {
-	span<reshade::api::rt_instance_desc> instances;
+	std::span<reshade::api::rt_instance_desc> instances;
 };
 
 
