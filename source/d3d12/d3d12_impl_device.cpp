@@ -986,7 +986,8 @@ bool reshade::d3d12::device_impl::create_pipeline_layout(uint32_t param_count, c
 	}
 
 	D3D12_ROOT_SIGNATURE_DESC internal_desc = {};
-	internal_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	internal_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+						  D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED; //TODO: make this x-platform?
 	internal_desc.NumParameters = param_count;
 	internal_desc.pParameters = internal_params.data();
 
