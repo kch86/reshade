@@ -501,7 +501,7 @@ void reshade::d3d12::device_impl::destroy_resource_view(api::resource_view handl
 		return;
 
 	//check for gpu descriptor handle
-	if ((handle.handle & 0x8000000000000000) == 1)
+	if ((handle.handle & 0x8000000000000000) != 0)
 	{
 		uint32_t index = handle.handle & 0xffffffff;
 		D3D12_GPU_DESCRIPTOR_HANDLE gpu_descriptor = _gpu_view_heap.get_handle_gpu(index);
@@ -550,7 +550,7 @@ reshade::api::resource_view_desc reshade::d3d12::device_impl::get_resource_view_
 
 uint32_t reshade::d3d12::device_impl::get_resource_view_descriptor_index(api::resource_view view) const
 {
-	if ((view.handle & 0x8000000000000000) == 1)
+	if ((view.handle & 0x8000000000000000) != 0)
 	{
 		uint32_t index = view.handle & 0xffffffff;
 		assert(index != 0xffffffff);
