@@ -307,6 +307,8 @@ namespace reshade::api
 		/// </summary>
 		virtual resource_view_desc get_resource_view_desc(resource_view view) const = 0;
 
+		virtual uint32_t get_resource_view_descriptor_index(resource_view view) const { return 0; }
+
 		/// <summary>
 		/// Maps the memory of a buffer resource into application address space.
 		/// </summary>

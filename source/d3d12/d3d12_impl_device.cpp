@@ -424,6 +424,24 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 		}
 		case api::resource_usage::shader_resource:
 		{
+			if ((desc.flags & api::resource_view_flags::shader_visible) != 0)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE base_handle;
+				D3D12_GPU_DESCRIPTOR_HANDLE base_handle_gpu;
+
+				if (!_gpu_view_heap.allocate_static(1, base_handle, base_handle_gpu))
+				{
+					break;
+				}
+
+				uint32_t index = _gpu_view_heap.get_index(base_handle_gpu);
+				uint64_t handle = 0x8000000000000000  //store that this is a gpu descriptor handle in the
+								  | uint64_t(index);
+
+				*out_handle = api::resource_view{ handle };
+				return true;
+			}
+
 			D3D12_CPU_DESCRIPTOR_HANDLE descriptor_handle;
 			if (!_view_heaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].allocate(descriptor_handle))
 				break;
@@ -433,6 +451,10 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			convert_resource_view_desc(desc, internal_desc);
 
 			_orig->CreateShaderResourceView(reinterpret_cast<ID3D12Resource *>(resource.handle), &internal_desc, descriptor_handle);
+
+			//for the above mark to work, make sure that the 63 bit is never 1
+			uint64_t h = (uint64_t)descriptor_handle.ptr;
+			assert((h & 0x8000000000000000) == 0);
 
 			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
 			*out_handle = to_handle(descriptor_handle);
@@ -478,6 +500,18 @@ void reshade::d3d12::device_impl::destroy_resource_view(api::resource_view handl
 	if (handle.handle == 0)
 		return;
 
+	//check for gpu descriptor handle
+	if ((handle.handle & 0x8000000000000000) == 1)
+	{
+		uint32_t index = handle.handle & 0xffffffff;
+		D3D12_GPU_DESCRIPTOR_HANDLE gpu_descriptor = _gpu_view_heap.get_handle_gpu(index);
+		if (gpu_descriptor.ptr)
+		{
+			_gpu_view_heap.free(gpu_descriptor);
+		}
+		return;
+	}
+
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor_handle = { static_cast<SIZE_T>(handle.handle) };
 
 	const std::unique_lock<std::shared_mutex> lock(_resource_mutex);
@@ -512,6 +546,21 @@ reshade::api::resource_view_desc reshade::d3d12::device_impl::get_resource_view_
 		return it->second.second;
 	else
 		return assert(false), api::resource_view_desc();
+}
+
+uint32_t reshade::d3d12::device_impl::get_resource_view_descriptor_index(api::resource_view view) const
+{
+	if ((view.handle & 0x8000000000000000) == 1)
+	{
+		uint32_t index = view.handle & 0xffffffff;
+		assert(index != 0xffffffff);
+		return index;
+	}
+	else
+	{
+		assert(false); // should not get here
+	}
+	return 0;
 }
 
 bool reshade::d3d12::device_impl::map_buffer_region(api::resource resource, uint64_t offset, uint64_t, api::map_access access, void **out_data)

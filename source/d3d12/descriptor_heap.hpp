@@ -259,6 +259,27 @@ namespace reshade::d3d12
 			}
 		}
 
+		uint32_t get_index(D3D12_GPU_DESCRIPTOR_HANDLE handle)
+		{
+			if (contains(handle))
+			{
+				return uint32_t(handle.ptr - _static_heap_base_gpu) / _increment_size;
+			}
+
+			return 0xffffffff; //invalid index
+		}
+
+		D3D12_GPU_DESCRIPTOR_HANDLE get_handle_gpu(uint32_t index)
+		{
+			D3D12_GPU_DESCRIPTOR_HANDLE handle{};
+			if (index == 0xffffffff)
+				return handle;
+
+			handle.ptr = _static_heap_base_gpu + SIZE_T(index) * _increment_size;
+
+			return handle;
+		}
+
 		ID3D12DescriptorHeap *get() const { assert(_heap != nullptr); return _heap.get(); }
 
 	private:

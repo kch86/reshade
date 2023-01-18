@@ -335,6 +335,16 @@ namespace reshade::api
 	};
 
 	/// <summary>
+	/// Flags for the resource view.
+	/// </summary>
+	enum class resource_view_flags : uint32_t
+	{
+		none = 0,
+		shader_visible = (1 << 0), // Will control if this is a cpu or gpu descriptor
+	};
+	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(resource_view_flags);
+
+	/// <summary>
 	/// Describes a resource view, which specifies how to interpret the data of a resource.
 	/// </summary>
 	struct [[nodiscard]] resource_view_desc
@@ -356,6 +366,10 @@ namespace reshade::api
 		/// Format the view should reinterpret the resource data to (can be different than the format of the resource as long as they are compatible).
 		/// </summary>
 		format format = format::unknown;
+		/// <summary>
+		/// Flags for the resource view
+		/// </summary>
+		resource_view_flags flags = resource_view_flags::none;
 
 		union
 		{
