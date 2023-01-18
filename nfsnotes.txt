@@ -22,3 +22,7 @@ todo:
 - bindless
 -- get descriptor offset for each resource (can call device function or track this myself?)
 -- fill a buffer with descriptor handles/indices
+-- need to allocate gpu static and temporary descriptor for srvs
+--- add flags to resource_view alloc for temp/static gpu 
+-- add api to get the descriptor index for a view (there is something like this for sets)
+- use amd d3d12 memory allocator
