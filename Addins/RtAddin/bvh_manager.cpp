@@ -151,8 +151,10 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			}
 		}
 
+		m_instances_flat = instances;
+
 		TlasBuildDesc desc = {
-			.instances = {instances.data(), instances.size() }
+			.instances = {m_instances_flat.data(), m_instances_flat.size() }
 		};
 		return buildTlas(cmd_list, cmd_queue, desc);
 	}

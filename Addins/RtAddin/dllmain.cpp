@@ -457,7 +457,6 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 		}
 	}	
 }
-
 void on_unmap_buffer_region(device *device, resource handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -707,6 +706,7 @@ static void on_present(effect_runtime *runtime)
 	}
 }
 
+volatile bool g_test = false;
 static void update_rt()
 {
 	s_tlas.free();
@@ -715,6 +715,63 @@ static void update_rt()
 		s_got_viewproj ? &s_viewproj : nullptr,
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
+
+	if (g_test)
+	{
+		std::vector<scopedresource> buffers;
+		std::vector<scopedresourceview> srvs;
+		buffers.reserve(s_bvh_manager.get_bvhs().size());
+
+		for (const rt_instance_desc& instance : s_bvh_manager.get_instances())
+		{
+			uint32_t instanceId = instance.instance_id;
+
+			resource d3d12res;
+			s_d3d12device->create_resource(
+				resource_desc(sizeof(uint32_t), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+				nullptr, resource_usage::cpu_access, &d3d12res);
+
+			void *ptr;
+			s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t), map_access::write_only, &ptr);
+			memcpy(ptr, &instanceId, sizeof(uint32_t));
+			s_d3d12device->unmap_buffer_region(d3d12res);
+
+			buffers.push_back(scopedresource(s_d3d12device, d3d12res));
+
+			resource_view_desc view_desc(format::r32_uint, 0, sizeof(uint32_t));
+			view_desc.flags = resource_view_flags::shader_visible;
+
+			resource_view srv;
+			s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+			srvs.push_back(scopedresourceview(s_d3d12device, srv));
+		}
+
+		resource d3d12res;
+		s_d3d12device->create_resource(
+			resource_desc(sizeof(uint32_t) * srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+			nullptr, resource_usage::cpu_access, &d3d12res);
+
+		void *ptr;
+		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t), map_access::write_only, &ptr);
+
+		uint32_t *data = (uint32_t *)ptr;
+		for (uint32_t i = 0; i < srvs.size(); i++)
+		{
+			data[i] = s_d3d12device->get_resource_view_descriptor_index(srvs[i].handle());
+		}
+		s_d3d12device->unmap_buffer_region(d3d12res);
+
+		resource_view_desc view_desc(format::r32_uint, 0, sizeof(uint32_t) * srvs.size());
+
+		resource_view srv;
+		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+		scopedresource instanceBuffer(s_d3d12device, d3d12res);
+		scopedresourceview instanceSrv(s_d3d12device, srv);
+
+		g_test = false;
+	}
 }
 
 void updateCamera(effect_runtime *runtime)
