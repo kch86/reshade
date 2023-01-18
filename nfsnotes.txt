@@ -25,4 +25,7 @@ todo:
 -- need to allocate gpu static and temporary descriptor for srvs
 --- add flags to resource_view alloc for temp/static gpu 
 -- add api to get the descriptor index for a view (there is something like this for sets)
+- for gpu visible views, this would no longer use the push_descriptor path
+-- the indirection buffer(buffer of descriptor ids) can be bound as normal if I want, 
+-- or it can also use the temporary gpu descriptor path
 - use amd d3d12 memory allocator
