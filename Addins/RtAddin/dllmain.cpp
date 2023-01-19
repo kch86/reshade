@@ -68,7 +68,8 @@ namespace
 
 		float fov;
 		uint32_t usePrebuiltCamMat;
-		int pad[2];
+		uint32_t useIdBuffer;
+		int pad[1];
 	};
 
 	std::shared_mutex s_mutex;
@@ -108,6 +109,7 @@ namespace
 	bool s_ui_use_viewproj = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
+	bool s_ui_use_id_buffer = false;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -134,6 +136,11 @@ namespace
 	int s_draw_count = 0;
 
 	bool s_d3d_debug_enabled = false;
+
+	std::vector<scopedresource> s_instance_data_buffers;
+	std::vector<scopedresourceview> s_instance_data_srvs;
+	scopedresource s_instances_buffer;
+	scopedresourceview s_instances_buffer_srv;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -203,7 +210,8 @@ static void init_pipeline()
 	// init rt pipeline
 	{
 		pipeline_layout_param params[] = {
-			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(CameraCb)/sizeof(int), .visibility = shader_stage::compute}),
 		};
@@ -222,9 +230,6 @@ static void init_pipeline()
 
 		ThrowIfFailed(s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout));
 		ThrowIfFailed(s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline));
-
-		//s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 0, &s_bindings.inputs);
-		//s_d3d12device->allocate_descriptor_set(s_pipeline_layout, 1, &s_bindings.outputs);
 	}
 
 	// init blit pipeline
@@ -232,8 +237,6 @@ static void init_pipeline()
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::pixel, .type = descriptor_type::shader_resource_view }),
 		};
-
-		//params[0] = descriptor_range{ 0, 0, 0, 1, shader_stage::all, 1, descriptor_type::shader_resource_view };
 
 		shader_desc vs_desc = {
 			.code = g_pRaytracing_blit_vs,
@@ -708,7 +711,7 @@ static void on_present(effect_runtime *runtime)
 	}
 }
 
-volatile bool g_test = false;
+volatile bool g_test = true;
 static void update_rt()
 {
 	s_tlas.free();
@@ -718,11 +721,12 @@ static void update_rt()
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
 
-	if (g_test)
+	if (g_test && s_ui_use_id_buffer)
 	{
-		std::vector<scopedresource> buffers;
-		std::vector<scopedresourceview> srvs;
-		buffers.reserve(s_bvh_manager.get_bvhs().size());
+		s_instance_data_buffers.clear();
+		s_instance_data_srvs.clear();
+		s_instance_data_buffers.reserve(s_bvh_manager.get_bvhs().size());
+		s_instance_data_srvs.reserve(s_bvh_manager.get_bvhs().size());
 
 		for (const rt_instance_desc& instance : s_bvh_manager.get_instances())
 		{
@@ -738,7 +742,7 @@ static void update_rt()
 			memcpy(ptr, &instanceId, sizeof(uint32_t));
 			s_d3d12device->unmap_buffer_region(d3d12res);
 
-			buffers.push_back(scopedresource(s_d3d12device, d3d12res));
+			s_instance_data_buffers.push_back(scopedresource(s_d3d12device, d3d12res));
 
 			resource_view_desc view_desc(format::r32_uint, 0, 1);
 			view_desc.flags = resource_view_flags::shader_visible;
@@ -746,31 +750,34 @@ static void update_rt()
 			resource_view srv;
 			s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
 
-			srvs.push_back(scopedresourceview(s_d3d12device, srv));
+			s_instance_data_srvs.push_back(scopedresourceview(s_d3d12device, srv));
 		}
 
 		resource d3d12res;
 		s_d3d12device->create_resource(
-			resource_desc(sizeof(uint32_t) * srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+			resource_desc(sizeof(uint32_t) * s_instance_data_srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
 			nullptr, resource_usage::cpu_access, &d3d12res);
 
 		void *ptr;
-		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * srvs.size(), map_access::write_only, &ptr);
+		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * s_instance_data_srvs.size(), map_access::write_only, &ptr);
 
 		uint32_t *data = (uint32_t *)ptr;
-		for (uint32_t i = 0; i < srvs.size(); i++)
+		for (uint32_t i = 0; i < s_instance_data_srvs.size(); i++)
 		{
-			data[i] = s_d3d12device->get_resource_view_descriptor_index(srvs[i].handle());
+			data[i] = s_d3d12device->get_resource_view_descriptor_index(s_instance_data_srvs[i].handle());
 		}
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		resource_view_desc view_desc(format::r32_uint, 0, srvs.size());
+		resource_view_desc view_desc(format::r32_uint, 0, s_instance_data_srvs.size());
 
 		resource_view srv;
 		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
 
-		scopedresource instanceBuffer(s_d3d12device, d3d12res);
-		scopedresourceview instanceSrv(s_d3d12device, srv);
+		s_instances_buffer.free();
+		s_instances_buffer = scopedresource(s_d3d12device, d3d12res);
+
+		s_instances_buffer_srv.free();
+		s_instances_buffer_srv = scopedresourceview(s_d3d12device, srv);
 
 		g_test = false;
 	}
@@ -881,6 +888,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.pos = s_cam_pos;
 	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
+	cb.useIdBuffer = s_ui_use_id_buffer;
 	if (cb.usePrebuiltCamMat)
 	{
 		cb.pos = s_view.r[3];
@@ -895,6 +903,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		},
 		{
 			.count = 1,
+			.type = descriptor_type::shader_resource_view,
+			.descriptors = &s_instances_buffer_srv, // bind tlas srv
+		},
+		{
+			.count = 1,
 			.type = descriptor_type::unordered_access_view,
 			.descriptors = &s_output_uav, // bind output uav
 		}
@@ -902,9 +915,14 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	s_d3d12cmdlist->bind_pipeline_layout(pipeline_stage::compute_shader, s_pipeline_layout);
 	s_d3d12cmdlist->bind_pipeline(pipeline_stage::compute_shader, s_pipeline);
-	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 0, updates[0]);
-	s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, 1, updates[1]);
-	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, 2, 0, sizeof(CameraCb)/sizeof(int), &cb);
+	uint32_t param_index = 0;
+	for (param_index = 0; param_index < ARRAYSIZE(updates); param_index++)
+	{
+		if(((uint64_t*)updates[param_index].descriptors)[0] != 0)
+			s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, param_index, updates[param_index]);
+	}
+		
+	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(CameraCb)/sizeof(int), &cb);
 
 	// dispatch
 	const uint32_t groupX = (width + 7) / 8;
@@ -1044,6 +1062,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
+
+	ImGui::Checkbox("Use id buffer", &s_ui_use_id_buffer);
 }
 
 static void do_init()
