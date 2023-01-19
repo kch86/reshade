@@ -132,6 +132,8 @@ namespace
 	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
+
+	bool s_d3d_debug_enabled = false;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -738,7 +740,7 @@ static void update_rt()
 
 			buffers.push_back(scopedresource(s_d3d12device, d3d12res));
 
-			resource_view_desc view_desc(format::r32_uint, 0, sizeof(uint32_t));
+			resource_view_desc view_desc(format::r32_uint, 0, 1);
 			view_desc.flags = resource_view_flags::shader_visible;
 
 			resource_view srv;
@@ -753,7 +755,7 @@ static void update_rt()
 			nullptr, resource_usage::cpu_access, &d3d12res);
 
 		void *ptr;
-		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t), map_access::write_only, &ptr);
+		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * srvs.size(), map_access::write_only, &ptr);
 
 		uint32_t *data = (uint32_t *)ptr;
 		for (uint32_t i = 0; i < srvs.size(); i++)
@@ -762,7 +764,7 @@ static void update_rt()
 		}
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		resource_view_desc view_desc(format::r32_uint, 0, sizeof(uint32_t) * srvs.size());
+		resource_view_desc view_desc(format::r32_uint, 0, srvs.size());
 
 		resource_view srv;
 		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
@@ -854,6 +856,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 		s_output_srv = scopedresourceview(s_d3d12device, srv);
 		s_output_uav = scopedresourceview(s_d3d12device, uav);
+
+		s_width = width;
+		s_height = height;
 	}
 	else
 	{
@@ -911,6 +916,10 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 void blit(uint32_t width, uint32_t height, resource_desc target_desc, resource target)
 {
+	// debug layer causes a crash when binding the unwrapped render target
+	if (s_d3d_debug_enabled)
+		return;
+
 	resource_view rtv;
 	{
 		resource_view_desc rtv_desc(target_desc.texture.format);
@@ -988,6 +997,8 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 
 	if (resources.size() == 0)
 		return false;
+
+	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
 
 	update_rt();
 
