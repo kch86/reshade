@@ -69,6 +69,26 @@ cbuffer RtConstants : register(b0)
 	uint pad0;
 }
 
+//template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
+//{
+//	//T result = byteBufferUniform(g_bindingsOffset.bindingsOffset).Load<T>(0);
+//	T result = ResourceDescriptorHeap[handle].Load<T>(byteOffset);
+//	return result;
+//}
+uint load_buffer_elem(uint handle, uint byteOffset)
+{
+	//T result = byteBufferUniform(g_bindingsOffset.bindingsOffset).Load<T>(0);
+
+	Buffer<uint> b = ResourceDescriptorHeap[handle];
+	uint result = b.Load(byteOffset);
+
+	uint dim = 10;
+	b.GetDimensions(dim);
+	result = dim;
+
+	return result;
+}
+
 float3 genRayDir(uint3 tid, float2 dims)
 {
 	float2 crd = float2(tid.xy);
@@ -105,23 +125,21 @@ float3 IntToColor(uint Index)
 
 float3 instanceIdToColor(uint id)
 {
+	if (g_useIdBuffer)
+	{
+		uint handle = g_instance_buffer[id];
+		//id = load_buffer_elem_t(handle, 0);
+		id = load_buffer_elem(handle, 0);
+		//id = handle;
+		//id *= 7;
+
+		if (id == 0)
+		{
+			return float3(1, 0, 0);
+		}
+	}
+
 	return IntToColor(id);
-}
-
-//#define byteBufferUniform(handle) ResourceDescriptorHeap[handle.readIndex()]
-//template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
-//{
-//	//T result = byteBufferUniform(g_bindingsOffset.bindingsOffset).Load<T>(0);
-//	T result = ResourceDescriptorHeap[handle].Load<T>(byteOffset);
-//	return result;
-//}
-uint load_buffer_elem(uint handle, uint byteOffset)
-{
-	//T result = byteBufferUniform(g_bindingsOffset.bindingsOffset).Load<T>(0);
-
-	Buffer<uint> b = ResourceDescriptorHeap[handle];
-	uint result = b.Load(byteOffset);
-	return result;
 }
 
 [numthreads(8, 8, 1)]
@@ -209,21 +227,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
-		if (g_useIdBuffer)
-		{
-			uint id = query.CommittedInstanceID();
-			uint handle = g_instance_buffer[id];
-			//id = load_buffer_elem_t(handle, 0);
-			//id = load_buffer_elem(handle, 0);
-			id = handle;
-			//id *= 7;
-
-			value.rgb = instanceIdToColor(id);
-		}
-		else
-		{
-			value.rgb = instanceIdToColor(query.CommittedInstanceID());
-		}		
+		value.rgb = instanceIdToColor(query.CommittedInstanceID());
 	}
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
