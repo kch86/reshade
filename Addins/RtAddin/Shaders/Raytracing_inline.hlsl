@@ -54,7 +54,7 @@
 
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
-Buffer<uint> g_instance_buffer : register(t1, space1);
+Buffer<uint> g_instance_buffer : register(t0, space1);
 RWTexture2D<float4> g_rtOutput : register(u0);
 
 cbuffer RtConstants : register(b0)
@@ -214,7 +214,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			uint id = query.CommittedInstanceID();
 			uint handle = g_instance_buffer[id];
 			//id = load_buffer_elem_t(handle, 0);
-			id = load_buffer_elem(handle, 0);
+			//id = load_buffer_elem(handle, 0);
+			id = handle;
 			//id *= 7;
 
 			value.rgb = instanceIdToColor(id);
