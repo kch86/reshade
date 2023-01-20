@@ -77,14 +77,16 @@ cbuffer RtConstants : register(b0)
 //}
 uint load_buffer_elem(uint handle, uint byteOffset)
 {
-	//T result = byteBufferUniform(g_bindingsOffset.bindingsOffset).Load<T>(0);
-
 	Buffer<uint> b = ResourceDescriptorHeap[handle];
 	uint result = b.Load(byteOffset);
 
-	uint dim = 10;
-	b.GetDimensions(dim);
-	result = dim;
+	return result;
+}
+
+uint load_buffer_elem_nonuniform(uint handle, uint byteOffset)
+{
+	Buffer<uint> b = ResourceDescriptorHeap[NonUniformResourceIndex(handle)];
+	uint result = b.Load(byteOffset);
 
 	return result;
 }
@@ -128,15 +130,7 @@ float3 instanceIdToColor(uint id)
 	if (g_useIdBuffer)
 	{
 		uint handle = g_instance_buffer[id];
-		//id = load_buffer_elem_t(handle, 0);
-		id = load_buffer_elem(handle, 0);
-		//id = handle;
-		//id *= 7;
-
-		if (id == 0)
-		{
-			return float3(1, 0, 0);
-		}
+		id = load_buffer_elem_nonuniform(handle, 0);
 	}
 
 	return IntToColor(id);
