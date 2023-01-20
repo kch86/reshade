@@ -380,11 +380,11 @@ namespace reshade::api
 			struct
 			{
 				/// <summary>
-				/// Offset from the start of the buffer resource (in bytes).
+				/// Offset from the start of the buffer resource (in elements).
 				/// </summary>
 				uint64_t offset = 0;
 				/// <summary>
-				/// Number of elements this view covers in the buffer resource (in bytes).
+				/// Number of elements this view covers in the buffer resource (in elements).
 				/// Set to -1 (UINT64_MAX) to indicate that the entire buffer resource should be used.
 				/// </summary>
 				uint64_t size = UINT64_MAX;
