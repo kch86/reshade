@@ -231,14 +231,8 @@ static DeferDeleteData s_frameDeleteData[MaxDeferredFrames][HandleTypeCount];
 static uint32_t s_frameIndex = 0;
 static std::shared_mutex s_mutex;
 
-void doDeferredDeletes()
+void doDeferredDeletes(uint32_t deleteIndex)
 {
-	const std::unique_lock<std::shared_mutex> lock(s_mutex);
-
-	// delete oldest frame
-	const uint32_t index = s_frameIndex % MaxDeferredFrames;
-	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
-
 	for (int i = 0; i < HandleTypeCount; i++)
 	{
 		for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
@@ -258,9 +252,28 @@ void doDeferredDeletes()
 			}
 		}
 		s_frameDeleteData[deleteIndex][i].todelete.clear();
-	}	
+	}
+}
+
+void doDeferredDeletes()
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	// delete oldest frame
+	const uint32_t index = s_frameIndex % MaxDeferredFrames;
+	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
+
+	doDeferredDeletes(deleteIndex);
 
 	s_frameIndex++;
+}
+
+void doDeferredDeletesAll()
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	for(uint32_t index = 0; index < MaxDeferredFrames; index++)
+		doDeferredDeletes(index);
 }
 
 void deferDestroyHandle(device* device, resource res)

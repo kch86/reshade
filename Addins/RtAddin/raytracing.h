@@ -15,6 +15,7 @@ namespace reshade::api
 }
 
 void doDeferredDeletes();
+void doDeferredDeletesAll();
 void deferDestroyHandle(reshade::api::device *device, reshade::api::resource res);
 void deferDestroyHandle(reshade::api::device *device, reshade::api::resource_view view);
 
