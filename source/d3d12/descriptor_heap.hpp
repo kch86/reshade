@@ -245,9 +245,14 @@ namespace reshade::d3d12
 			return handle_gpu.ptr >= _static_heap_base_gpu && handle_gpu.ptr < _transient_heap_base_gpu;
 		}
 
+		bool contains(D3D12_CPU_DESCRIPTOR_HANDLE handle_cpu) const
+		{
+			return handle_cpu.ptr >= _static_heap_base && handle_cpu.ptr < _transient_heap_base;
+		}
+
 		bool convert_handle(D3D12_GPU_DESCRIPTOR_HANDLE handle_gpu, D3D12_CPU_DESCRIPTOR_HANDLE &out_handle_cpu) const
 		{
-			if (contains(handle_gpu))
+			if (contains(handle_cpu))
 			{
 				out_handle_cpu.ptr = _static_heap_base + static_cast<SIZE_T>(handle_gpu.ptr - _static_heap_base_gpu);
 				return true;
@@ -259,7 +264,21 @@ namespace reshade::d3d12
 			}
 		}
 
-		uint32_t get_index(D3D12_GPU_DESCRIPTOR_HANDLE handle)
+		bool convert_handle(D3D12_CPU_DESCRIPTOR_HANDLE handle_cpu, D3D12_GPU_DESCRIPTOR_HANDLE &out_handle_gpu) const
+		{
+			if (contains(handle_cpu))
+			{
+				out_handle_gpu.ptr = _static_heap_base_gpu + static_cast<SIZE_T>(handle_cpu.ptr - _static_heap_base);
+				return true;
+			}
+			else
+			{
+				out_handle_gpu.ptr = 0;
+				return false;
+			}
+		}
+
+		uint32_t get_index(D3D12_GPU_DESCRIPTOR_HANDLE handle) const
 		{
 			if (contains(handle))
 			{
