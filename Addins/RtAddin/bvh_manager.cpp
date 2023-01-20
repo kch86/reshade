@@ -106,6 +106,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		{
 			resource_view_desc view_desc(attachment.fmt, attachment.offset, attachment.count);
 			view_desc.flags = resource_view_flags::shader_visible;
+			view_desc.buffer.stride = attachment.stride;
 
 			resource_view srv;
 			desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);

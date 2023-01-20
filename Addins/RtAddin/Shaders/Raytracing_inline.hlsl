@@ -52,10 +52,15 @@
 //    1 // max trace recursion depth
 //};
 
+struct Attachments
+{
+	uint vb;
+	uint ib;
+};
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 Buffer<uint> g_instance_buffer : register(t0, space1);
-Buffer<uint> g_attachments_buffer : register(t1, space1);
+StructuredBuffer<Attachments> g_attachments_buffer : register(t1, space1);
 RWTexture2D<float4> g_rtOutput : register(u0);
 
 cbuffer RtConstants : register(b0)
@@ -139,13 +144,18 @@ float3 instanceIdToColor(uint id)
 
 float3 fetchNormal(uint instance_id, uint primitive_id)
 {
-	uint handle = g_attachments_buffer[instance_id];
-	Buffer<float3> b = ResourceDescriptorHeap[NonUniformResourceIndex(handle)];
+	Attachments att = g_attachments_buffer[instance_id];
+	Buffer<uint3> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib)];
+	Buffer<float3> vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb)];
 
-	float3 pos = b.Load(0);
+	uint3 indices = ib.Load(primitive_id);
 
-	pos /= 10.0;
-	return saturate(pos * 0.5 + 0.5);
+	float3 v0 = vb.Load(indices.x);
+	float3 v1 = vb.Load(indices.y);
+	float3 v2 = vb.Load(indices.z);
+
+	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
+	return n * 0.5 + 0.5;
 }
 
 [numthreads(8, 8, 1)]

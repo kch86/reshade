@@ -31,10 +31,10 @@ namespace
 {
 	struct PosStreamInfo
 	{
-		uint32_t streamIndex;
-		uint32_t stride;
-		uint32_t offset;
-		format format;
+		uint32_t streamIndex = 0;
+		uint32_t stride = 0;
+		uint32_t offset = 0;
+		format format = format::unknown;
 	};
 
 	struct IndexData
@@ -42,6 +42,7 @@ namespace
 		resource ib = {};
 		uint32_t offset = 0;
 		uint32_t stride = 0;
+		uint64_t size_bytes = 0;
 		format fmt = format::unknown;
 	};
 
@@ -51,6 +52,7 @@ namespace
 		uint32_t offset = 0;
 		uint32_t count = 0;
 		uint32_t stride = 0;
+		uint64_t size_bytes = 0;
 		format fmt = format::unknown;
 	};
 
@@ -555,7 +557,7 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 		s_current_rtv.handle = 0;
 	}
 }
-static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offset, uint32_t index_size)
+static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64_t offset, uint32_t index_size)
 {
 	if (filter_command())
 		return;
@@ -564,8 +566,11 @@ static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offse
 	s_currentIB.offset = (uint32_t)offset;
 	s_currentIB.stride = index_size;
 	s_currentIB.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
+
+	resource_desc desc = cmd_list->get_device()->get_resource_desc(buffer);
+	s_currentIB.size_bytes = desc.buffer.size;
 }
-static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
+static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
 	if (filter_command())
 		return;
@@ -579,6 +584,9 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 		s_currentVB.count = 0;
 		s_currentVB.stride = strides[posStreamInfo.streamIndex];
 		s_currentVB.fmt = posStreamInfo.format;
+
+		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.vb);
+		s_currentVB.size_bytes = desc.buffer.size;
 	}
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
@@ -708,13 +716,22 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	};
 
 	bvh_manager::Attachment attachments[] = {
+		// vb
 		{
 			.res = s_shadow_resources[s_currentVB.vb.handle].handle(),
-			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
+			.offset = (s_currentVB.offset + (vertex_offset * s_currentVB.stride)) / s_currentVB.stride,
 			.count = vertex_count,
 			.stride = s_currentVB.stride,
 			.fmt = s_currentVB.fmt
 		},
+		// ib
+		{
+			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
+			.offset = (s_currentIB.offset + (first_index * s_currentIB.stride)) / s_currentIB.stride,
+			.count = index_count,
+			.stride = s_currentIB.stride,
+			.fmt = s_currentIB.fmt,
+		}
 	};
 
 	bvh_manager::DrawDesc draw_desc = {

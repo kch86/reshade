@@ -12,9 +12,9 @@ public:
 	struct Attachment
 	{
 		reshade::api::resource res;
-		uint32_t offset;
-		uint32_t count;
-		uint32_t stride;
+		uint32_t offset; // in elements
+		uint32_t count;  // in elements
+		uint32_t stride; // in bytes
 		reshade::api::format fmt;
 	};
 
