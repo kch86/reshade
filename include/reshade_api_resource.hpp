@@ -341,6 +341,7 @@ namespace reshade::api
 	{
 		none = 0,
 		shader_visible = (1 << 0), // Will control if this is a cpu or gpu descriptor
+		structured = (1 << 1),
 	};
 	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(resource_view_flags);
 
@@ -387,6 +388,10 @@ namespace reshade::api
 				/// Set to -1 (UINT64_MAX) to indicate that the entire buffer resource should be used.
 				/// </summary>
 				uint64_t size = UINT64_MAX;
+				/// <summary>
+				/// Structure stride for structured buffers (in bytes), otherwise zero.
+				/// </summary>
+				uint32_t stride = 0;
 			} buffer;
 
 			/// <summary>

@@ -544,12 +544,21 @@ void reshade::d3d12::convert_resource_view_desc(const api::resource_view_desc &d
 	switch (desc.type) // Do not modifiy description in case type is 'resource_view_type::unknown'
 	{
 	case api::resource_view_type::buffer:
+	{
+		const bool is_structured = (desc.flags & api::resource_view_flags::structured) != 0;
 		internal_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		internal_desc.Buffer.FirstElement = desc.buffer.offset;
 		assert(desc.buffer.size <= std::numeric_limits<UINT>::max());
+		assert(desc.format != api::format::unknown || is_structured);
 		internal_desc.Buffer.NumElements = static_cast<UINT>(desc.buffer.size);
+		if (is_structured)
+		{
+			assert(desc.buffer.stride != 0);
+			internal_desc.Buffer.StructureByteStride = desc.buffer.stride;
+		}
 		// Missing fields: D3D12_BUFFER_SRV::StructureByteStride, D3D12_BUFFER_SRV::Flags
 		break;
+	}
 	case api::resource_view_type::acceleration_structure:
 		internal_desc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
 		internal_desc.RaytracingAccelerationStructure.Location = to_native_gpu(desc.acceleration_structure.resource) + desc.acceleration_structure.offset;
