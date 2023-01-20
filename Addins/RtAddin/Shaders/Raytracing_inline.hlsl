@@ -55,6 +55,7 @@
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 Buffer<uint> g_instance_buffer : register(t0, space1);
+Buffer<uint> g_attachments_buffer : register(t1, space1);
 RWTexture2D<float4> g_rtOutput : register(u0);
 
 cbuffer RtConstants : register(b0)
@@ -66,7 +67,7 @@ cbuffer RtConstants : register(b0)
 	float g_fov;
 	uint g_usePrebuiltCamMat;
 	uint g_useIdBuffer;
-	uint pad0;
+	uint g_showNormal;
 }
 
 //template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
@@ -134,6 +135,17 @@ float3 instanceIdToColor(uint id)
 	}
 
 	return IntToColor(id);
+}
+
+float3 fetchNormal(uint instance_id, uint primitive_id)
+{
+	uint handle = g_attachments_buffer[instance_id];
+	Buffer<float3> b = ResourceDescriptorHeap[NonUniformResourceIndex(handle)];
+
+	float3 pos = b.Load(0);
+
+	pos /= 10.0;
+	return saturate(pos * 0.5 + 0.5);
 }
 
 [numthreads(8, 8, 1)]
@@ -221,7 +233,14 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
-		value.rgb = instanceIdToColor(query.CommittedInstanceID());
+		if (g_showNormal)
+		{
+			value.rgb = fetchNormal(query.CommittedInstanceID(), query.CommittedPrimitiveIndex());
+		}
+		else
+		{
+			value.rgb = instanceIdToColor(query.CommittedInstanceID());
+		}		
 	}
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);

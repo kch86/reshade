@@ -40,6 +40,7 @@ void bvh_manager::on_geo_updated(resource res)
 			m_bvhs[i] = std::move(m_bvhs[count - 1]);
 
 			m_instances[i] = m_instances[count - 1];
+			m_attachments[i] = std::move(m_attachments[count - 1]);
 
 			//since we moved the last one here, we need to check i again
 			--i;
@@ -51,6 +52,7 @@ void bvh_manager::on_geo_updated(resource res)
 	m_geometry.resize(count);
 	m_bvhs.resize(count);
 	m_instances.resize(count);
+	m_attachments.resize(count);
 }
 
 void bvh_manager::on_geo_draw(DrawDesc& desc)
