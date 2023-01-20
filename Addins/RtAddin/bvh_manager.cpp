@@ -40,7 +40,9 @@ void bvh_manager::on_geo_updated(resource res)
 			m_bvhs[i] = std::move(m_bvhs[count - 1]);
 
 			m_instances[i] = m_instances[count - 1];
-			m_attachments[i] = std::move(m_attachments[count - 1]);
+
+			m_attachments[i].srvs.clear();
+			m_attachments[i].srvs = std::move(m_attachments[count - 1].srvs);
 
 			//since we moved the last one here, we need to check i again
 			--i;
@@ -99,6 +101,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		m_instances.back().push_back(desc.transform); assert(instanceIndex == 0);
 		m_geometry.push_back(desc.blas_desc);
 
+		GpuAttachment<scopedresourceview> gpuattach;
 		for (const Attachment &attachment : desc.attachments)
 		{
 			resource_view_desc view_desc(attachment.fmt, attachment.offset, attachment.count);
@@ -107,8 +110,9 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			resource_view srv;
 			desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
 
-			m_attachments.push_back(scopedresourceview(desc.cmd_list->get_device(), srv));
+			gpuattach.srvs.push_back(std::move(scopedresourceview(desc.cmd_list->get_device(), srv)));
 		}
+		m_attachments.push_back(std::move(gpuattach));
 	}
 	else
 	{
@@ -131,7 +135,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		std::vector<rt_instance_desc> instances;
 		instances.reserve(m_bvhs.size());
 
-		std::vector<resource_view> attachments;
+		std::vector<GpuAttachment<resource_view>> attachments;
 		attachments.reserve(m_bvhs.size());
 
 		assert(m_bvhs.size() == m_instances.size());
@@ -145,7 +149,9 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			instance.instance_mask = 0xff;
 			instance.flags = rt_instance_flags::none;
 
-			resource_view attachment = m_attachments[i].handle();
+			GpuAttachment<resource_view> gpuattachments;
+			for (scopedresourceview &srv : m_attachments[i].srvs)
+				gpuattachments.srvs.push_back(srv.handle());
 
 			const auto &instanceDatas = m_instances[i];
 			for (const auto &instanceData : instanceDatas)
@@ -165,8 +171,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				instance.instance_id = totalInstanceCount;
 				totalInstanceCount++;
 
-				instances.push_back(instance);
-				attachments.push_back(attachment);
+				instances.push_back(instance);				
+				attachments.push_back(gpuattachments);
 			}
 		}
 
@@ -188,22 +194,42 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 	{
 		device *d = cmd_list->get_device();
 
+		const uint32_t elem_byte_count = sizeof(uint32_t);
+		const uint32_t attachment_count = m_attachments_flat[0].srvs.size();
+		const uint32_t attachment_byte_count = elem_byte_count * attachment_count;
+		const uint32_t total_count = attachment_count * m_attachments_flat.size();
+		const uint32_t total_byte_count = total_count * elem_byte_count;
+
+		//size for the resource is in bytes
+		resource_desc res_desc = resource_desc(total_byte_count, memory_heap::cpu_to_gpu, resource_usage::shader_resource);
+		res_desc.buffer.stride = attachment_byte_count;
+		res_desc.flags = resource_flags::structured;
+
 		resource d3d12res;
 		d->create_resource(
-			resource_desc(sizeof(uint32_t) * m_attachments_flat.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
-			nullptr, resource_usage::cpu_access, &d3d12res);
+			res_desc,
+			nullptr,
+			resource_usage::cpu_access,
+			&d3d12res);
 
 		void *ptr;
-		d->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * m_attachments_flat.size(), map_access::write_only, &ptr);
+		d->map_buffer_region(d3d12res, 0, total_byte_count, map_access::write_only, &ptr);
 
 		uint32_t *data = (uint32_t *)ptr;
 		for (uint32_t i = 0; i < m_attachments_flat.size(); i++)
 		{
-			data[i] = d->get_resource_view_descriptor_index(m_attachments_flat[i]);
+			for (uint32_t att = 0; att < attachment_count; att++)
+			{
+				data[att] = d->get_resource_view_descriptor_index(m_attachments_flat[i].srvs[att]);
+			}
+			data += attachment_count;
 		}
 		d->unmap_buffer_region(d3d12res);
 
-		resource_view_desc view_desc(format::r32_uint, 0, m_attachments_flat.size());
+		// size in element count not bytes
+		resource_view_desc view_desc(format::unknown, 0, m_attachments_flat.size());
+		view_desc.flags = resource_view_flags::structured;
+		view_desc.buffer.stride = attachment_byte_count;
 
 		resource_view srv;
 		d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);

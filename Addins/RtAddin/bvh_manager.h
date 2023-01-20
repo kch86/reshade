@@ -42,14 +42,18 @@ public:
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
 private:
+	template<typename T>
+	struct GpuAttachment
+	{
+		std::vector<T> srvs;
+	};
 	std::vector<BlasBuildDesc> m_geometry;
 	std::vector<scopedresource> m_bvhs;
 	std::vector<std::vector<DirectX::XMMATRIX>> m_instances;
-	std::vector<scopedresourceview> m_attachments;
-
+	std::vector<GpuAttachment<scopedresourceview>> m_attachments;
 
 	std::vector<reshade::api::rt_instance_desc> m_instances_flat;
-	std::vector<reshade::api::resource_view> m_attachments_flat;
+	std::vector< GpuAttachment<reshade::api::resource_view>> m_attachments_flat;
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
 	uint64_t s_current_draw_stream_hash = 0;
