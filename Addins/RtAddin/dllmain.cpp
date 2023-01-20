@@ -118,6 +118,7 @@ namespace
 	bool s_ui_show_rt_half = false;
 	bool s_ui_use_id_buffer = false;
 	bool s_ui_show_normals = false;
+	bool s_ui_enable = true;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -196,7 +197,7 @@ static bool filter_command()
 	// add 1 for the filter because the draw call index is only incremented on the draw
 	// so all the bound state is 1 behind
 	const int drawId = s_draw_count;
-	return  !(drawId >= (s_ui_drawCallBegin) && drawId <= s_ui_drawCallEnd);
+	return !s_ui_enable || !(drawId >= (s_ui_drawCallBegin) && drawId <= s_ui_drawCallEnd);
 }
 
 static void on_init_swapchain(swapchain *swapchain)
@@ -498,6 +499,11 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 void on_unmap_buffer_region(device *device, resource handle)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (!s_ui_enable)
+	{
+		return;
+	}
 
 	//create shadow copy
 	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
@@ -1062,6 +1068,11 @@ void on_tech_render(effect_runtime *runtime, effect_technique technique, command
 
 bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, size_t pass_index)
 {
+	if (!s_ui_enable)
+	{
+		return false;
+	}
+
 	size_t nameLength = 0;
 	runtime->get_technique_name(technique, 0, &nameLength);
 	nameLength += 1;
@@ -1131,6 +1142,8 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 
 static void draw_ui(reshade::api::effect_runtime *)
 {
+	ImGui::Checkbox("Enable", &s_ui_enable);
+
 	ImGui::SliderFloat("ViewRotX: ", &s_ui_view_rot_x, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotZ: ", &s_ui_view_rot_z, -180.0f, 180.0f);
