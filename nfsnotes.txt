@@ -20,3 +20,4 @@ todo:
 - don't re-create shadow resources if they've already been created (e.g. updates)
 - find better way to get viewproj matrix (not hard coded to a specific draw)
 - use amd d3d12 memory allocator
+- fix shutdown crash with deferred free'ing
