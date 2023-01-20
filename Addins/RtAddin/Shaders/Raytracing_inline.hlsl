@@ -170,7 +170,7 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 
 	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
 	n = mul(transform, n);
-	return n *v0.5 + 0.5;
+	return n * 0.5 + 0.5;
 }
 
 [numthreads(8, 8, 1)]
