@@ -342,6 +342,7 @@ namespace reshade::api
 		none = 0,
 		shader_visible = (1 << 0), // Will control if this is a cpu or gpu descriptor
 		structured = (1 << 1),
+		raw = (1 << 2),
 	};
 	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(resource_view_flags);
 

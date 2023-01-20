@@ -546,6 +546,7 @@ void reshade::d3d12::convert_resource_view_desc(const api::resource_view_desc &d
 	case api::resource_view_type::buffer:
 	{
 		const bool is_structured = (desc.flags & api::resource_view_flags::structured) != 0;
+		const bool is_raw = (desc.flags & api::resource_view_flags::raw) != 0;
 		internal_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		internal_desc.Buffer.FirstElement = desc.buffer.offset;
 		assert(desc.buffer.size <= std::numeric_limits<UINT>::max());
@@ -555,6 +556,11 @@ void reshade::d3d12::convert_resource_view_desc(const api::resource_view_desc &d
 		{
 			assert(desc.buffer.stride != 0);
 			internal_desc.Buffer.StructureByteStride = desc.buffer.stride;
+		}
+		else if (is_raw)
+		{
+			internal_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+			internal_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 		}
 		// Missing fields: D3D12_BUFFER_SRV::StructureByteStride, D3D12_BUFFER_SRV::Flags
 		break;
