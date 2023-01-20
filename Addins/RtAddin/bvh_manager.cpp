@@ -81,12 +81,12 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 
 	auto result = std::find_if(m_geometry.begin(), m_geometry.end(), [&](const BlasBuildDesc &d) {
 		return
-		d.vb.count == desc.blas_desc.vb.count &&
-				d.vb.offset == desc.blas_desc.vb.offset &&
-				d.vb.res == desc.blas_desc.vb.res &&
-				d.ib.count == desc.blas_desc.ib.count &&
-				d.ib.offset == desc.blas_desc.ib.offset &&
-				d.ib.res == desc.blas_desc.ib.res;
+			d.vb.count == desc.blas_desc.vb.count &&
+			d.vb.offset == desc.blas_desc.vb.offset &&
+			d.vb.res == desc.blas_desc.vb.res &&
+			d.ib.count == desc.blas_desc.ib.count &&
+			d.ib.offset == desc.blas_desc.ib.offset &&
+			d.ib.res == desc.blas_desc.ib.res;
 		});
 	if (result == m_geometry.end())
 	{
@@ -96,6 +96,17 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		m_instances.push_back({});
 		m_instances.back().push_back(desc.transform); assert(instanceIndex == 0);
 		m_geometry.push_back(desc.blas_desc);
+
+		for (const Attachment &attachment : desc.attachments)
+		{
+			resource_view_desc view_desc(attachment.fmt, attachment.offset, attachment.count);
+			view_desc.flags = resource_view_flags::shader_visible;
+
+			resource_view srv;
+			desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+
+			m_attachments.push_back(scopedresourceview(desc.cmd_list->get_device(), srv));
+		}
 	}
 	else
 	{
@@ -118,6 +129,9 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		std::vector<rt_instance_desc> instances;
 		instances.reserve(m_bvhs.size());
 
+		std::vector<resource_view> attachments;
+		attachments.reserve(m_bvhs.size());
+
 		assert(m_bvhs.size() == m_instances.size());
 		int totalInstanceCount = 0;
 		for (size_t i = 0; i < m_instances.size(); i++)
@@ -128,6 +142,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			instance.acceleration_structure = { .buffer = m_bvhs[i].handle() };
 			instance.instance_mask = 0xff;
 			instance.flags = rt_instance_flags::none;
+
+			resource_view attachment = m_attachments[i].handle();
 
 			const auto &instanceDatas = m_instances[i];
 			for (const auto &instanceData : instanceDatas)
@@ -148,10 +164,12 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				totalInstanceCount++;
 
 				instances.push_back(instance);
+				attachments.push_back(attachment);
 			}
 		}
 
 		m_instances_flat = instances;
+		m_attachments_flat = attachments;
 
 		TlasBuildDesc desc = {
 			.instances = {m_instances_flat.data(), m_instances_flat.size() }
@@ -160,4 +178,35 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 	}
 
 	return {};
+}
+
+std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(reshade::api::command_list *cmd_list)
+{
+	if (m_attachments_flat.size() > 0)
+	{
+		device *d = cmd_list->get_device();
+
+		resource d3d12res;
+		d->create_resource(
+			resource_desc(sizeof(uint32_t) * m_attachments_flat.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+			nullptr, resource_usage::cpu_access, &d3d12res);
+
+		void *ptr;
+		d->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * m_attachments_flat.size(), map_access::write_only, &ptr);
+
+		uint32_t *data = (uint32_t *)ptr;
+		for (uint32_t i = 0; i < m_attachments_flat.size(); i++)
+		{
+			data[i] = d->get_resource_view_descriptor_index(m_attachments_flat[i]);
+		}
+		d->unmap_buffer_region(d3d12res);
+
+		resource_view_desc view_desc(format::r32_uint, 0, m_attachments_flat.size());
+
+		resource_view srv;
+		d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+		return { scopedresource(d, d3d12res), scopedresourceview(d, srv) };
+	}
+	return { scopedresource(), scopedresourceview() };
 }
