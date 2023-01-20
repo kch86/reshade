@@ -137,8 +137,8 @@ namespace
 
 	bool s_d3d_debug_enabled = false;
 
-	std::vector<scopedresource> s_instance_data_buffers;
-	std::vector<scopedresourceview> s_instance_data_srvs;
+	std::vector<scopedresource> s_instance_id_buffers;
+	std::vector<scopedresourceview> s_instance_id_srvs;
 	scopedresource s_instances_buffer;
 	scopedresourceview s_instances_buffer_srv;
 }
@@ -723,10 +723,10 @@ static void update_rt()
 
 	if (g_test && s_ui_use_id_buffer)
 	{
-		s_instance_data_buffers.clear();
-		s_instance_data_srvs.clear();
-		s_instance_data_buffers.reserve(s_bvh_manager.get_bvhs().size());
-		s_instance_data_srvs.reserve(s_bvh_manager.get_bvhs().size());
+		s_instance_id_buffers.clear();
+		s_instance_id_srvs.clear();
+		s_instance_id_buffers.reserve(s_bvh_manager.get_bvhs().size());
+		s_instance_id_srvs.reserve(s_bvh_manager.get_bvhs().size());
 
 		for (const rt_instance_desc& instance : s_bvh_manager.get_instances())
 		{
@@ -742,7 +742,7 @@ static void update_rt()
 			memcpy(ptr, &instanceId, sizeof(uint32_t));
 			s_d3d12device->unmap_buffer_region(d3d12res);
 
-			s_instance_data_buffers.push_back(scopedresource(s_d3d12device, d3d12res));
+			s_instance_id_buffers.push_back(scopedresource(s_d3d12device, d3d12res));
 
 			resource_view_desc view_desc(format::r32_uint, 0, 1);
 			view_desc.flags = resource_view_flags::shader_visible;
@@ -750,25 +750,25 @@ static void update_rt()
 			resource_view srv;
 			s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
 
-			s_instance_data_srvs.push_back(scopedresourceview(s_d3d12device, srv));
+			s_instance_id_srvs.push_back(scopedresourceview(s_d3d12device, srv));
 		}
 
 		resource d3d12res;
 		s_d3d12device->create_resource(
-			resource_desc(sizeof(uint32_t) * s_instance_data_srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
+			resource_desc(sizeof(uint32_t) * s_instance_id_srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
 			nullptr, resource_usage::cpu_access, &d3d12res);
 
 		void *ptr;
-		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * s_instance_data_srvs.size(), map_access::write_only, &ptr);
+		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * s_instance_id_srvs.size(), map_access::write_only, &ptr);
 
 		uint32_t *data = (uint32_t *)ptr;
-		for (uint32_t i = 0; i < s_instance_data_srvs.size(); i++)
+		for (uint32_t i = 0; i < s_instance_id_srvs.size(); i++)
 		{
-			data[i] = s_d3d12device->get_resource_view_descriptor_index(s_instance_data_srvs[i].handle());
+			data[i] = s_d3d12device->get_resource_view_descriptor_index(s_instance_id_srvs[i].handle());
 		}
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		resource_view_desc view_desc(format::r32_uint, 0, s_instance_data_srvs.size());
+		resource_view_desc view_desc(format::r32_uint, 0, s_instance_id_srvs.size());
 
 		resource_view srv;
 		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
@@ -1073,7 +1073,6 @@ static void do_init()
 
 static void do_shutdown()
 {
-	//s_bvhs.clear();
 	s_tlas.free();
 	s_output.free();
 
@@ -1082,7 +1081,17 @@ static void do_shutdown()
 
 	s_bvh_manager.destroy();
 
-	doDeferredDeletes();
+	s_instance_id_buffers.clear();
+	s_instance_id_srvs.clear();
+
+	s_instances_buffer.free();
+	s_instances_buffer_srv.free();
+
+	s_shadow_resources.clear();
+
+	// all resource frees must happen before this as they will add to the deferred delete list
+	// otherwise the delete order doesn't matter (resources vs srvs)
+	doDeferredDeletesAll();
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "Rt Addon";
