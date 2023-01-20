@@ -240,11 +240,11 @@ void doDeferredDeletes(uint32_t deleteIndex)
 			device *device = pair.first;
 			if (i == 0)
 			{
-				device->destroy_resource((resource)pair.second);
+				device->destroy_resource_view((resource_view)pair.second);
 			}
 			else if (i == 1)
 			{
-				device->destroy_resource_view((resource_view)pair.second);
+				device->destroy_resource((resource)pair.second);
 			}
 			else
 			{
@@ -282,7 +282,7 @@ void deferDestroyHandle(device* device, resource res)
 
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 
-	s_frameDeleteData[index][0].todelete.push_back({device,res.handle});
+	s_frameDeleteData[index][1].todelete.push_back({device,res.handle});
 }
 
 void deferDestroyHandle(device *device, resource_view view)
@@ -291,7 +291,7 @@ void deferDestroyHandle(device *device, resource_view view)
 
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 
-	s_frameDeleteData[index][1].todelete.push_back({ device, view.handle });
+	s_frameDeleteData[index][0].todelete.push_back({ device, view.handle });
 }
 
 resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)
