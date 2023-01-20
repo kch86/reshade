@@ -9,13 +9,15 @@
 class bvh_manager
 {
 public:
-	struct Attachment
+	struct AttachmentDesc
 	{
 		reshade::api::resource res;
-		uint32_t offset; // in elements
-		uint32_t count;  // in elements
-		uint32_t stride; // in bytes
+		uint32_t offset = 0; // in elements
+		uint32_t elem_offset = 0; // offset inside the stride
+		uint32_t count = 0;  // in elements
+		uint32_t stride = 0; // in bytes
 		reshade::api::format fmt;
+		bool view_as_raw = false;
 	};
 
 	struct DrawDesc
@@ -25,7 +27,7 @@ public:
 		reshade::api::command_queue *cmd_queue;
 		const BlasBuildDesc &blas_desc;
 		DirectX::XMMATRIX &transform;
-		std::span<Attachment> attachments = {};
+		std::span<AttachmentDesc> attachments = {};
 	};
 public:
 	bvh_manager() = default;
@@ -43,17 +45,36 @@ public:
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
 private:
 	template<typename T>
-	struct GpuAttachment
+	struct AttachmentT
 	{
-		std::vector<T> srvs;
+		struct Elem
+		{
+			T srv;
+			uint32_t offset; // in elements
+			uint32_t stride; // in bytes
+			uint32_t fmt;
+		};
+		std::vector<Elem> data;
 	};
+	struct GpuAttachmentElem
+	{
+		uint32_t srv;
+		uint32_t offset; // in elements
+		uint32_t stride; // in bytes
+		uint32_t fmt;
+	};
+
+	using ScopedAttachment = AttachmentT<scopedresourceview>;
+	using Attachment = AttachmentT<reshade::api::resource_view>;
+	using GpuAttachment = AttachmentT<uint32_t>;
+
 	std::vector<BlasBuildDesc> m_geometry;
 	std::vector<scopedresource> m_bvhs;
 	std::vector<std::vector<DirectX::XMMATRIX>> m_instances;
-	std::vector<GpuAttachment<scopedresourceview>> m_attachments;
+	std::vector<ScopedAttachment> m_attachments;
 
 	std::vector<reshade::api::rt_instance_desc> m_instances_flat;
-	std::vector< GpuAttachment<reshade::api::resource_view>> m_attachments_flat;
+	std::vector<Attachment> m_attachments_flat;
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
 	uint64_t s_current_draw_stream_hash = 0;

@@ -715,14 +715,16 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		}
 	};
 
-	bvh_manager::Attachment attachments[] = {
+	bvh_manager::AttachmentDesc attachments[] = {
 		// vb
 		{
 			.res = s_shadow_resources[s_currentVB.vb.handle].handle(),
 			.offset = (s_currentVB.offset + (vertex_offset * s_currentVB.stride)) / s_currentVB.stride,
+			.elem_offset = 0,
 			.count = vertex_count,
 			.stride = s_currentVB.stride,
-			.fmt = s_currentVB.fmt
+			.fmt = s_currentVB.fmt,
+			.view_as_raw = true,
 		},
 		// ib
 		{

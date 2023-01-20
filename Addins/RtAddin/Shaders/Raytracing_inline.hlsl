@@ -52,10 +52,18 @@
 //    1 // max trace recursion depth
 //};
 
+struct AttachElem
+{
+	uint id;
+	uint offset; // uint bytes
+	uint stride; // bytes
+	uint format;
+};
+
 struct Attachments
 {
-	uint vb;
-	uint ib;
+	AttachElem vb;
+	AttachElem ib;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
@@ -142,20 +150,27 @@ float3 instanceIdToColor(uint id)
 	return IntToColor(id);
 }
 
-float3 fetchNormal(uint instance_id, uint primitive_id)
+float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 {
 	Attachments att = g_attachments_buffer[instance_id];
-	Buffer<uint3> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib)];
-	Buffer<float3> vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb)];
 
-	uint3 indices = ib.Load(primitive_id);
+	// since vb streams are interleaved, this needs to be a byte address buffer
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
 
-	float3 v0 = vb.Load(indices.x);
-	float3 v1 = vb.Load(indices.y);
-	float3 v2 = vb.Load(indices.z);
+	uint3 indices = uint3(
+		ib[primitive_id * 3 + 0],
+		ib[primitive_id * 3 + 1],
+		ib[primitive_id * 3 + 2]);
+
+	uint stride = att.vb.stride;
+	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
+	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
+	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
 
 	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
-	return n * 0.5 + 0.5;
+	n = mul(transform, n);
+	return n *v0.5 + 0.5;
 }
 
 [numthreads(8, 8, 1)]
@@ -245,7 +260,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	{
 		if (g_showNormal)
 		{
-			value.rgb = fetchNormal(query.CommittedInstanceID(), query.CommittedPrimitiveIndex());
+			value.rgb = fetchNormal(query.CommittedInstanceID(),
+								    query.CommittedPrimitiveIndex(),
+									(float3x3)query.CommittedObjectToWorld3x4());
 		}
 		else
 		{
