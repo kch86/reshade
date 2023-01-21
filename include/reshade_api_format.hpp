@@ -419,7 +419,7 @@ namespace reshade::api
 		switch (value)
 		{
 		default:
-			//assert(false); //unimplemented format
+			assert(false); //unimplemented format
 			return 0;
 		case format::unknown:
 			return 0;
