@@ -29,12 +29,18 @@ using namespace DirectX;
 
 namespace
 {
-	struct PosStreamInfo
+	struct StreamInfo
 	{
-		uint32_t streamIndex = 0;
-		uint32_t stride = 0;
-		uint32_t offset = 0;
-		format format = format::unknown;
+		struct stream
+		{
+			uint32_t index = 0;
+			uint32_t offset = 0;
+			uint32_t stride = 0;
+			format format = format::unknown;
+		};
+
+		stream pos;
+		stream uv;
 	};
 
 	struct IndexData
@@ -46,14 +52,20 @@ namespace
 		format fmt = format::unknown;
 	};
 
-	struct VertexData
+	struct StreamData
 	{
-		resource vb = {};
-		uint32_t offset = 0;
-		uint32_t count = 0;
-		uint32_t stride = 0;
-		uint64_t size_bytes = 0;
-		format fmt = format::unknown;
+		struct stream
+		{
+			resource res = {};
+			uint32_t offset = 0;
+			uint32_t count = 0;
+			uint32_t stride = 0;
+			uint64_t size_bytes = 0;
+			format fmt = format::unknown;
+		};
+
+		stream pos;
+		stream uv;
 	};
 
 	struct RtBindings
@@ -79,7 +91,7 @@ namespace
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
-	std::unordered_map<uint64_t, PosStreamInfo> s_inputLayoutPipelines;
+	std::unordered_map<uint64_t, StreamInfo> s_inputLayoutPipelines;
 	scopedresource s_tlas;
 	scopedresource s_attachments_buffer;
 	scopedresourceview s_attachments_srv;
@@ -97,7 +109,7 @@ namespace
 
 	pipeline s_currentInputLayout;
 	IndexData s_currentIB;
-	VertexData s_currentVB;
+	StreamData s_currentVB;
 	resource_view s_current_rtv = { 0 };
 
 	scopedresource s_empty_buffer;
@@ -363,41 +375,93 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 		const pipeline_subobject &object = subObjects[i];
 		if (object.type == pipeline_subobject_type::input_layout)
 		{
-			PosStreamInfo info;
-			info.stride = 0;
-			info.format = format::unknown;
-			uint32_t posElemIndex = 0;
+			StreamInfo info;
+
+			uint32_t stream_count = 0;
 
 			for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
 			{
 				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
 
+				stream_count = max(elem.buffer_binding + 1u, stream_count);
+
 				if (strstr(elem.semantic, "POSITION") != nullptr)
 				{
-					assert(info.format == format::unknown);
-					info.format = elem.format;
-					info.offset = elem.offset;
-					info.streamIndex = elem.buffer_binding;
-					posElemIndex = elemIdx;
-					break;
+					assert(info.pos.format == format::unknown);
+					info.pos.format = elem.format;
+					info.pos.offset = elem.offset;
+					info.pos.index = elem.buffer_binding;
+					info.pos.stride = elem.stride;
+				}
+				else if (strstr(elem.semantic, "TEXCOORD") != nullptr)
+				{
+					info.uv.format = elem.format;
+					info.uv.offset = elem.offset;
+					info.uv.index = elem.buffer_binding;
+					info.uv.stride = elem.stride;
+
+					std::stringstream s;
+
+					s << "vertex_buffer_stream_uv(" << handle.handle << ", ";
+
+					if (info.uv.format == format::r32g32b32a32_float)
+					{
+						s << "float32x4";
+					}
+					else if (info.uv.format == format::r32g32b32_float)
+					{
+						s << "float32x3";
+					}
+					else if (info.uv.format == format::r32g32_float)
+					{
+						s << "float32x2";
+					}
+					else if (info.uv.format == format::r16g16b16a16_float)
+					{
+						s << "float16x4";
+					}
+					else if (info.uv.format == format::r16g16_float)
+					{
+						s << "float16x2";
+					}
+					else if (info.uv.format == format::r8g8b8a8_unorm)
+					{
+						s << "float8x4";
+					}
+					else if (info.uv.format == format::r8g8_unorm)
+					{
+						s << "float8x2";
+					}
+					else
+					{
+						s << "unkown";
+					}
+					s << ", " << elemIdx;
+					s << ")";
+
+					reshade::log_message(3, s.str().c_str());
 				}
 			}
 
-			if (info.format != format::unknown)
+			if (info.pos.format != format::unknown)
 			{
-				// found our position stream, calculate the stride and offset
+				temp_mem<uint32_t> strides(stream_count);
+				for (uint32_t s = 0; s < stream_count; s++)
+					strides[s] = 0;
+
+				// found our position stream, calculate the stride
+				// the incoming stride is always 0, so we must manually calculate here
 				for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
 				{
 					const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
 
-					if (elem.buffer_binding == info.streamIndex)
-					{
-						if (elemIdx < posElemIndex)
-						{
-							info.offset += format_size(elem.format);
-						}
-						info.stride += format_size(elem.format);
-					}
+					strides[elem.buffer_binding] += format_size(elem.format);
+				}
+
+				info.pos.stride = strides[info.pos.index];
+				if (info.uv.format != format::unknown)
+				{
+					info.uv.stride = strides[info.uv.index];
 				}
 
 				const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -581,18 +645,33 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	if (filter_command())
 		return;
 
-	const PosStreamInfo &posStreamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
-
-	if (first <= posStreamInfo.streamIndex && count > (posStreamInfo.streamIndex - first))
+	const StreamInfo &streamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
+	if (streamInfo.uv.format == format::unknown)
 	{
-		s_currentVB.vb = buffers[posStreamInfo.streamIndex];
-		s_currentVB.offset = (uint32_t)offsets[posStreamInfo.streamIndex];
-		s_currentVB.count = 0;
-		s_currentVB.stride = strides[posStreamInfo.streamIndex];
-		s_currentVB.fmt = posStreamInfo.format;
+		s_currentVB.uv = {};
+	}
 
-		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.vb);
-		s_currentVB.size_bytes = desc.buffer.size;
+	if (first <= streamInfo.pos.index && count > (streamInfo.pos.index - first))
+	{
+		s_currentVB.pos.res = buffers[streamInfo.pos.index];
+		s_currentVB.pos.offset = (uint32_t)offsets[streamInfo.pos.index];
+		s_currentVB.pos.count = 0;
+		s_currentVB.pos.stride = strides[streamInfo.pos.index];
+		s_currentVB.pos.fmt = streamInfo.pos.format;
+
+		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.pos.res);
+		s_currentVB.pos.size_bytes = desc.buffer.size;
+	}
+	else if (first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
+	{
+		s_currentVB.uv.res = buffers[streamInfo.uv.index];
+		s_currentVB.uv.offset = (uint32_t)offsets[streamInfo.uv.index];
+		s_currentVB.uv.count = 0;
+		s_currentVB.uv.stride = strides[streamInfo.uv.index];
+		s_currentVB.uv.fmt = streamInfo.uv.format;
+
+		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.uv.res);
+		s_currentVB.uv.size_bytes = desc.buffer.size;
 	}
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
@@ -702,16 +781,16 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		return false;
 	}
 
-	assert(s_shadow_resources.find(s_currentVB.vb.handle) != s_shadow_resources.end());
+	assert(s_shadow_resources.find(s_currentVB.pos.res.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
 
 	BlasBuildDesc desc = {
 		.vb = {
-			.res = s_shadow_resources[s_currentVB.vb.handle].handle().handle,
-			.offset = s_currentVB.offset + (vertex_offset * s_currentVB.stride),
+			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle().handle,
+			.offset = s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride),
 			.count = vertex_count,
-			.stride = s_currentVB.stride,
-			.fmt = s_currentVB.fmt
+			.stride = s_currentVB.pos.stride,
+			.fmt = s_currentVB.pos.fmt
 		},
 		.ib = {
 			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
@@ -722,16 +801,6 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	};
 
 	bvh_manager::AttachmentDesc attachments[] = {
-		// vb
-		{
-			.res = s_shadow_resources[s_currentVB.vb.handle].handle(),
-			.offset = (s_currentVB.offset + (vertex_offset * s_currentVB.stride)) / s_currentVB.stride,
-			.elem_offset = 0,
-			.count = vertex_count,
-			.stride = s_currentVB.stride,
-			.fmt = s_currentVB.fmt,
-			.view_as_raw = true,
-		},
 		// ib
 		{
 			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
@@ -739,7 +808,27 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.count = index_count,
 			.stride = s_currentIB.stride,
 			.fmt = s_currentIB.fmt,
-		}
+		},
+		// vb
+		{
+			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle(),
+			.offset = (s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride)) / s_currentVB.pos.stride,
+			.elem_offset = 0,
+			.count = vertex_count,
+			.stride = s_currentVB.pos.stride,
+			.fmt = s_currentVB.pos.fmt,
+			.view_as_raw = true,
+		},
+		// uv
+		/*{
+			.res = s_shadow_resources[s_currentVB.uv.res.handle].handle(),
+			.offset = (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride,
+			.elem_offset = 0,
+			.count = vertex_count,
+			.stride = s_currentVB.uv.stride,
+			.fmt = s_currentVB.uv.fmt,
+			.view_as_raw = true,
+		},*/
 	};
 
 	bvh_manager::DrawDesc draw_desc = {

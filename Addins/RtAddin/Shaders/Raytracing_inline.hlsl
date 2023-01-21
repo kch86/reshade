@@ -62,8 +62,9 @@ struct AttachElem
 
 struct Attachments
 {
-	AttachElem vb;
 	AttachElem ib;
+	AttachElem vb;
+	//AttachElem uv;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
