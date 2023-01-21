@@ -231,28 +231,26 @@ static DeferDeleteData s_frameDeleteData[MaxDeferredFrames][HandleTypeCount];
 static uint32_t s_frameIndex = 0;
 static std::shared_mutex s_mutex;
 
-void doDeferredDeletes(uint32_t deleteIndex)
+void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
 {
-	for (int i = 0; i < HandleTypeCount; i++)
+	const int i = type_index;
+	for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
 	{
-		for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
+		device *device = pair.first;
+		if (i == 0)
 		{
-			device *device = pair.first;
-			if (i == 0)
-			{
-				device->destroy_resource_view((resource_view)pair.second);
-			}
-			else if (i == 1)
-			{
-				device->destroy_resource((resource)pair.second);
-			}
-			else
-			{
-				assert(false);
-			}
+			device->destroy_resource_view((resource_view)pair.second);
 		}
-		s_frameDeleteData[deleteIndex][i].todelete.clear();
+		else if (i == 1)
+		{
+			device->destroy_resource((resource)pair.second);
+		}
+		else
+		{
+			assert(false);
+		}
 	}
+	s_frameDeleteData[deleteIndex][i].todelete.clear();
 }
 
 void doDeferredDeletes()
@@ -263,7 +261,8 @@ void doDeferredDeletes()
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
 
-	doDeferredDeletes(deleteIndex);
+	doDeferredDeletes(deleteIndex, 0);
+	doDeferredDeletes(deleteIndex, 1);
 
 	s_frameIndex++;
 }
@@ -273,7 +272,10 @@ void doDeferredDeletesAll()
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	for(uint32_t index = 0; index < MaxDeferredFrames; index++)
-		doDeferredDeletes(index);
+		doDeferredDeletes(index, 0);
+
+	for (uint32_t index = 0; index < MaxDeferredFrames; index++)
+		doDeferredDeletes(index, 1);
 }
 
 void deferDestroyHandle(device* device, resource res)
@@ -282,7 +284,16 @@ void deferDestroyHandle(device* device, resource res)
 
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 
-	s_frameDeleteData[index][1].todelete.push_back({device,res.handle});
+	auto iter = std::find_if(
+		s_frameDeleteData[index][1].todelete.begin(),
+		s_frameDeleteData[index][1].todelete.end(), [&](auto &handle) {
+			return handle.second == res.handle;
+	});
+
+	if (iter == s_frameDeleteData[index][1].todelete.end())
+	{
+		s_frameDeleteData[index][1].todelete.push_back({ device,res.handle });
+	}	
 }
 
 void deferDestroyHandle(device *device, resource_view view)
@@ -291,7 +302,16 @@ void deferDestroyHandle(device *device, resource_view view)
 
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 
-	s_frameDeleteData[index][0].todelete.push_back({ device, view.handle });
+	auto iter = std::find_if(
+		s_frameDeleteData[index][0].todelete.begin(),
+		s_frameDeleteData[index][0].todelete.end(), [&](auto &handle) {
+			return handle.second == view.handle;
+	});
+
+	if (iter == s_frameDeleteData[index][0].todelete.end())
+	{
+		s_frameDeleteData[index][0].todelete.push_back({ device,view.handle });
+	}
 }
 
 resource getd3d12resource(Direct3DDevice9On12 *device, command_queue* cmdqueue, resource res)

@@ -19,6 +19,10 @@ void bvh_manager::destroy()
 	m_geometry.clear();
 	m_bvhs.clear();
 	m_instances.clear();
+	m_attachments.clear();
+	m_instances_flat.clear();
+	m_attachments_flat.clear();
+	m_per_frame_instance_counts.clear();
 }
 
 void bvh_manager::update_vbs(std::span<const resource> buffers)
