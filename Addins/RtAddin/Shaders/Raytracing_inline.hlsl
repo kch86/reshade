@@ -189,12 +189,12 @@ float3 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 	uint stride = att.uv.stride;
 	float2 u0 = asfloat(vb.Load2(indices.x * stride + att.uv.offset));
 	float2 u1 = asfloat(vb.Load2(indices.y * stride + att.uv.offset));
-	//float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+	float2 u2 = asfloat(vb.Load2(indices.z * stride + att.uv.offset));
 
-	float2 uv = u0 * barries.x + u1 * barries.y;
+	float2 uv = u0 * (1.0 - barries.y - barries.x) + u1 * barries.x + u2 * barries.y;
 	uv = frac(uv);
 
-	return float3(uv, 1.0);
+	return float3(uv, 0.0);
 }
 
 [numthreads(8, 8, 1)]
