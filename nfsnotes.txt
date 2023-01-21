@@ -17,7 +17,7 @@ todo:
 - categorize/bin vs, ps, blend states
 - mapped/updated geometry should do a blas update, not a full rebuild and allocation if possible
 - the proxies are not being passed to the d3d9on12 create function
+-- something isn't hooked correctly for d3d12 32-bit
 - don't re-create shadow resources if they've already been created (e.g. updates)
 - find better way to get viewproj matrix (not hard coded to a specific draw)
 - use amd d3d12 memory allocator
-- fix shutdown crash with deferred free'ing
