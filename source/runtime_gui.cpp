@@ -2546,6 +2546,9 @@ void reshade::runtime::draw_gui_addons()
 	std::vector<std::string> disabled_addons;
 	config.get("ADDON", "DisabledAddons", disabled_addons);
 
+	std::vector<std::string> expanded_addons;
+	config.get("ADDON", "ExpandedAddons", expanded_addons);
+
 	const float child_window_width = ImGui::GetContentRegionAvail().x;
 
 	for (addon_info &info : addon_loaded_info)
@@ -2560,7 +2563,16 @@ void reshade::runtime::draw_gui_addons()
 
 		const bool builtin = (info.file == g_reshade_dll_path.filename().u8string());
 
-		bool open = ImGui::GetStateStorage()->GetBool(ImGui::GetID("##addon_open"), builtin);
+		const auto expanded_it = std::find_if(expanded_addons.begin(), expanded_addons.end(), [&info](const std::string_view &addon_name) {
+			const size_t at_pos = addon_name.find('@');
+			if (at_pos == std::string::npos)
+				return addon_name == info.name;
+			return addon_name.substr(0, at_pos) == info.name && addon_name.substr(at_pos + 1) == info.file;
+		});
+
+		const bool expanded = expanded_it != expanded_addons.end();
+
+		bool open = ImGui::GetStateStorage()->GetBool(ImGui::GetID("##addon_open"), builtin || expanded);
 		if (ImGui::ArrowButton("##addon_open", open ? ImGuiDir_Down : ImGuiDir_Right))
 			ImGui::GetStateStorage()->SetBool(ImGui::GetID("##addon_open"), open = !open);
 
