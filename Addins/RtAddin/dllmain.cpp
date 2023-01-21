@@ -672,7 +672,7 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	{
 		s_currentVB.uv.res = buffers[streamInfo.uv.index];
 		s_currentVB.uv.offset = (uint32_t)offsets[streamInfo.uv.index];
-		s_currentVB.pos.elem_offset = streamInfo.uv.offset;
+		s_currentVB.uv.elem_offset = streamInfo.uv.offset;
 		s_currentVB.uv.count = 0;
 		s_currentVB.uv.stride = strides[streamInfo.uv.index];
 		s_currentVB.uv.fmt = streamInfo.uv.format;
