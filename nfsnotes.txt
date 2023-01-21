@@ -21,3 +21,4 @@ todo:
 - find better way to get viewproj matrix (not hard coded to a specific draw)
 - use amd d3d12 memory allocator
 - fix shutdown crash with deferred free'ing
+- upload current descriptor offset to make sure we're not indexing oob
