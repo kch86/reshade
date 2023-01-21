@@ -64,7 +64,7 @@ struct Attachments
 {
 	AttachElem ib;
 	AttachElem vb;
-	//AttachElem uv;
+	AttachElem uv;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
@@ -152,6 +152,29 @@ float3 instanceIdToColor(uint id)
 }
 
 float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
+{
+	Attachments att = g_attachments_buffer[instance_id];
+
+	// since vb streams are interleaved, this needs to be a byte address buffer
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
+
+	uint3 indices = uint3(
+		ib[primitive_id * 3 + 0],
+		ib[primitive_id * 3 + 1],
+		ib[primitive_id * 3 + 2]);
+
+	uint stride = att.vb.stride;
+	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
+	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
+	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+
+	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
+	n = mul(transform, n);
+	return n * 0.5 + 0.5;
+}
+
+float3 fetchuv(uint instance_id, uint primitive_id, float3x3 transform)
 {
 	Attachments att = g_attachments_buffer[instance_id];
 

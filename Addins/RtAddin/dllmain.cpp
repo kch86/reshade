@@ -58,6 +58,7 @@ namespace
 		{
 			resource res = {};
 			uint32_t offset = 0;
+			uint32_t elem_offset = 0;
 			uint32_t count = 0;
 			uint32_t stride = 0;
 			uint64_t size_bytes = 0;
@@ -655,6 +656,7 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	{
 		s_currentVB.pos.res = buffers[streamInfo.pos.index];
 		s_currentVB.pos.offset = (uint32_t)offsets[streamInfo.pos.index];
+		s_currentVB.pos.elem_offset = streamInfo.pos.offset;
 		s_currentVB.pos.count = 0;
 		s_currentVB.pos.stride = strides[streamInfo.pos.index];
 		s_currentVB.pos.fmt = streamInfo.pos.format;
@@ -662,10 +664,11 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.pos.res);
 		s_currentVB.pos.size_bytes = desc.buffer.size;
 	}
-	else if (first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
+	else if (streamInfo.uv.format != format::unknown && first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
 	{
 		s_currentVB.uv.res = buffers[streamInfo.uv.index];
 		s_currentVB.uv.offset = (uint32_t)offsets[streamInfo.uv.index];
+		s_currentVB.pos.elem_offset = streamInfo.uv.offset;
 		s_currentVB.uv.count = 0;
 		s_currentVB.uv.stride = strides[streamInfo.uv.index];
 		s_currentVB.uv.fmt = streamInfo.uv.format;
@@ -813,22 +816,23 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		{
 			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle(),
 			.offset = (s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride)) / s_currentVB.pos.stride,
-			.elem_offset = 0,
+			.elem_offset = s_currentVB.pos.elem_offset,
 			.count = vertex_count,
 			.stride = s_currentVB.pos.stride,
 			.fmt = s_currentVB.pos.fmt,
 			.view_as_raw = true,
 		},
 		// uv
-		/*{
-			.res = s_shadow_resources[s_currentVB.uv.res.handle].handle(),
-			.offset = (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride,
-			.elem_offset = 0,
+		{
+			// uv may not always be available
+			.res = s_currentVB.uv.res.handle ? s_shadow_resources[s_currentVB.uv.res.handle].handle() : resource{0},
+			.offset = s_currentVB.uv.res.handle ? (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride : 0,
+			.elem_offset = s_currentVB.uv.elem_offset,
 			.count = vertex_count,
 			.stride = s_currentVB.uv.stride,
 			.fmt = s_currentVB.uv.fmt,
 			.view_as_raw = true,
-		},*/
+		},
 	};
 
 	bvh_manager::DrawDesc draw_desc = {

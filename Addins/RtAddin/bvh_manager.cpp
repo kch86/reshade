@@ -120,8 +120,9 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			resource_view_desc view_desc(fmt, offset, count);
 			view_desc.flags = flags;
 
-			resource_view srv;
-			desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+			resource_view srv{};
+			if(attachment.res.handle != 0)
+				desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
 
 			ScopedAttachment::Elem data;
 			data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
@@ -247,7 +248,11 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 			for (uint32_t att = 0; att < attachment_count; att++)
 			{
 				const Attachment::Elem &elem = m_attachments_flat[i].data[att];
-				data[att].srv = d->get_resource_view_descriptor_index(elem.srv);
+				if (elem.srv.handle != 0)
+					data[att].srv = d->get_resource_view_descriptor_index(elem.srv);
+				else
+					data[att].srv = 0xffffffff;
+
 				data[att].offset = elem.offset;
 				data[att].stride = elem.stride;
 				data[att].fmt = elem.fmt;
