@@ -82,6 +82,9 @@ cbuffer RtConstants : register(b0)
 	uint g_usePrebuiltCamMat;
 	uint g_useIdBuffer;
 	uint g_showNormal;
+
+	uint g_showUvs;
+	uint3 pad;
 }
 
 //template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
@@ -174,12 +177,17 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 	return n * 0.5 + 0.5;
 }
 
-float3 fetchuv(uint instance_id, uint primitive_id, float3x3 transform)
+float3 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 {
 	Attachments att = g_attachments_buffer[instance_id];
 
+	if (att.uv.id == 0x7FFFFFFF)
+	{
+		return 1.0.xxx;
+	}
+
 	// since vb streams are interleaved, this needs to be a byte address buffer
-	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.uv.id)];
 	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
 
 	uint3 indices = uint3(
@@ -187,14 +195,15 @@ float3 fetchuv(uint instance_id, uint primitive_id, float3x3 transform)
 		ib[primitive_id * 3 + 1],
 		ib[primitive_id * 3 + 2]);
 
-	uint stride = att.vb.stride;
-	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
-	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
-	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+	uint stride = att.uv.stride;
+	float2 u0 = asfloat(vb.Load2(indices.x * stride + att.uv.offset));
+	float2 u1 = asfloat(vb.Load2(indices.y * stride + att.uv.offset));
+	//float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
 
-	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
-	n = mul(transform, n);
-	return n * 0.5 + 0.5;
+	float2 uv = u0 * barries.x + u1 * barries.y;
+	uv = frac(uv);
+
+	return float3(uv, 1.0);
 }
 
 [numthreads(8, 8, 1)]
@@ -287,6 +296,12 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			value.rgb = fetchNormal(query.CommittedInstanceID(),
 								    query.CommittedPrimitiveIndex(),
 									(float3x3)query.CommittedObjectToWorld3x4());
+		}
+		else if (g_showUvs)
+		{
+			value.rgb = fetchUvs(query.CommittedInstanceID(),
+								 query.CommittedPrimitiveIndex(),
+								 query.CommittedTriangleBarycentrics());
 		}
 		else
 		{

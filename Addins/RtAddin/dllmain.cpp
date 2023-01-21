@@ -85,6 +85,9 @@ namespace
 		uint32_t usePrebuiltCamMat;
 		uint32_t useIdBuffer;
 		uint32_t showNormal;
+
+		uint32_t showUvs;
+		uint32_t pad[3];
 	};
 
 	std::shared_mutex s_mutex;
@@ -131,6 +134,7 @@ namespace
 	bool s_ui_show_rt_half = false;
 	bool s_ui_use_id_buffer = false;
 	bool s_ui_show_normals = false;
+	bool s_ui_show_uvs = false;
 	bool s_ui_enable = true;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
@@ -664,7 +668,7 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.pos.res);
 		s_currentVB.pos.size_bytes = desc.buffer.size;
 	}
-	else if (streamInfo.uv.format != format::unknown && first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
+	if (streamInfo.uv.format != format::unknown && first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
 	{
 		s_currentVB.uv.res = buffers[streamInfo.uv.index];
 		s_currentVB.uv.offset = (uint32_t)offsets[streamInfo.uv.index];
@@ -1058,6 +1062,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
 	cb.useIdBuffer = s_ui_use_id_buffer;
 	cb.showNormal = s_ui_show_normals;
+	cb.showUvs = s_ui_show_uvs;
 	if (cb.usePrebuiltCamMat)
 	{
 		cb.pos = s_view.r[3];
@@ -1251,6 +1256,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::Checkbox("Use id buffer", &s_ui_use_id_buffer);
 	ImGui::Checkbox("Show normals", &s_ui_show_normals);
+	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 }
 
 static void do_init()

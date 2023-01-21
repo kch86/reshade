@@ -251,7 +251,7 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 				if (elem.srv.handle != 0)
 					data[att].srv = d->get_resource_view_descriptor_index(elem.srv);
 				else
-					data[att].srv = 0xffffffff;
+					data[att].srv = 0x7FFFFFFF;
 
 				data[att].offset = elem.offset;
 				data[att].stride = elem.stride;
