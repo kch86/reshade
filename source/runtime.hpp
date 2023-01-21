@@ -422,6 +422,7 @@ namespace reshade
 		bool _show_frametime = false;
 		bool _show_screenshot_message = true;
 		bool _rebuild_font_atlas = true;
+		std::string _default_tab = "";
 #  if RESHADE_FX
 		unsigned int _reload_count = 0;
 #  endif

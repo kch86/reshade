@@ -173,6 +173,7 @@ void reshade::runtime::load_config_gui(const ini_file &config)
 	config.get("INPUT", "KeyOverlay", _overlay_key_data);
 	config.get("INPUT", "InputProcessing", _input_processing_mode);
 
+	config.get("OVERLAY", "DefaultTabFocus", _default_tab);
 	config.get("OVERLAY", "ClockFormat", _clock_format);
 	config.get("OVERLAY", "FPSPosition", _fps_pos);
 	config.get("OVERLAY", "NoFontScaling", _no_font_scaling);
@@ -1004,10 +1005,24 @@ void reshade::runtime::draw_gui()
 
 		for (const auto &widget : overlay_callbacks)
 		{
+			if (strcmp(widget.first, _default_tab.c_str()) == 0)
+			{
+				ImGui::SetNextWindowFocus();
+			}
 			if (ImGui::Begin(widget.first, nullptr, ImGuiWindowFlags_NoFocusOnAppearing)) // No focus so that window state is preserved between opening/closing the GUI
 				(this->*widget.second)();
 			ImGui::End();
 		}
+
+		/*ImGuiWindow *window = ImGui::FindWindowByName("Add-ons");
+		if (window == NULL || window->DockNode == NULL || window->DockNode->TabBar == NULL)
+		{
+
+		}
+		else
+		{
+			window->DockNode->TabBar->NextSelectedTabId = window->ID;
+		}		*/
 
 #if RESHADE_FX
 		if (!_editors.empty())
