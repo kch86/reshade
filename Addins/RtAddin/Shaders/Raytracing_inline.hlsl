@@ -80,11 +80,8 @@ cbuffer RtConstants : register(b0)
 
 	float g_fov;
 	uint g_usePrebuiltCamMat;
-	uint g_useIdBuffer;
 	uint g_showNormal;
-
 	uint g_showUvs;
-	uint3 pad;
 }
 
 //template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
@@ -145,12 +142,6 @@ float3 IntToColor(uint Index)
 
 float3 instanceIdToColor(uint id)
 {
-	if (g_useIdBuffer)
-	{
-		uint handle = g_instance_buffer[id];
-		id = load_buffer_elem_nonuniform(handle, 0);
-	}
-
 	return IntToColor(id);
 }
 

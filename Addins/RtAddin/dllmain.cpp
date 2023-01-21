@@ -82,12 +82,9 @@ namespace
 		XMVECTOR pos;
 
 		float fov;
-		uint32_t usePrebuiltCamMat;
-		uint32_t useIdBuffer;
-		uint32_t showNormal;
-
-		uint32_t showUvs;
-		uint32_t pad[3];
+		uint32_t usePrebuiltCamMat = 1;
+		uint32_t showNormal = 0;
+		uint32_t showUvs = 0;
 	};
 
 	std::shared_mutex s_mutex;
@@ -132,7 +129,6 @@ namespace
 	bool s_ui_use_viewproj = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
-	bool s_ui_use_id_buffer = false;
 	bool s_ui_show_normals = false;
 	bool s_ui_show_uvs = false;
 	bool s_ui_enable = true;
@@ -581,11 +577,6 @@ void on_unmap_buffer_region(device *device, resource handle)
 
 		const resource_desc& desc = s_resources[handle.handle];
 
-		subresource_data srd = {
-			.data = data,
-			.row_pitch = (uint32_t)desc.buffer.size,
-		};
-
 		resource d3d12res;
 		s_d3d12device->create_resource(
 			resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
@@ -875,7 +866,6 @@ static void on_present(effect_runtime *runtime)
 	}
 }
 
-volatile bool g_test = true;
 static void update_rt()
 {
 	s_tlas.free();
@@ -885,74 +875,12 @@ static void update_rt()
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
 
-	s_attachments_buffer.free();
-	s_attachments_srv.free();
-
 	auto [buffer, srv] = s_bvh_manager.build_attachments(s_d3d12cmdlist);
 
+	s_attachments_buffer.free();
+	s_attachments_srv.free();
 	s_attachments_buffer = std::move(buffer);
 	s_attachments_srv = std::move(srv);
-
-	if (g_test && s_ui_use_id_buffer)
-	{
-		s_instance_id_buffers.clear();
-		s_instance_id_srvs.clear();
-		s_instance_id_buffers.reserve(s_bvh_manager.get_bvhs().size());
-		s_instance_id_srvs.reserve(s_bvh_manager.get_bvhs().size());
-
-		for (const rt_instance_desc& instance : s_bvh_manager.get_instances())
-		{
-			uint32_t instanceId = instance.instance_id;
-
-			resource d3d12res;
-			s_d3d12device->create_resource(
-				resource_desc(sizeof(uint32_t), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
-				nullptr, resource_usage::cpu_access, &d3d12res);
-
-			void *ptr;
-			s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t), map_access::write_only, &ptr);
-			memcpy(ptr, &instanceId, sizeof(uint32_t));
-			s_d3d12device->unmap_buffer_region(d3d12res);
-
-			s_instance_id_buffers.push_back(scopedresource(s_d3d12device, d3d12res));
-
-			resource_view_desc view_desc(format::r32_uint, 0, 1);
-			view_desc.flags = resource_view_flags::shader_visible;
-
-			resource_view srv;
-			s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
-
-			s_instance_id_srvs.push_back(scopedresourceview(s_d3d12device, srv));
-		}
-
-		resource d3d12res;
-		s_d3d12device->create_resource(
-			resource_desc(sizeof(uint32_t) * s_instance_id_srvs.size(), memory_heap::cpu_to_gpu, resource_usage::shader_resource),
-			nullptr, resource_usage::cpu_access, &d3d12res);
-
-		void *ptr;
-		s_d3d12device->map_buffer_region(d3d12res, 0, sizeof(uint32_t) * s_instance_id_srvs.size(), map_access::write_only, &ptr);
-
-		uint32_t *data = (uint32_t *)ptr;
-		for (uint32_t i = 0; i < s_instance_id_srvs.size(); i++)
-		{
-			data[i] = s_d3d12device->get_resource_view_descriptor_index(s_instance_id_srvs[i].handle());
-		}
-		s_d3d12device->unmap_buffer_region(d3d12res);
-
-		resource_view_desc view_desc(format::r32_uint, 0, s_instance_id_srvs.size());
-
-		resource_view srv;
-		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
-
-		s_instances_buffer.free();
-		s_instances_buffer = scopedresource(s_d3d12device, d3d12res);
-
-		s_instances_buffer_srv.free();
-		s_instances_buffer_srv = scopedresourceview(s_d3d12device, srv);
-
-		g_test = false;
-	}
 }
 
 void updateCamera(effect_runtime *runtime)
@@ -1060,7 +988,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.pos = s_cam_pos;
 	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
-	cb.useIdBuffer = s_ui_use_id_buffer;
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
 	if (cb.usePrebuiltCamMat)
@@ -1254,7 +1181,6 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
 
-	ImGui::Checkbox("Use id buffer", &s_ui_use_id_buffer);
 	ImGui::Checkbox("Show normals", &s_ui_show_normals);
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 }
