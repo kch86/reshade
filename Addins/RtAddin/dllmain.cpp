@@ -92,6 +92,7 @@ namespace
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
 	std::unordered_map<uint64_t, void *> s_mapped_resources;
+	std::unordered_set<uint64_t> s_dynamic_resources;
 	std::unordered_map<uint64_t, StreamInfo> s_inputLayoutPipelines;
 	scopedresource s_tlas;
 	scopedresource s_attachments_buffer;
@@ -147,8 +148,6 @@ namespace
 	bool s_staticgeo_vs_pipeline_is_bound = false;
 	pipeline s_current_vs_pipeline;
 	bvh_manager s_bvh_manager;
-
-	uint64_t s_current_draw_stream_hash = 0;
 
 	XMMATRIX s_viewproj;
 	XMMATRIX s_view;
@@ -538,6 +537,13 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 
 	assert(s_resources.find(handle.handle) == s_resources.end());
 	s_resources[handle.handle] = desc;
+
+	resource d3d12res;
+	s_d3d12device->create_resource(
+		resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
+		nullptr, resource_usage::cpu_access, &d3d12res);
+
+	s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
 }
 static void on_destroy_resource(device *device, resource handle)
 {
@@ -558,6 +564,10 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 		if (s_resources.find(resource.handle) != s_resources.end())
 		{
 			s_mapped_resources[resource.handle] = *data;
+			if (access == map_access::write_discard)
+			{
+				s_dynamic_resources.insert(resource.handle);
+			}
 		}
 	}	
 }
@@ -577,25 +587,19 @@ void on_unmap_buffer_region(device *device, resource handle)
 
 		const resource_desc& desc = s_resources[handle.handle];
 
-		resource d3d12res;
-		s_d3d12device->create_resource(
-			resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
-			nullptr, resource_usage::cpu_access, &d3d12res);
+		auto iter = s_shadow_resources.find(handle.handle);
+		assert(iter != s_shadow_resources.end());
+		resource d3d12res = s_shadow_resources[handle.handle].handle();
 
+		// TODO/HACK:
+		// this is kind of bad what we're doing here. you should never read from a mapped pointer
+		// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
 		void *ptr;
 		s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
 		memcpy(ptr, data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		auto prev_shadow = s_shadow_resources.find(handle.handle);
-		if (prev_shadow != s_shadow_resources.end())
-		{
-			s_bvh_manager.on_geo_updated(prev_shadow->second.handle());
-
-			prev_shadow->second.free();
-		}
-
-		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+		s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
 		s_mapped_resources.erase(handle.handle);
 	}
 }
@@ -781,6 +785,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 
 	assert(s_shadow_resources.find(s_currentVB.pos.res.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
+	const bool dynamic_resource = s_dynamic_resources.contains(s_currentVB.pos.res.handle);
 
 	BlasBuildDesc desc = {
 		.vb = {
@@ -795,7 +800,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
 			.count = index_count,
 			.fmt = s_currentIB.fmt
-		}
+		},
 	};
 
 	bvh_manager::AttachmentDesc attachments[] = {
@@ -836,7 +841,8 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.cmd_queue = s_d3d12cmdqueue,
 		.blas_desc = desc,
 		.transform = s_current_wvp,
-		.attachments = attachments
+		.attachments = attachments,
+		.dynamic = dynamic_resource,
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);

@@ -28,6 +28,7 @@ public:
 		const BlasBuildDesc &blas_desc;
 		DirectX::XMMATRIX &transform;
 		std::span<AttachmentDesc> attachments = {};
+		bool dynamic = false;
 	};
 public:
 	bvh_manager() = default;
@@ -44,6 +45,8 @@ public:
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
 private:
+	void prune_stale_geo();
+
 	template<typename T>
 	struct AttachmentT
 	{
@@ -68,6 +71,8 @@ private:
 	using Attachment = AttachmentT<reshade::api::resource_view>;
 	using GpuAttachment = AttachmentT<uint32_t>;
 
+	std::vector<bool> m_needs_rebuild;
+	std::vector<uint64_t> m_last_rebuild;
 	std::vector<BlasBuildDesc> m_geometry;
 	std::vector<scopedresource> m_bvhs;
 	std::vector<std::vector<DirectX::XMMATRIX>> m_instances;
@@ -77,5 +82,6 @@ private:
 	std::vector<Attachment> m_attachments_flat;
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
-	uint64_t s_current_draw_stream_hash = 0;
+	uint64_t m_current_draw_stream_hash = 0;
+	uint64_t m_frame_id = 0;
 };

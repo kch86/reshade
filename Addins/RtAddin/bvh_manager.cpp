@@ -12,6 +12,7 @@ using namespace DirectX;
 void bvh_manager::update()
 {
 	m_per_frame_instance_counts.clear();
+	m_frame_id++;
 }
 
 void bvh_manager::destroy()
@@ -27,16 +28,17 @@ void bvh_manager::destroy()
 
 void bvh_manager::update_vbs(std::span<const resource> buffers)
 {
-	s_current_draw_stream_hash = XXH3_64bits(buffers.data(), buffers.size_bytes());
+	m_current_draw_stream_hash = XXH3_64bits(buffers.data(), buffers.size_bytes());
 }
 
-void bvh_manager::on_geo_updated(resource res)
+void bvh_manager::prune_stale_geo()
 {
-	//erase from our geometry and bvh list
+	// currently unused, leaving here for future use if I need it
+	// erase from our geometry and bvh list
 	uint32_t count = m_geometry.size();
 	for (uint32_t i = 0; i < count; i++)
 	{
-		if (m_geometry[i].vb.res == res.handle)
+		if (m_needs_rebuild[i] && (m_frame_id - m_last_rebuild[i]) > 100)
 		{
 			m_geometry[i] = m_geometry[count - 1];
 
@@ -47,6 +49,9 @@ void bvh_manager::on_geo_updated(resource res)
 
 			m_attachments[i].data.clear();
 			m_attachments[i].data = std::move(m_attachments[count - 1].data);
+
+			m_needs_rebuild[i] = m_needs_rebuild[count - 1];
+			m_last_rebuild[i] = m_last_rebuild[count - 1];
 
 			//since we moved the last one here, we need to check i again
 			--i;
@@ -59,6 +64,21 @@ void bvh_manager::on_geo_updated(resource res)
 	m_bvhs.resize(count);
 	m_instances.resize(count);
 	m_attachments.resize(count);
+	m_needs_rebuild.resize(count);
+	m_last_rebuild.resize(count);
+}
+
+void bvh_manager::on_geo_updated(resource res)
+{
+	//erase from our geometry and bvh list
+	uint32_t count = m_geometry.size();
+	for (uint32_t i = 0; i < count; i++)
+	{
+		if (m_geometry[i].vb.res == res.handle)
+		{
+			m_needs_rebuild[i] = true;
+		}
+	}
 }
 
 void bvh_manager::on_geo_draw(DrawDesc& desc)
@@ -69,7 +89,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		uint64_t stream_hash;
 	} combinedHashData = {
 			.desc = desc.blas_desc,
-			.stream_hash = s_current_draw_stream_hash
+			.stream_hash = m_current_draw_stream_hash
 	};
 
 	// combine the stream and draw data into one hash
@@ -88,13 +108,16 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	}
 
 	auto result = std::find_if(m_geometry.begin(), m_geometry.end(), [&](const BlasBuildDesc &d) {
-		return
-			d.vb.count == desc.blas_desc.vb.count &&
+		return desc.dynamic ?
+			(d.vb.res == desc.blas_desc.vb.res &&
+			 d.ib.res == desc.blas_desc.ib.res)
+		:
+			(d.vb.count == desc.blas_desc.vb.count &&
 			d.vb.offset == desc.blas_desc.vb.offset &&
 			d.vb.res == desc.blas_desc.vb.res &&
 			d.ib.count == desc.blas_desc.ib.count &&
 			d.ib.offset == desc.blas_desc.ib.offset &&
-			d.ib.res == desc.blas_desc.ib.res;
+			d.ib.res == desc.blas_desc.ib.res);
 		});
 	if (result == m_geometry.end())
 	{
@@ -104,6 +127,8 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		m_instances.push_back({});
 		m_instances.back().push_back(desc.transform); assert(instanceIndex == 0);
 		m_geometry.push_back(desc.blas_desc);
+		m_needs_rebuild.push_back(false);
+		m_last_rebuild.push_back(m_frame_id);
 
 		ScopedAttachment gpuattach;
 		for (const AttachmentDesc &attachment : desc.attachments)
@@ -139,7 +164,14 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	}
 	else
 	{
-		uint32_t index = result - m_geometry.begin();
+		const uint32_t index = result - m_geometry.begin();
+		if (m_needs_rebuild[index])
+		{
+			m_bvhs[index].free();
+			m_bvhs[index] = std::move(buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc));
+			m_needs_rebuild[index] = false;
+			m_last_rebuild[index] = m_frame_id;
+		}
 		if (instanceIndex < m_instances[index].size())
 		{
 			m_instances[index][instanceIndex] = desc.transform;
@@ -166,6 +198,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		for (size_t i = 0; i < m_instances.size(); i++)
 		{
 			assert(m_bvhs[i].handle().handle != 0);
+			if (m_needs_rebuild[i])
+				continue;
 
 			rt_instance_desc instance{};
 			instance.acceleration_structure = { .buffer = m_bvhs[i].handle() };
