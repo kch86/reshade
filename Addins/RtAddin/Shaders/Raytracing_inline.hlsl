@@ -65,6 +65,7 @@ struct Attachments
 	AttachElem ib;
 	AttachElem vb;
 	AttachElem uv;
+	AttachElem tex0;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
@@ -82,6 +83,9 @@ cbuffer RtConstants : register(b0)
 	uint g_usePrebuiltCamMat;
 	uint g_showNormal;
 	uint g_showUvs;
+
+	uint g_showTexture;
+	uint3 pad0;
 }
 
 //template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
@@ -168,13 +172,13 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 	return n * 0.5 + 0.5;
 }
 
-float3 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
+float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 {
 	Attachments att = g_attachments_buffer[instance_id];
 
 	if (att.uv.id == 0x7FFFFFFF)
 	{
-		return 1.0.xxx;
+		return 1.0.xx;
 	}
 
 	// since vb streams are interleaved, this needs to be a byte address buffer
@@ -194,7 +198,26 @@ float3 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 	float2 uv = u0 * (1.0 - barries.y - barries.x) + u1 * barries.x + u2 * barries.y;
 	uv = frac(uv);
 
-	return float3(uv, 0.0);
+	return uv;
+}
+
+float3 fetchTexture(uint instance_id, float2 uv)
+{
+	Attachments att = g_attachments_buffer[instance_id];
+
+	if (att.tex0.id == 0x7FFFFFFF)
+	{
+		return 1.0.xxx;
+	}
+
+	Texture2D<float4> tex0 = ResourceDescriptorHeap[NonUniformResourceIndex(att.tex0.id)];
+
+	uint width, height;
+	tex0.GetDimensions(width, height);
+
+	uint2 index = uint2(uv * float2(width, height) + 0.5);	
+
+	return tex0[index].rgb;
 }
 
 [numthreads(8, 8, 1)]
@@ -290,9 +313,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 		else if (g_showUvs)
 		{
-			value.rgb = fetchUvs(query.CommittedInstanceID(),
-								 query.CommittedPrimitiveIndex(),
-								 query.CommittedTriangleBarycentrics());
+			float2 uvs = fetchUvs(query.CommittedInstanceID(),
+								  query.CommittedPrimitiveIndex(),
+								  query.CommittedTriangleBarycentrics());
+			value.rgb = float3(uvs, 0.0);
+		}
+		else if (g_showTexture)
+		{
+			float2 uvs = fetchUvs(query.CommittedInstanceID(),
+								  query.CommittedPrimitiveIndex(),
+								  query.CommittedTriangleBarycentrics());
+
+			value.rgb = fetchTexture(query.CommittedInstanceID(), uvs);
 		}
 		else
 		{

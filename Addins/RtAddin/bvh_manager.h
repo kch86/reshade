@@ -12,6 +12,7 @@ public:
 	struct AttachmentDesc
 	{
 		reshade::api::resource res;
+		reshade::api::resource_type type;
 		uint32_t offset = 0; // in elements
 		uint32_t elem_offset = 0; // offset inside the stride
 		uint32_t count = 0;  // in elements

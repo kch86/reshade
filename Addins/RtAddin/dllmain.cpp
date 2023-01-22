@@ -85,10 +85,9 @@ namespace
 		stream uv;
 	};
 
-	struct RtBindings
+	struct BoundTextureData
 	{
-		descriptor_set inputs;
-		descriptor_set outputs;
+		resource slots[4];
 	};
 
 	struct CameraCb
@@ -101,6 +100,9 @@ namespace
 		uint32_t usePrebuiltCamMat = 1;
 		uint32_t showNormal = 0;
 		uint32_t showUvs = 0;
+
+		uint32_t showTexture = 0;
+		uint32_t pad[3];
 	};
 
 	std::shared_mutex s_mutex;
@@ -119,8 +121,6 @@ namespace
 	pipeline_layout s_blit_layout;
 	pipeline s_blit_pipeline;
 
-	RtBindings s_bindings;
-
 	scopedresource s_output;
 	scopedresourceview s_output_uav, s_output_srv;
 	uint32_t s_width = 0, s_height = 0;
@@ -129,6 +129,7 @@ namespace
 	IndexData s_currentIB;
 	StreamData s_currentVB;
 	resource_view s_current_rtv = { 0 };
+	BoundTextureData s_currentTextureBindings;
 
 	scopedresource s_empty_buffer;
 	scopedresourceview s_empty_srv;
@@ -148,6 +149,7 @@ namespace
 	bool s_ui_show_rt_half = false;
 	bool s_ui_show_normals = false;
 	bool s_ui_show_uvs = false;
+	bool s_ui_show_texture = false;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
 	float s_cam_pitch = 0.0;
@@ -841,6 +843,49 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		}	
 	}
 }
+static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
+{
+	const std::shared_lock<std::shared_mutex> lock(s_mutex);
+
+	resource res;
+	resource_desc desc;
+
+	switch (update.type)
+	{
+#if 0
+	case descriptor_type::sampler:
+		for (uint32_t i = 0; i < update.count; ++i)
+			assert(static_cast<const sampler *>(update.descriptors)[i].handle == 0 || s_samplers.find(static_cast<const sampler *>(update.descriptors)[i].handle) != s_samplers.end());
+		break;
+#endif
+	case descriptor_type::sampler_with_resource_view:
+		for (uint32_t i = 0; i < update.count; ++i)
+		{
+			sampler_with_resource_view *sv = (sampler_with_resource_view *)update.descriptors;
+
+			resource_view view = sv[i].view;
+			if (view.handle != 0)
+			{
+				res = cmd_list->get_device()->get_resource_from_view(view);
+				s_currentTextureBindings.slots[update.binding] = res;
+			}
+		}
+		break;
+#if 0
+	case descriptor_type::shader_resource_view:
+	case descriptor_type::unordered_access_view:
+		for (uint32_t i = 0; i < update.count; ++i)
+			assert(static_cast<const resource_view *>(update.descriptors)[i].handle == 0 || s_resource_views.find(static_cast<const resource_view *>(update.descriptors)[i].handle) != s_resource_views.end());
+		break;
+	case descriptor_type::constant_buffer:
+		for (uint32_t i = 0; i < update.count; ++i)
+			assert(static_cast<const buffer_range *>(update.descriptors)[i].buffer.handle == 0 || s_resources.find(static_cast<const buffer_range *>(update.descriptors)[i].buffer.handle) != s_resources.end());
+		break;
+#endif
+	default:
+		break;
+	}
+}
 
 bool g_drawBeforeUi = false;
 static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
@@ -918,6 +963,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		// ib
 		{
 			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
+			.type = resource_type::buffer,
 			.offset = (s_currentIB.offset + (first_index * s_currentIB.stride)) / s_currentIB.stride,
 			.count = index_count,
 			.stride = s_currentIB.stride,
@@ -926,6 +972,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		// vb
 		{
 			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle(),
+			.type = resource_type::buffer,
 			.offset = (s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride)) / s_currentVB.pos.stride,
 			.elem_offset = s_currentVB.pos.elem_offset,
 			.count = vertex_count,
@@ -937,12 +984,19 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		{
 			// uv may not always be available
 			.res = s_currentVB.uv.res.handle ? s_shadow_resources[s_currentVB.uv.res.handle].handle() : resource{0},
+			.type = resource_type::buffer,
 			.offset = s_currentVB.uv.res.handle ? (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride : 0,
 			.elem_offset = s_currentVB.uv.elem_offset,
 			.count = vertex_count,
 			.stride = s_currentVB.uv.stride,
 			.fmt = s_currentVB.uv.fmt,
 			.view_as_raw = true,
+		},
+		// texture 0 (only if the texcoord is valid)
+		{
+			.res = s_currentVB.uv.res.handle ? s_shadow_resources[s_currentTextureBindings.slots[0].handle].handle() : resource{0},
+			.type = resource_type::texture_2d,
+			.fmt = format::unknown,
 		},
 	};
 
@@ -1108,6 +1162,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
+	cb.showTexture = s_ui_show_texture;
 	if (cb.usePrebuiltCamMat)
 	{
 		cb.pos = s_view.r[3];
@@ -1300,6 +1355,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::Checkbox("Show normals", &s_ui_show_normals);
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
+	ImGui::Checkbox("Show texture", &s_ui_show_texture);
 }
 
 static void on_init_runtime(effect_runtime *runtime)
@@ -1375,6 +1431,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::bind_vertex_buffers>(on_bind_vertex_buffers);
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
 		reshade::register_event<reshade::addon_event::push_constants>(on_push_constants);
+		reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_runtime);

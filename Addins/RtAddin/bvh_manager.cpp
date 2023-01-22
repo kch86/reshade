@@ -134,31 +134,54 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		for (const AttachmentDesc &attachment : desc.attachments)
 		{
 			resource_view_flags flags = resource_view_flags::shader_visible;
-			format fmt = attachment.fmt;
-			uint32_t offset = attachment.offset;
-			uint32_t count = attachment.count;
-			uint32_t stride = attachment.stride;
-			if (attachment.view_as_raw)
+			if (attachment.type == resource_type::buffer)
 			{
-				fmt = format::r32_uint;
-				flags |= resource_view_flags::raw;
-				assert((stride % sizeof(uint32_t)) == 0);
-				offset *= stride / sizeof(uint32_t);
-				count *= stride / sizeof(uint32_t);
+				format fmt = attachment.fmt;
+				uint32_t offset = attachment.offset;
+				uint32_t count = attachment.count;
+				uint32_t stride = attachment.stride;
+				if (attachment.view_as_raw)
+				{
+					fmt = format::r32_uint;
+					flags |= resource_view_flags::raw;
+					assert((stride % sizeof(uint32_t)) == 0);
+					offset *= stride / sizeof(uint32_t);
+					count *= stride / sizeof(uint32_t);
+				}
+				resource_view_desc view_desc(fmt, offset, count);
+				view_desc.flags = flags;
+
+				resource_view srv{};
+				if (attachment.res.handle != 0)
+					desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+
+				ScopedAttachment::Elem data;
+				data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
+				data.offset = attachment.elem_offset;
+				data.stride = stride;
+				data.fmt = (uint32_t)attachment.fmt;
+				gpuattach.data.push_back(std::move(data));
 			}
-			resource_view_desc view_desc(fmt, offset, count);
-			view_desc.flags = flags;
+			else if (attachment.type == resource_type::texture_2d)
+			{
+				resource_view srv{};
+				if (attachment.res.handle != 0)
+				{
+					resource_desc res_desc = desc.cmd_list->get_device()->get_resource_desc(attachment.res);
 
-			resource_view srv{};
-			if(attachment.res.handle != 0)
-				desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+					resource_view_desc view_desc(res_desc.texture.format);
+					view_desc.flags = flags;
 
-			ScopedAttachment::Elem data;
-			data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
-			data.offset = attachment.elem_offset;
-			data.stride = stride;
-			data.fmt = (uint32_t)attachment.fmt;
-			gpuattach.data.push_back(std::move(data));
+					desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+				}
+
+				ScopedAttachment::Elem data;
+				data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
+				data.offset = 0;
+				data.stride = 0;
+				data.fmt = 0;
+				gpuattach.data.push_back(std::move(data));
+			}			
 		}
 		m_attachments.push_back(std::move(gpuattach));
 	}
