@@ -18,6 +18,10 @@ todo:
 - mapped/updated geometry should do a blas update, not a full rebuild and allocation if possible
 - the proxies are not being passed to the d3d9on12 create function
 -- something isn't hooked correctly for d3d12 32-bit
-- don't re-create shadow resources if they've already been created (e.g. updates)
+-- maybe I just need to make this mode more pass through?
+-- could be related to different d3d12 versions?
+--- the version (maybe d3d12.dll and d3d12core.dll) might not match what reshade builds against
 - find better way to get viewproj matrix (not hard coded to a specific draw)
 - use amd d3d12 memory allocator
+- if i don't mark buffers as dynamic, can I then unwrap them?
+-- hard to do this in advance, I'd only know on map if the buffer needed to be dynamic...
