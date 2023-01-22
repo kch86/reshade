@@ -29,6 +29,22 @@ using namespace DirectX;
 
 namespace
 {
+	struct MapRegion
+	{
+		struct Buffer {
+			void *data;
+		};
+
+		struct Texture {
+			uint32_t subresource;
+			subresource_box box;
+			subresource_data data;
+		};
+
+		Buffer buffer;
+		Texture texture;
+	};
+
 	struct StreamInfo
 	{
 		struct stream
@@ -91,7 +107,7 @@ namespace
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
 	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
-	std::unordered_map<uint64_t, void *> s_mapped_resources;
+	std::unordered_map<uint64_t, MapRegion> s_mapped_resources;
 	std::unordered_set<uint64_t> s_dynamic_resources;
 	std::unordered_map<uint64_t, StreamInfo> s_inputLayoutPipelines;
 	scopedresource s_tlas;
@@ -530,21 +546,54 @@ static void on_destroy_effect_runtime(effect_runtime *runtime)
 
 static void on_init_resource(device *device, const resource_desc &desc, const subresource_data *, resource_usage usage, resource handle)
 {
-	if (!(desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer))
+	bool supported_resource = false;
+	bool geo_buffer = false;
+	bool texture = false;
+	if ((desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer))
 	{
-		return;
+		geo_buffer = true;
+		supported_resource |= true;
 	}
+	else if (desc.type == resource_type::texture_2d && (desc.usage & resource_usage::render_target) == 0)
+	{
+		// make sure it's not dynamic? or strip later?
+		// only use texture2d for now
+		if (desc.texture.depth_or_layers == 1)
+		{
+			texture = true;
+			supported_resource |= true;
+		}		
+	}
+
+	if (!supported_resource)
+		return;
+
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	assert(s_resources.find(handle.handle) == s_resources.end());
 	s_resources[handle.handle] = desc;
 
-	resource d3d12res;
-	s_d3d12device->create_resource(
-		resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
-		nullptr, resource_usage::cpu_access, &d3d12res);
+	if (geo_buffer)
+	{
+		resource d3d12res;
+		s_d3d12device->create_resource(
+			resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
+			nullptr, resource_usage::cpu_access, &d3d12res);
 
-	s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+	}
+	else if (texture)
+	{
+		resource_desc new_desc = desc;
+		new_desc.heap = memory_heap::gpu_only;
+
+		resource d3d12res;
+		s_d3d12device->create_resource(
+			new_desc,
+			nullptr, resource_usage::shader_resource, &d3d12res);
+
+		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+	}
 }
 static void on_destroy_resource(device *device, resource handle)
 {
@@ -564,7 +613,12 @@ void on_map_buffer_region(device *device, resource resource, uint64_t offset, ui
 	{
 		if (s_resources.find(resource.handle) != s_resources.end())
 		{
-			s_mapped_resources[resource.handle] = *data;
+			
+			s_mapped_resources[resource.handle] = MapRegion{
+				.buffer = MapRegion::Buffer{
+					.data = *data
+				}
+			};
 			if (access == map_access::write_discard)
 			{
 				s_dynamic_resources.insert(resource.handle);
@@ -584,24 +638,79 @@ void on_unmap_buffer_region(device *device, resource handle)
 	//create shadow copy
 	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
 	{
-		void *data = s_mapped_resources[handle.handle];
+		const MapRegion& region = s_mapped_resources[handle.handle];
 
 		const resource_desc& desc = s_resources[handle.handle];
 
 		auto iter = s_shadow_resources.find(handle.handle);
 		assert(iter != s_shadow_resources.end());
-		resource d3d12res = s_shadow_resources[handle.handle].handle();
+		resource d3d12res = iter->second.handle();
 
 		// TODO/HACK:
 		// this is kind of bad what we're doing here. you should never read from a mapped pointer
 		// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
 		void *ptr;
 		s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
-		memcpy(ptr, data, (size_t)desc.buffer.size);
+		memcpy(ptr, region.buffer.data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
 		if (!s_ui_pause)
 			s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
+		s_mapped_resources.erase(handle.handle);
+	}
+}
+
+static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
+{
+	if (s_resources.find(resource.handle) != s_resources.end())
+	{
+		if (s_shadow_resources.contains(resource.handle))
+		{
+			s_mapped_resources[resource.handle] = MapRegion{
+				.texture = {
+					.subresource = subresource,
+					.box = box ? *box : subresource_box{},
+					.data = *data
+				}
+			};
+		}
+		
+	}
+}
+static void on_unmap_texture_region(device *device, resource handle, uint32_t subresource)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (!s_ui_enable)
+	{
+		return;
+	}
+
+	//create shadow copy
+	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
+	{
+		// execute command list crashes when d3d debug enabled
+		if (!s_d3d_debug_enabled)
+		{
+			const MapRegion &region = s_mapped_resources[handle.handle];
+
+			const resource_desc &desc = s_resources[handle.handle];
+
+			auto iter = s_shadow_resources.find(handle.handle);
+			assert(iter != s_shadow_resources.end());
+			resource d3d12res = iter->second.handle();
+
+			// TODO/HACK:
+			// this is kind of bad what we're doing here. you should never read from a mapped pointer
+			// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
+			const bool valid_box = region.texture.box.width() > 0 || region.texture.box.height() > 0 || region.texture.box.depth() > 0;
+			s_d3d12device->update_texture_region(
+				region.texture.data,
+				d3d12res,
+				region.texture.subresource,
+				valid_box ? &region.texture.box : nullptr);
+		}		
+
 		s_mapped_resources.erase(handle.handle);
 	}
 }
@@ -1250,6 +1359,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
 		reshade::register_event<reshade::addon_event::map_buffer_region>(on_map_buffer_region);
 		reshade::register_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer_region);
+		reshade::register_event<reshade::addon_event::map_texture_region>(on_map_texture_region);
+		reshade::register_event<reshade::addon_event::unmap_texture_region>(on_unmap_texture_region);
 		reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
 		reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_effect_runtime);
