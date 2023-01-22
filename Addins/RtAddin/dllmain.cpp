@@ -164,8 +164,11 @@ namespace
 	std::unordered_set<uint64_t> s_static_geo_vs_pipelines;
 	std::unordered_map<uint64_t, uint32_t> s_vs_transform_map;
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
+	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
+	std::unordered_set<uint64_t> s_ps_texbinding_map;
 	bool s_staticgeo_vs_pipeline_is_bound = false;
 	pipeline s_current_vs_pipeline;
+	pipeline s_current_ps_pipeline;
 	bvh_manager s_bvh_manager;
 
 	XMMATRIX s_viewproj;
@@ -215,6 +218,18 @@ static void init_vs_mappings()
 	for (const VsTransformMap& mapping : hashes)
 	{
 		s_vs_transform_map[mapping.hash] = mapping.offset;
+	}
+}
+
+static void init_ps_mappings()
+{
+	static uint64_t hashes[] = {
+		7314718503845779620,
+	};
+
+	for (uint64_t mapping : hashes)
+	{
+		s_ps_texbinding_map.insert(mapping);
 	}
 }
 
@@ -504,6 +519,13 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				s_static_geo_vs_pipelines.insert(handle.handle);
 			}
 		}
+		else if (object.type == pipeline_subobject_type::pixel_shader)
+		{
+			shader_desc *shader_data = (shader_desc *)object.data;
+			XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+
+			s_ps_hash_map[handle.handle] = hash;
+		}
 	}
 #endif
 }
@@ -520,6 +542,7 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 		return;
 
 	s_current_vs_pipeline = { 0 };
+	s_current_ps_pipeline = { 0 };
 
 	if (type == pipeline_stage::input_assembler)
 	{
@@ -530,6 +553,10 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 		s_staticgeo_vs_pipeline_is_bound = s_static_geo_vs_pipelines.contains(pipeline.handle);
 
 		s_current_vs_pipeline = pipeline;
+	}
+	else if (type == pipeline_stage::pixel_shader)
+	{
+		s_current_ps_pipeline = pipeline;
 	}
 }
 
@@ -845,6 +872,9 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 }
 static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
 {
+	if (filter_command())
+		return;
+
 	const std::shared_lock<std::shared_mutex> lock(s_mutex);
 
 	resource res;
@@ -959,6 +989,27 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		},
 	};
 
+	const bool has_uvs = s_currentVB.uv.res.handle != 0;
+	uint32_t texslot = 0;
+	uint64_t texhandle = 0;
+
+	if (s_current_ps_pipeline.handle)
+	{
+		assert(s_ps_hash_map.contains(s_current_ps_pipeline.handle));
+		const uint64_t hash = s_ps_hash_map[s_current_ps_pipeline.handle];
+		if (s_ps_texbinding_map.contains(hash))
+		{
+			texslot = 1;
+		}
+	}
+	if (texslot == 1 && s_currentTextureBindings.slots[1].handle)
+	{
+		texhandle = s_currentTextureBindings.slots[1].handle;
+	}
+	else
+	{
+		texhandle = s_currentTextureBindings.slots[0].handle;
+	}
 	bvh_manager::AttachmentDesc attachments[] = {
 		// ib
 		{
@@ -983,9 +1034,9 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		// uv
 		{
 			// uv may not always be available
-			.res = s_currentVB.uv.res.handle ? s_shadow_resources[s_currentVB.uv.res.handle].handle() : resource{0},
+			.res = has_uvs ? s_shadow_resources[s_currentVB.uv.res.handle].handle() : resource{0},
 			.type = resource_type::buffer,
-			.offset = s_currentVB.uv.res.handle ? (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride : 0,
+			.offset = has_uvs ? (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride : 0,
 			.elem_offset = s_currentVB.uv.elem_offset,
 			.count = vertex_count,
 			.stride = s_currentVB.uv.stride,
@@ -994,7 +1045,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		},
 		// texture 0 (only if the texcoord is valid)
 		{
-			.res = s_currentVB.uv.res.handle ? s_shadow_resources[s_currentTextureBindings.slots[0].handle].handle() : resource{0},
+			.res = has_uvs && texhandle > 0 ? s_shadow_resources[texhandle].handle() : resource{0},
 			.type = resource_type::texture_2d,
 			.fmt = format::unknown,
 		},
@@ -1030,6 +1081,10 @@ static void on_present(effect_runtime *runtime)
 	s_got_viewproj = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
+	s_currentTextureBindings.slots[0] = { 0 };
+	s_currentTextureBindings.slots[1] = { 0 };
+	s_currentTextureBindings.slots[2] = { 0 };
+	s_currentTextureBindings.slots[3] = { 0 };
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
@@ -1366,6 +1421,7 @@ static void on_init_runtime(effect_runtime *runtime)
 static void do_init()
 {
 	init_vs_mappings();
+	init_ps_mappings();
 }
 
 static void do_shutdown()
