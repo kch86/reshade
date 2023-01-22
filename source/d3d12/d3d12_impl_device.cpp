@@ -701,10 +701,19 @@ void reshade::d3d12::device_impl::update_texture_region(const api::subresource_d
 		num_rows = box->height();
 		num_slices = box->depth();
 	}
+	else
+	{
+		width = std::max(1u, static_cast<UINT>(width) >> (subresource % desc.MipLevels));
+		num_rows = std::max(1u, num_rows >> (subresource % desc.MipLevels));
+	}
 
 	auto row_pitch = api::format_row_pitch(convert_format(desc.Format), width);
 	row_pitch = (row_pitch + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1u) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1u);
 	const auto slice_pitch = api::format_slice_pitch(convert_format(desc.Format), row_pitch, num_rows);
+
+	// re-calc num_rows to be num_blocks for bcformats
+	// do this after we've calculated slice_pitch
+	num_rows = api::format_block_count(convert_format(desc.Format), num_rows);
 
 	// Allocate host memory for upload
 	D3D12_RESOURCE_DESC intermediate_desc = { D3D12_RESOURCE_DIMENSION_BUFFER };
@@ -738,8 +747,12 @@ void reshade::d3d12::device_impl::update_texture_region(const api::subresource_d
 
 		for (size_t y = 0; y < num_rows; ++y)
 		{
-			const size_t row_size = data.row_pitch < row_pitch ?
-				data.row_pitch : static_cast<size_t>(row_pitch);
+			//always choose the src row pitch
+			const size_t row_size = data.row_pitch;
+
+			const auto dst_begin = dst_slice + y * row_pitch;
+			const auto dst_end = dst_begin + row_size;
+			assert((dst_end - mapped_data) <= intermediate_desc.Width);
 			std::memcpy(
 				dst_slice + y * row_pitch,
 				src_slice + y * data.row_pitch, row_size);
