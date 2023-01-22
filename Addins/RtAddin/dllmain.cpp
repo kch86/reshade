@@ -133,6 +133,7 @@ namespace
 	bool s_ui_show_normals = false;
 	bool s_ui_show_uvs = false;
 	bool s_ui_enable = true;
+	bool s_ui_pause = false;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -599,7 +600,8 @@ void on_unmap_buffer_region(device *device, resource handle)
 		memcpy(ptr, data, (size_t)desc.buffer.size);
 		s_d3d12device->unmap_buffer_region(d3d12res);
 
-		s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
+		if (!s_ui_pause)
+			s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
 		s_mapped_resources.erase(handle.handle);
 	}
 }
@@ -846,7 +848,8 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
-	s_bvh_manager.on_geo_draw(draw_desc);	
+	if(!s_ui_pause)
+		s_bvh_manager.on_geo_draw(draw_desc);	
 
 	return false;
 }
@@ -1174,6 +1177,7 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 static void draw_ui(reshade::api::effect_runtime *)
 {
 	ImGui::Checkbox("Enable", &s_ui_enable);
+	ImGui::Checkbox("Pause", &s_ui_pause);
 
 	ImGui::SliderFloat("ViewRotX: ", &s_ui_view_rot_x, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
