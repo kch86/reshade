@@ -497,4 +497,14 @@ namespace reshade::api
 
 		return row_pitch * height;
 	}
+	/// <summary>
+	/// Gets the number of bytes a texture slice of the specified format <paramref name="value"/> occupies.
+	/// </summary>
+	inline const uint32_t format_block_count(format value, uint32_t dim)
+	{
+		if ((value >= format::bc1_typeless && value <= format::bc5_snorm) || (value >= format::bc6h_typeless && value <= format::bc7_unorm_srgb))
+			return ((dim + 3) / 4);
+
+		return dim;
+	}
 }
