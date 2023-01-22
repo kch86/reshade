@@ -873,13 +873,16 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 	reshade::log_message(3, s.str().c_str());
 }
-static void on_push_descriptors(command_list *, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
+static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
 {
 	if (!do_capture())
 		return;
 
 #ifndef NDEBUG
 	{	const std::shared_lock<std::shared_mutex> lock(s_mutex);
+
+	resource res;
+	resource_desc desc;
 
 	switch (update.type)
 	{
@@ -889,7 +892,18 @@ static void on_push_descriptors(command_list *, shader_stage stages, pipeline_la
 		break;
 	case descriptor_type::sampler_with_resource_view:
 		for (uint32_t i = 0; i < update.count; ++i)
+		{
 			assert(static_cast<const sampler_with_resource_view *>(update.descriptors)[i].view.handle == 0 || s_resource_views.find(static_cast<const sampler_with_resource_view *>(update.descriptors)[i].view.handle) != s_resource_views.end());
+
+			sampler_with_resource_view *sv = (sampler_with_resource_view *)update.descriptors;
+
+			resource_view view = sv[i].view;
+			if (view.handle != 0)
+			{
+				res = cmd_list->get_device()->get_resource_from_view(view);
+				desc = cmd_list->get_device()->get_resource_desc(res);
+			}
+		}			
 		break;
 	case descriptor_type::shader_resource_view:
 	case descriptor_type::unordered_access_view:
