@@ -1003,11 +1003,14 @@ void reshade::runtime::draw_gui()
 				ImGui::SetNextWindowFocus();
 		}
 
+		static bool found_focused_tab = false;
+
 		for (const auto &widget : overlay_callbacks)
 		{
-			if (strcmp(widget.first, _default_tab.c_str()) == 0)
+			if (!found_focused_tab && strcmp(widget.first, _default_tab.c_str()) == 0)
 			{
 				ImGui::SetNextWindowFocus();
+				found_focused_tab = true;
 			}
 			if (ImGui::Begin(widget.first, nullptr, ImGuiWindowFlags_NoFocusOnAppearing)) // No focus so that window state is preserved between opening/closing the GUI
 				(this->*widget.second)();
