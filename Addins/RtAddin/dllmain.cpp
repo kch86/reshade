@@ -1304,6 +1304,11 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 }
 
+static void on_init_runtime(effect_runtime *runtime)
+{
+	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
+}
+
 static void do_init()
 {
 	init_vs_mappings();
@@ -1374,6 +1379,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::push_constants>(on_push_constants);
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
+		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_runtime);
 
 		reshade::register_overlay(nullptr, draw_ui);
 
