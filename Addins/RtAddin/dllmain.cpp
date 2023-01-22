@@ -1250,8 +1250,6 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	if (resources.size() == 0)
 		return false;
 
-	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
-
 	update_rt();
 
 	if (s_tlas.handle() == 0)
