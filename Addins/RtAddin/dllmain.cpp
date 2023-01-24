@@ -183,10 +183,9 @@ namespace
 	command_list *s_d3d12cmdlist = nullptr;
 	command_queue *s_d3d12cmdqueue = nullptr;
 
-	float s_ui_view_rot_x = 0.0;
-	float s_ui_view_rot_y = 0.0;
-	float s_ui_view_rot_z = 0.0;
 	float s_ui_fov = 60.0;
+	float s_ui_sun_azimuth = 0.0;
+	float s_ui_sun_elevation = 0.0;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
 	bool s_ui_use_viewproj = true;
@@ -197,6 +196,7 @@ namespace
 	bool s_ui_show_texture = true;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
+	bool s_ui_render_before_ui = true;
 	float s_cam_pitch = 0.0;
 	float s_cam_yaw = 0.0;
 	XMVECTOR s_cam_pos = XMVectorZero();
@@ -973,7 +973,6 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 	}
 }
 
-bool g_drawBeforeUi = true;
 static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
@@ -1006,7 +1005,7 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
 	// This is not perfect, since there may be multiple command lists and this will try and render effects in every single one ...
-	if(g_drawBeforeUi && s_null_vs_ps_has_been_bound && s_ui_pipelines.contains(s_current_vs_pipeline.handle) && s_ui_pipelines.contains(s_current_ps_pipeline.handle))
+	if(s_ui_render_before_ui && s_null_vs_ps_has_been_bound && s_ui_pipelines.contains(s_current_vs_pipeline.handle) && s_ui_pipelines.contains(s_current_ps_pipeline.handle))
 	{
 		// TODO: find last valid 3d render target and apply that before drawing
 		const auto &current_state = cmd_list->get_private_data<state_block>();
@@ -1286,6 +1285,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
 	cb.showTexture = s_ui_show_texture;
+	cb.sunDirection = XMFLOAT3(sinf(s_ui_sun_azimuth * XM_PI / 180.0f), cosf(s_ui_sun_elevation * XM_PI / 180.0f), 1.0);
 	if (cb.usePrebuiltCamMat)
 	{
 		cb.viewPos = s_view.r[3];
@@ -1463,14 +1463,12 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Enable", &s_ui_enable);
 	ImGui::Checkbox("Pause", &s_ui_pause);
 
-	ImGui::SliderFloat("ViewRotX: ", &s_ui_view_rot_x, -180.0f, 180.0f);
-	ImGui::SliderFloat("ViewRotY: ", &s_ui_view_rot_y, -180.0f, 180.0f);
-	ImGui::SliderFloat("ViewRotZ: ", &s_ui_view_rot_z, -180.0f, 180.0f);
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 
 	ImGui::Checkbox("UseViewProjMat", &s_ui_use_viewproj);
 	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
 	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
+	ImGui::Checkbox("Render Before UI", &s_ui_render_before_ui);
 
 	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
@@ -1478,6 +1476,9 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show normals", &s_ui_show_normals);
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 	ImGui::Checkbox("Show texture", &s_ui_show_texture);
+
+	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, -180.0f, 180.0f);
+	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, 0.0f, 90.0f);
 }
 
 static void on_init_runtime(effect_runtime *runtime)

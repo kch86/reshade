@@ -244,6 +244,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		value = float4(0, 0, 0, 1);
 	}
 
+	bool miss = true;
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
 		if (g_constants.showNormal)
@@ -270,8 +271,24 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		else
 		{
 			value.rgb = instanceIdToColor(query.CommittedInstanceID());
-		}		
+		}
+		miss = false;
 	}
+
+	if (!miss)
+	{
+		ray.Origin = ray.Origin + ray.Direction * query.CommittedRayT();
+		ray.Direction = normalize(g_constants.sunDirection);
+		ray_flags |= RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+		query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
+		query.Proceed();
+
+		if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+		{
+			value.rgb = 0.0;
+		}
+	}
+	
 #else
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
 #endif

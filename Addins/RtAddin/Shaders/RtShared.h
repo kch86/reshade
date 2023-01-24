@@ -36,7 +36,7 @@ struct RtConstants
 	uint showUvs;
 
 	uint showTexture;
-	uint3 pad0;
+	float3 sunDirection;
 };
 
 #endif
