@@ -635,10 +635,16 @@ void reshade::runtime::draw_gui()
 
 	if (_input != nullptr)
 	{
+		const bool show_overlay = _show_overlay;
 		if (_show_overlay && !_ignore_shortcuts && !_imgui_context->IO.NavVisible && _input->is_key_pressed(0x1B /* VK_ESCAPE */))
 			_show_overlay = false; // Close when pressing the escape button and not currently navigating with the keyboard
 		else if (!_ignore_shortcuts && _input->is_key_pressed(_overlay_key_data, _force_shortcut_modifiers) && _imgui_context->ActiveId == 0)
 			_show_overlay = !_show_overlay;
+
+		if (!_show_overlay && show_overlay != _show_overlay)
+		{
+			_found_focused_tab = false;
+		}
 	}
 
 	if (_input_gamepad != nullptr)
@@ -1003,14 +1009,12 @@ void reshade::runtime::draw_gui()
 				ImGui::SetNextWindowFocus();
 		}
 
-		static bool found_focused_tab = false;
-
 		for (const auto &widget : overlay_callbacks)
 		{
-			if (!found_focused_tab && strcmp(widget.first, _default_tab.c_str()) == 0)
+			if (!_found_focused_tab && strcmp(widget.first, _default_tab.c_str()) == 0)
 			{
 				ImGui::SetNextWindowFocus();
-				found_focused_tab = true;
+				_found_focused_tab = true;
 			}
 			if (ImGui::Begin(widget.first, nullptr, ImGuiWindowFlags_NoFocusOnAppearing)) // No focus so that window state is preserved between opening/closing the GUI
 				(this->*widget.second)();

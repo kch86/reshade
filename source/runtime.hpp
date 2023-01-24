@@ -417,6 +417,7 @@ namespace reshade
 
 		bool _show_splash = true;
 		bool _show_overlay = false;
+		bool _found_focused_tab = false;
 		bool _show_fps = false;
 		bool _show_clock = false;
 		bool _show_frametime = false;
