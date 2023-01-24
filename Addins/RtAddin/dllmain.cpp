@@ -19,9 +19,10 @@
 //ray tracing includes
 #include "raytracing.h"
 #include "bvh_manager.h"
-#include "CompiledShaders\Raytracing_inline.hlsl.h"
-#include "CompiledShaders\Raytracing_blit_vs.hlsl.h"
-#include "CompiledShaders\Raytracing_blit_ps.hlsl.h"
+#include "CompiledShaders/Raytracing_inline.hlsl.h"
+#include "CompiledShaders/Raytracing_blit_vs.hlsl.h"
+#include "CompiledShaders/Raytracing_blit_ps.hlsl.h"
+#include "Shaders/RtShared.h"
 #include "hash.h"
 
 using namespace reshade::api;
@@ -88,21 +89,6 @@ namespace
 	struct BoundTextureData
 	{
 		resource slots[4];
-	};
-
-	struct CameraCb
-	{
-		XMMATRIX view;
-
-		XMVECTOR pos;
-
-		float fov;
-		uint32_t usePrebuiltCamMat = 1;
-		uint32_t showNormal = 0;
-		uint32_t showUvs = 0;
-
-		uint32_t showTexture = 0;
-		uint32_t pad[3];
 	};
 
 	std::shared_mutex s_mutex;
@@ -268,7 +254,7 @@ static void init_pipeline()
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
-			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(CameraCb)/sizeof(int), .visibility = shader_stage::compute}),
+			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants)/sizeof(int), .visibility = shader_stage::compute}),
 		};
 
 		shader_desc shader_desc = {
@@ -1210,9 +1196,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 	}
 
-	CameraCb cb;
-	cb.view = getViewMatrix();
-	cb.pos = s_cam_pos;
+	RtConstants cb;
+	cb.viewMatrix = getViewMatrix();
+	cb.viewPos = s_cam_pos;
 	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
 	cb.showNormal = s_ui_show_normals;
@@ -1220,7 +1206,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showTexture = s_ui_show_texture;
 	if (cb.usePrebuiltCamMat)
 	{
-		cb.pos = s_view.r[3];
+		cb.viewPos = s_view.r[3];
 	}
 
 	auto get_srv = [&](scopedresourceview& srv)
@@ -1261,7 +1247,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 			s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, param_index, updates[param_index]);
 	}
 		
-	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(CameraCb)/sizeof(int), &cb);
+	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(RtConstants)/sizeof(int), &cb);
 
 	// dispatch
 	const uint32_t groupX = (width + 7) / 8;

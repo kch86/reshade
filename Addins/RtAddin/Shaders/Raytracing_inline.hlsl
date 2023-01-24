@@ -1,56 +1,7 @@
-//*********************************************************
-//
-// Copyright (c) Microsoft. All rights reserved.
-// This code is licensed under the MIT License (MIT).
-// THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
-// IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR
-// PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
-//
-//*********************************************************
-
 #ifndef RAYTRACING_HLSL
 #define RAYTRACING_HLSL
 
-#define HLSL
-#include "RaytracingHlslCompat.h"
-//
-//// Subobjects definitions at library scope. 
-//GlobalRootSignature MyGlobalRootSignature =
-//{
-//    "DescriptorTable( UAV( u0 ) ),"                        // Output texture
-//    "SRV( t0 ),"                                           // Acceleration structure
-//    "CBV( b0 ),"                                           // g_rtScene constants
-//    "DescriptorTable( SRV( t1, numDescriptors = 2 ) )"     // Static index and vertex buffers.
-//};
-//
-//LocalRootSignature MyLocalRootSignature = 
-//{
-//    "RootConstants( num32BitConstants = 4, b1 )"           // Cube constants        
-//};
-//
-//TriangleHitGroup MyHitGroup =
-//{
-//    "",                     // AnyHit
-//    "MyClosestHitShader",   // ClosestHit
-//};
-//
-//SubobjectToExportsAssociation  MyLocalRootSignatureAssociation =
-//{
-//    "MyLocalRootSignature",  // subobject name
-//    "MyHitGroup"             // export association 
-//};
-//
-//RaytracingShaderConfig  MyShaderConfig =
-//{
-//    16, // max payload size
-//    8   // max attribute size
-//};
-//
-//RaytracingPipelineConfig MyPipelineConfig =
-//{
-//    1 // max trace recursion depth
-//};
+#include "RtShared.h"
 
 struct AttachElem
 {
@@ -73,19 +24,9 @@ Buffer<uint> g_instance_buffer : register(t0, space1);
 StructuredBuffer<Attachments> g_attachments_buffer : register(t1, space1);
 RWTexture2D<float4> g_rtOutput : register(u0);
 
-cbuffer RtConstants : register(b0)
+cbuffer constants : register(b0)
 {
-	float4x4 g_viewMatrix;
-
-	float4 g_viewPos;
-
-	float g_fov;
-	uint g_usePrebuiltCamMat;
-	uint g_showNormal;
-	uint g_showUvs;
-
-	uint g_showTexture;
-	uint3 pad0;
+	RtConstants g_constants;
 }
 
 //template <typename T> T load_buffer_elem_t(uint handle, uint byteOffset)
@@ -117,7 +58,7 @@ float3 genRayDir(uint3 tid, float2 dims)
 	float2 d = ((crd / dims) * 2.f - 1.f);
 	float aspectRatio = dims.x / dims.y;
 
-	return normalize(float3(d.x * aspectRatio * g_fov, -d.y, -1));
+	return normalize(float3(d.x * aspectRatio * g_constants.fov, -d.y, -1));
 }
 
 uint MurmurMix(uint Hash)
@@ -135,11 +76,11 @@ float3 IntToColor(uint Index)
 	uint Hash = MurmurMix(Index);
 
 	float3 Color = float3
-	(
-		(Hash >> 0) & 255,
-		(Hash >> 8) & 255,
-		(Hash >> 16) & 255
-	);
+		(
+			(Hash >> 0) & 255,
+			(Hash >> 8) & 255,
+			(Hash >> 16) & 255
+			);
 
 	return Color * (1.0f / 255.0f);
 }
@@ -215,7 +156,7 @@ float3 fetchTexture(uint instance_id, float2 uv)
 	uint width, height;
 	tex0.GetDimensions(width, height);
 
-	uint2 index = uint2(uv * float2(width, height) + 0.5);	
+	uint2 index = uint2(uv * float2(width, height) + 0.5);
 
 	return tex0[index].rgb;
 }
@@ -223,30 +164,30 @@ float3 fetchTexture(uint instance_id, float2 uv)
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
-    //trace
+	//trace
 #if 1
 
 	uint width, height;
 	g_rtOutput.GetDimensions(width, height);
 
-	 // a. Configure
-	//RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
+	// a. Configure
+   //RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
 	RayQuery<RAY_FLAG_FORCE_OPAQUE> query;
 
 	uint ray_flags = 0; // Any this ray requires in addition those above.
 	uint ray_instance_mask = 0xffffffff;
 
 	float3 raydir = genRayDir(tid, float2(width, height));
-	raydir = mul(float4(raydir, 0.0), g_viewMatrix).xyz;
+	raydir = mul(float4(raydir, 0.0), g_constants.viewMatrix).xyz;
 
-	float3 rayorigin = g_viewPos.xyz;
+	float3 rayorigin = g_constants.viewPos.xyz;
 
-	if (g_usePrebuiltCamMat)
+	if (g_constants.usePrebuiltCamMat)
 	{
 		//get far end of the ray
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);
 		float4 ndc = float4(d.x, -d.y, 1.0, 1.0);
-		float4 worldpos = mul(ndc, g_viewMatrix);
+		float4 worldpos = mul(ndc, g_constants.viewMatrix);
 		worldpos.xyz /= worldpos.w;
 
 		raydir = normalize(worldpos.xyz - rayorigin);
@@ -305,20 +246,20 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
-		if (g_showNormal)
+		if (g_constants.showNormal)
 		{
 			value.rgb = fetchNormal(query.CommittedInstanceID(),
-								    query.CommittedPrimitiveIndex(),
-									(float3x3)query.CommittedObjectToWorld3x4());
+				query.CommittedPrimitiveIndex(),
+				(float3x3)query.CommittedObjectToWorld3x4());
 		}
-		else if (g_showUvs)
+		else if (g_constants.showUvs)
 		{
 			float2 uvs = fetchUvs(query.CommittedInstanceID(),
-								  query.CommittedPrimitiveIndex(),
-								  query.CommittedTriangleBarycentrics());
+				query.CommittedPrimitiveIndex(),
+				query.CommittedTriangleBarycentrics());
 			value.rgb = float3(uvs, 0.0);
 		}
-		else if (g_showTexture)
+		else if (g_constants.showTexture)
 		{
 			float2 uvs = fetchUvs(query.CommittedInstanceID(),
 								  query.CommittedPrimitiveIndex(),
