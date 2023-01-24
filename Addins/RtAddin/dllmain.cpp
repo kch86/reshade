@@ -152,7 +152,13 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
 	std::unordered_set<uint64_t> s_ps_texbinding_map;
+
+	const uint64_t UiVsHash = 9844442386646808009;
+	const uint64_t UiPsHash = 15657049591930699901;
+	std::unordered_set<uint64_t> s_ui_pipelines;
+
 	bool s_staticgeo_vs_pipeline_is_bound = false;
+	bool s_null_vs_ps_has_been_bound = false;
 	pipeline s_current_vs_pipeline;
 	pipeline s_current_ps_pipeline;
 	bvh_manager s_bvh_manager;
@@ -497,6 +503,10 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 			{
 				s_static_geo_vs_pipelines.insert(handle.handle);
 			}
+			else if (hash == UiVsHash)
+			{
+				s_ui_pipelines.insert(handle.handle);
+			}
 		}
 		else if (object.type == pipeline_subobject_type::pixel_shader)
 		{
@@ -504,6 +514,11 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 			XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
 
 			s_ps_hash_map[handle.handle] = hash;
+
+			if (hash == UiPsHash)
+			{
+				s_ui_pipelines.insert(handle.handle);
+			}
 		}
 	}
 #endif
@@ -519,9 +534,6 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 {
 	if (filter_command())
 		return;
-
-	s_current_vs_pipeline = { 0 };
-	s_current_ps_pipeline = { 0 };
 
 	if (type == pipeline_stage::input_assembler)
 	{
@@ -826,7 +838,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		s_view = XMMatrixInverse(0, s_view);
 	}
 
-	if (s_current_vs_pipeline.handle != 0)
+	if (s_current_vs_pipeline.handle != 0 && (stages & shader_stage::vertex) != 0)
 	{
 		// some vs do not have the WVP at slot 0
 		// we hashed those shaders earlier and check them here
@@ -896,13 +908,25 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 	}
 }
 
-bool g_drawBeforeUi = false;
+bool g_drawBeforeUi = true;
 static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
+	auto on_exit = sg::make_scope_guard([&]() {
+		s_draw_count++;
+	});
+
 	auto &data = cmd_list->get_private_data<command_list_data>();
 
-	//if (data.has_multiple_rtvs || data.current_main_rtv == 0)
-		//return; // Ignore when game is rendering to multiple render targets simultaneously
+	// null pipelines are bound and a draw occurs right before the ui is drawn
+	if (s_current_vs_pipeline.handle == 0 && s_current_ps_pipeline.handle == 0)
+	{
+		s_null_vs_ps_has_been_bound = true;
+	}
+
+	if (s_current_rtv.handle == 0)
+	{
+		return false;
+	}
 
 	device *const device = cmd_list->get_device();
 	auto &dev_data = device->get_private_data<device_data>();
@@ -917,8 +941,7 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
 	// This is not perfect, since there may be multiple command lists and this will try and render effects in every single one ...
-	//if (data.current_render_pass_index++ == (dev_data.last_render_pass_count - dev_data.offset_from_last_pass))
-	if(g_drawBeforeUi && !dev_data.hasRenderedThisFrame && data.current_dsv == 0)
+	if(g_drawBeforeUi && s_null_vs_ps_has_been_bound && s_ui_pipelines.contains(s_current_vs_pipeline.handle) && s_ui_pipelines.contains(s_current_ps_pipeline.handle))
 	{
 		// TODO: find last valid 3d render target and apply that before drawing
 		const auto &current_state = cmd_list->get_private_data<state_block>();
@@ -926,7 +949,7 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 		dev_data.main_runtime->render_effects(cmd_list, data.current_main_rtv);
 
 		// Re-apply state to the command-list, as it may have been modified by the call to 'render_effects'
-		//current_state.apply(cmd_list);
+		current_state.apply(cmd_list);
 		dev_data.hasRenderedThisFrame = true;
 	}
 
@@ -1058,6 +1081,7 @@ static void on_present(effect_runtime *runtime)
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
+	s_null_vs_ps_has_been_bound = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
 	s_currentTextureBindings.slots[0] = { 0 };

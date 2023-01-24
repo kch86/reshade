@@ -25,3 +25,4 @@ todo:
 - use amd d3d12 memory allocator
 - if i don't mark buffers as dynamic, can I then unwrap them?
 -- hard to do this in advance, I'd only know on map if the buffer needed to be dynamic...
+- drawing before the ui means the buffer update for particles isn't yet done
