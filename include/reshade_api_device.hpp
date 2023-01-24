@@ -307,7 +307,15 @@ namespace reshade::api
 		/// </summary>
 		virtual resource_view_desc get_resource_view_desc(resource_view view) const = 0;
 
+		/// <summary>
+		/// Gets the descriptor heap index of the resource view
+		/// </summary>
 		virtual uint32_t get_resource_view_descriptor_index(resource_view view) const { (void)view; return 0; }
+
+		/// <summary>
+		/// Get the number of allocated descriptoer heap indices (from static or dynamic heaps)
+		/// </summary>
+		virtual uint32_t get_descriptor_count(bool static_heap) const { (void)static_heap; return 0; }
 
 		/// <summary>
 		/// Maps the memory of a buffer resource into application address space.

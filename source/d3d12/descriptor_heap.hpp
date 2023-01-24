@@ -299,6 +299,10 @@ namespace reshade::d3d12
 			return handle;
 		}
 
+		uint32_t get_static_alloc_count() const { return _current_static_index; }
+
+		uint32_t get_temp_alloc_count() const { return _current_transient_tail % transient_size; }
+
 		ID3D12DescriptorHeap *get() const { assert(_heap != nullptr); return _heap.get(); }
 
 	private:

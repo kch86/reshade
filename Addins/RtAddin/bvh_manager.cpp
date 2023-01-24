@@ -310,9 +310,15 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 			{
 				const Attachment::Elem &elem = m_attachments_flat[i].data[att];
 				if (elem.srv.handle != 0)
-					data[att].srv = d->get_resource_view_descriptor_index(elem.srv);
+				{
+					const uint32_t index = d->get_resource_view_descriptor_index(elem.srv);
+					assert(index < d->get_descriptor_count(true));
+					data[att].srv = index;
+				}
 				else
+				{
 					data[att].srv = 0x7FFFFFFF;
+				}					
 
 				data[att].offset = elem.offset;
 				data[att].stride = elem.stride;

@@ -562,6 +562,16 @@ uint32_t reshade::d3d12::device_impl::get_resource_view_descriptor_index(api::re
 	return 0xffffffff;
 }
 
+uint32_t reshade::d3d12::device_impl::get_descriptor_count(bool static_heap) const
+{
+	if (static_heap)
+	{
+		return _gpu_view_heap.get_static_alloc_count();
+	}
+
+	return _gpu_view_heap.get_temp_alloc_count();
+}
+
 bool reshade::d3d12::device_impl::map_buffer_region(api::resource resource, uint64_t offset, uint64_t, api::map_access access, void **out_data)
 {
 	if (out_data == nullptr)

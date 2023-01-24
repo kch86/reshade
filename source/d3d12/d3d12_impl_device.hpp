@@ -43,6 +43,7 @@ namespace reshade::d3d12
 		api::resource get_resource_from_view(api::resource_view view) const final;
 		api::resource_view_desc get_resource_view_desc(api::resource_view view) const final;
 		uint32_t get_resource_view_descriptor_index(api::resource_view view) const final;
+		uint32_t get_descriptor_count(bool static_heap) const final;
 
 		bool map_buffer_region(api::resource resource, uint64_t offset, uint64_t size, api::map_access access, void **out_data) final;
 		void unmap_buffer_region(api::resource resource) final;

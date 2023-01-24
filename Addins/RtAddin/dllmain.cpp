@@ -135,7 +135,7 @@ namespace
 	bool s_ui_show_rt_half = false;
 	bool s_ui_show_normals = false;
 	bool s_ui_show_uvs = false;
-	bool s_ui_show_texture = false;
+	bool s_ui_show_texture = true;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
 	float s_cam_pitch = 0.0;
