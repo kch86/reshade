@@ -29,7 +29,7 @@ namespace
 	bool ui_alwaysTraceBlasBuilds = false;
 	int ui_drawCallBegin = 0;
 	int ui_drawCallEnd = 4095;
-	int drawCallCount = 0;
+	int s_drawCallCount = 0;
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_samplers;
 	std::unordered_set<uint64_t> s_resources;
@@ -551,7 +551,7 @@ namespace
 
 static bool do_capture(bool limit_to_range=true)
 {
-	int drawId = drawCallCount;
+	int drawId = s_drawCallCount;
 	return s_do_capture && (!limit_to_range || (drawId >= (ui_drawCallBegin) && drawId <= ui_drawCallEnd));
 }
 
@@ -975,11 +975,20 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 
 static bool on_draw(command_list *, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
+	auto on_exit = sg::make_scope_guard([&]() {
+		s_drawCallCount++;
+	});
+
+	bool filter = !(s_drawCallCount >= ui_drawCallBegin && s_drawCallCount <= ui_drawCallEnd);
+
+	if (filter)
+		return true;
+
 	if (!do_capture())
 		return ui_filterDraws;
 
 	std::stringstream s;
-	s << "draw(" << vertices << ", " << instances << ", " << first_vertex << ", " << first_instance << ")";
+	s << "draw " << s_drawCallCount << " ("<< vertices << ", " << instances << ", " << first_vertex << ", " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
@@ -987,11 +996,11 @@ static bool on_draw(command_list *, uint32_t vertices, uint32_t instances, uint3
 }
 static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
 {
-	bool filter = !(drawCallCount >= ui_drawCallBegin && drawCallCount <= ui_drawCallEnd);
-	int drawId = drawCallCount;
+	bool filter = !(s_drawCallCount >= ui_drawCallBegin && s_drawCallCount <= ui_drawCallEnd);
+	int drawId = s_drawCallCount;
 
 	auto on_exit = sg::make_scope_guard([&]() {
-		drawCallCount++;
+		s_drawCallCount++;
 	});
 
 	if (filter)
@@ -1364,16 +1373,16 @@ static void on_present(effect_runtime *runtime)
 		}
 	}
 
-	drawCallCount = 0;
+	s_drawCallCount = 0;
 }
 
 static void draw_ui(reshade::api::effect_runtime *)
 {
 	ImGui::Checkbox("FilterDraws", &ui_filterDraws);
 	ImGui::Checkbox("AlwaysTraceBlasBuilds", &ui_alwaysTraceBlasBuilds);
-	ImGui::Value("DrawIndexCount: ", drawCallCount);
-	ImGui::SliderInt("DrawCallBegin: ", &ui_drawCallBegin, 0, drawCallCount);
-	ImGui::SliderInt("DrawCallEnd: ", &ui_drawCallEnd, 0, drawCallCount);
+	ImGui::Value("DrawIndexCount: ", s_drawCallCount);
+	ImGui::SliderInt("DrawCallBegin: ", &ui_drawCallBegin, 0, s_drawCallCount);
+	ImGui::SliderInt("DrawCallEnd: ", &ui_drawCallEnd, 0, s_drawCallCount);
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "API Trace";
