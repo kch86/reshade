@@ -2552,6 +2552,9 @@ void reshade::runtime::draw_gui_addons()
 	std::vector<std::string> expanded_addons;
 	config.get("ADDON", "ExpandedAddons", expanded_addons);
 
+	bool auto_expand_builtin;
+	config.get("ADDON", "AutoExpandBuiltin", auto_expand_builtin);
+
 	const float child_window_width = ImGui::GetContentRegionAvail().x;
 
 	for (addon_info &info : addon_loaded_info)
@@ -2564,7 +2567,7 @@ void reshade::runtime::draw_gui_addons()
 
 		ImGui::BeginChild(info.name.c_str(), ImVec2(child_window_width, settings_height + _imgui_context->Style.FramePadding.y * 2), true, ImGuiWindowFlags_NoScrollbar);
 
-		const bool builtin = (info.file == g_reshade_dll_path.filename().u8string());
+		const bool builtin = (info.file == g_reshade_dll_path.filename().u8string()) && auto_expand_builtin;
 
 		const auto expanded_it = std::find_if(expanded_addons.begin(), expanded_addons.end(), [&info](const std::string_view &addon_name) {
 			const size_t at_pos = addon_name.find('@');
