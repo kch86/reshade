@@ -165,11 +165,6 @@ namespace
 	int s_draw_count = 0;
 
 	bool s_d3d_debug_enabled = false;
-
-	std::vector<scopedresource> s_instance_id_buffers;
-	std::vector<scopedresourceview> s_instance_id_srvs;
-	scopedresource s_instances_buffer;
-	scopedresourceview s_instances_buffer_srv;
 }
 
 struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
@@ -252,7 +247,7 @@ static void init_pipeline()
 	{
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants)/sizeof(int), .visibility = shader_stage::compute}),
 		};
@@ -323,8 +318,6 @@ static void init_default_resources()
 	uint32_t value = 0;
 	memcpy(ptr, &value, sizeof(uint32_t));
 	s_d3d12device->unmap_buffer_region(d3d12res);
-
-	s_instance_id_buffers.push_back(scopedresource(s_d3d12device, d3d12res));
 
 	resource_view_desc view_desc(format::r32_uint, 0, 1);
 
@@ -1215,7 +1208,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	};
 
 	resource_view srvs[] = {
-		get_srv(s_instances_buffer_srv),
 		get_srv(s_attachments_srv),
 	};
 
@@ -1227,7 +1219,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 			.descriptors = &tlas_srv, // bind tlas srv
 		},
 		{
-			.count = 2,
+			.count = 1,
 			.type = descriptor_type::shader_resource_view,
 			.descriptors = srvs, // bind tlas srv
 		},
@@ -1419,12 +1411,6 @@ static void do_shutdown()
 	s_output_srv.free();
 
 	s_bvh_manager.destroy();
-
-	s_instance_id_buffers.clear();
-	s_instance_id_srvs.clear();
-
-	s_instances_buffer.free();
-	s_instances_buffer_srv.free();
 
 	s_attachments_buffer.free();
 	s_attachments_srv.free();

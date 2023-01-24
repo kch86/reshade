@@ -20,8 +20,8 @@ struct Attachments
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
-Buffer<uint> g_instance_buffer : register(t0, space1);
-StructuredBuffer<Attachments> g_attachments_buffer : register(t1, space1);
+StructuredBuffer<Attachments> g_attachments_buffer : register(t0, space1);
+
 RWTexture2D<float4> g_rtOutput : register(u0);
 
 cbuffer constants : register(b0)
