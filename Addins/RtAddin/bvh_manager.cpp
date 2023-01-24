@@ -70,7 +70,7 @@ void bvh_manager::prune_stale_geo()
 
 void bvh_manager::on_geo_updated(resource res)
 {
-	//erase from our geometry and bvh list
+	// schedule a rebuild when geo is updated
 	uint32_t count = m_geometry.size();
 	for (uint32_t i = 0; i < count; i++)
 	{
@@ -108,10 +108,11 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	}
 
 	auto result = std::find_if(m_geometry.begin(), m_geometry.end(), [&](const BlasBuildDesc &d) {
-		return desc.dynamic ?
-			(d.vb.res == desc.blas_desc.vb.res &&
-			 d.ib.res == desc.blas_desc.ib.res)
-		:
+		if (desc.dynamic)
+		{
+			return d.vb.res == desc.blas_desc.vb.res && d.ib.res == desc.blas_desc.ib.res;
+		}
+		return 
 			(d.vb.count == desc.blas_desc.vb.count &&
 			d.vb.offset == desc.blas_desc.vb.offset &&
 			d.vb.res == desc.blas_desc.vb.res &&
@@ -119,6 +120,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			d.ib.offset == desc.blas_desc.ib.offset &&
 			d.ib.res == desc.blas_desc.ib.res);
 		});
+
 	if (result == m_geometry.end())
 	{
 		scopedresource bvh = buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc);
