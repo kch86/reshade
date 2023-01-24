@@ -91,10 +91,69 @@ namespace
 		resource slots[4];
 	};
 
+	// wrapper for updatable buffers
+	// if a map_discard comes along, then we create a 2nd resource to ping pong with
+	struct DynamicResource
+	{
+		scopedresource res[2];
+		resource_desc desc;
+		device *dev;
+		uint32_t map_index = 0;
+
+		DynamicResource() = default;
+
+		DynamicResource(device* _dev, resource _res, const resource_desc& _desc)
+		{
+			res[0] = std::move(scopedresource(_dev, _res));
+			desc = _desc;
+			dev = _dev;
+		}
+
+		void set_dynamic()
+		{
+			// only supported by buffers
+			assert(desc.type == resource_type::buffer);
+			if (res[1].handle().handle == 0)
+			{
+				resource d3d12res;
+				dev->create_resource(
+					desc,
+					nullptr, resource_usage::cpu_access, &d3d12res);
+
+				res[1] = std::move(scopedresource(dev, d3d12res));
+			}
+		}
+
+		resource get_map_resource()
+		{
+			if (res[1].handle().handle)
+			{
+				map_index++;
+				uint32_t index = map_index & 1;
+				assert(index == 0 || index == 1);
+				return res[index].handle();
+			}
+
+			return res[0].handle();
+		}
+
+		resource handle()
+		{
+			if (res[1].handle().handle)
+			{
+				uint32_t index = map_index & 1;
+				assert(index == 0 || index == 1);
+				return res[1-index].handle();
+			}
+
+			return res[0].handle();
+		}
+	};
+
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
-	std::unordered_map<uint64_t, scopedresource> s_shadow_resources;
+	std::unordered_map<uint64_t, DynamicResource> s_shadow_resources;
 	std::unordered_map<uint64_t, MapRegion> s_mapped_resources;
 	std::unordered_set<uint64_t> s_dynamic_resources;
 	std::unordered_map<uint64_t, StreamInfo> s_inputLayoutPipelines;
@@ -595,12 +654,13 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 
 	if (geo_buffer)
 	{
+		resource_desc new_desc = resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage);
 		resource d3d12res;
 		s_d3d12device->create_resource(
-			resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage),
+			new_desc,
 			nullptr, resource_usage::cpu_access, &d3d12res);
 
-		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc);
 	}
 	else if (texture)
 	{
@@ -612,7 +672,7 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 			new_desc,
 			nullptr, resource_usage::shader_resource, &d3d12res);
 
-		s_shadow_resources[handle.handle] = std::move(scopedresource(s_d3d12device, d3d12res));
+		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc);
 	}
 }
 static void on_destroy_resource(device *device, resource handle)
@@ -623,25 +683,25 @@ static void on_destroy_resource(device *device, resource handle)
 	s_resources.erase(handle.handle);
 }
 
-void on_map_buffer_region(device *device, resource resource, uint64_t offset, uint64_t size, map_access access, void **data)
+void on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
-	resource_desc desc = device->get_resource_desc(resource);
+	resource_desc desc = device->get_resource_desc(handle);
 
 	if (desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer)
 	{
-		if (s_resources.find(resource.handle) != s_resources.end())
-		{
-			
-			s_mapped_resources[resource.handle] = MapRegion{
+		if (s_resources.find(handle.handle) != s_resources.end())
+		{			
+			s_mapped_resources[handle.handle] = MapRegion{
 				.buffer = MapRegion::Buffer{
 					.data = *data
 				}
 			};
 			if (access == map_access::write_discard)
 			{
-				s_dynamic_resources.insert(resource.handle);
+				s_dynamic_resources.insert(handle.handle);
+				s_shadow_resources[handle.handle].set_dynamic();
 			}
 		}
 	}	
@@ -658,24 +718,29 @@ void on_unmap_buffer_region(device *device, resource handle)
 	//create shadow copy
 	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
 	{
-		const MapRegion& region = s_mapped_resources[handle.handle];
-
-		const resource_desc& desc = s_resources[handle.handle];
-
-		auto iter = s_shadow_resources.find(handle.handle);
-		assert(iter != s_shadow_resources.end());
-		resource d3d12res = iter->second.handle();
-
-		// TODO/HACK:
-		// this is kind of bad what we're doing here. you should never read from a mapped pointer
-		// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
-		void *ptr;
-		s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
-		memcpy(ptr, region.buffer.data, (size_t)desc.buffer.size);
-		s_d3d12device->unmap_buffer_region(d3d12res);
-
 		if (!s_ui_pause)
+		{
+			const MapRegion &region = s_mapped_resources[handle.handle];
+
+			const resource_desc &desc = s_resources[handle.handle];
+
+			auto iter = s_shadow_resources.find(handle.handle);
+			assert(iter != s_shadow_resources.end());
+			resource d3d12res = iter->second.get_map_resource();
+
+			// TODO/HACK:
+			// this is kind of bad what we're doing here. you should never read from a mapped pointer
+			// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
+			// we could instead allocate cpu memory in the map and return to the calling app
+			// then do a real map/unmap here
+			void *ptr;
+			s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
+			memcpy(ptr, region.buffer.data, (size_t)desc.buffer.size);
+			s_d3d12device->unmap_buffer_region(d3d12res);
+
 			s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
+		}
+		
 		s_mapped_resources.erase(handle.handle);
 	}
 }
