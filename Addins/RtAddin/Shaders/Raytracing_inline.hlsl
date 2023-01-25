@@ -1,12 +1,9 @@
-#ifndef RAYTRACING_HLSL
-#define RAYTRACING_HLSL
-
 #include "RtShared.h"
 
 struct AttachElem
 {
 	uint id;
-	uint offset; // uint bytes
+	uint offset; // in bytes, for buffers this is a multiple of uint
 	uint stride; // bytes
 	uint format;
 };
@@ -110,7 +107,7 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 
 	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
 	n = mul(transform, n);
-	return n * 0.5 + 0.5;
+	return normalize(n);
 }
 
 float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
@@ -164,14 +161,11 @@ float3 fetchTexture(uint instance_id, float2 uv)
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
-	//trace
 #if 1
 
 	uint width, height;
 	g_rtOutput.GetDimensions(width, height);
 
-	// a. Configure
-   //RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
 	RayQuery<RAY_FLAG_FORCE_OPAQUE> query;
 
 	uint ray_flags = 0; // Any this ray requires in addition those above.
@@ -193,20 +187,13 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		raydir = normalize(worldpos.xyz - rayorigin);
 	}
 
-	// b. Initialize  - hardwired here to deliver minimal sample code.
 	RayDesc ray;
-	ray.TMin = 1e-5f;
-	ray.TMax = 1e10f;
+	ray.TMin = 1e-5;
+	ray.TMax = 1000.0;
 	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 
 	query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
-
-	// c. Cast 
-
-	// Proceed() is where behind-the-scenes traversal happens, including the heaviest of any driver inlined code.
-	// In this simplest of scenarios, Proceed() only needs to be called once rather than a loop.
-	// Based on the template specialization above, traversal completion is guaranteed.
 
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
 
@@ -214,20 +201,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	uint iter = 0;
 	while (query.Proceed() && iter < MaxIter)
 	{
-		// d. Examine and act on the result of the traversal.
-
 		if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 		{
-			// TODO: Grab ray parameters & sample accordingly.
-
-			/* ShadeMyTriangleHit(
-				query.CommittedInstanceIndex(),
-				query.CommittedPrimitiveIndex(),
-				query.CommittedGeometryIndex(),
-				query.CommittedRayT(),
-				query.CommittedTriangleBarycentrics(),
-				query.CommittedTriangleFrontFace() );*/
-
 			value = float4(0, 1, 0, 1);
 			//TODO: call commit hit here
 			break;
@@ -252,6 +227,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			value.rgb = fetchNormal(query.CommittedInstanceID(),
 				query.CommittedPrimitiveIndex(),
 				(float3x3)query.CommittedObjectToWorld3x4());
+
+			value.rgb = value.rgb * 0.5 + 0.5;
 		}
 		else if (g_constants.showUvs)
 		{
@@ -277,8 +254,16 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (!miss)
 	{
-		ray.Origin = ray.Origin + ray.Direction * query.CommittedRayT();
+		float3 n = fetchNormal(query.CommittedInstanceID(),
+							   query.CommittedPrimitiveIndex(),
+							   (float3x3)query.CommittedObjectToWorld3x4());
+
+		float3 origin = ray.Origin + ray.Direction * query.CommittedRayT();
+		origin = origin + n * length(origin - ray.Origin) * 0.00001;
+
+		ray.Origin = origin;
 		ray.Direction = normalize(g_constants.sunDirection);
+		
 		ray_flags |= RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
 		query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
 		query.Proceed();
@@ -293,10 +278,5 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	float4 value = float4(1.0, 0.2, 1.0, 1.0);
 #endif
 
-    // Write the raytraced color to the output texture.
-    //g_rtOutput[tid.xy] = float4(1.0, 0.2, 0.2, 1.0);
 	g_rtOutput[tid.xy] = value;
 }
-
-
-#endif // RAYTRACING_HLSL

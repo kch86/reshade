@@ -28,6 +28,12 @@
 using namespace reshade::api;
 using namespace DirectX;
 
+namespace math
+{
+	constexpr float DegToRad = XM_PI / 180.0f;
+	constexpr float RadToDeg = 180.0f / XM_PI;
+}
+
 namespace
 {
 	struct MapRegion
@@ -1233,6 +1239,19 @@ XMMATRIX getViewMatrix()
 	return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
 }
 
+XMFLOAT3 getSunDirection(float azimuth, float elevation)
+{
+	float sinTheta;
+	float cosTheta;
+	XMScalarSinCos(&sinTheta, &cosTheta, azimuth * math::DegToRad);
+
+	float sinPhi;
+	float cosPhi;
+	XMScalarSinCos(&sinPhi, &cosPhi, elevation * math::DegToRad);
+
+	return XMFLOAT3(sinTheta * cosPhi, cosTheta * cosPhi, sinPhi);
+}
+
 static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 {
 	if (s_width != width || s_height != height)
@@ -1285,7 +1304,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
 	cb.showTexture = s_ui_show_texture;
-	cb.sunDirection = XMFLOAT3(sinf(s_ui_sun_azimuth * XM_PI / 180.0f), cosf(s_ui_sun_elevation * XM_PI / 180.0f), 1.0);
+	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	if (cb.usePrebuiltCamMat)
 	{
 		cb.viewPos = s_view.r[3];
@@ -1477,13 +1496,15 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 	ImGui::Checkbox("Show texture", &s_ui_show_texture);
 
-	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, -180.0f, 180.0f);
-	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, 0.0f, 90.0f);
+	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);
+	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, -90.0f, 90.0f);
 }
 
 static void on_init_runtime(effect_runtime *runtime)
 {
 	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
+	reshade::config_get_value(runtime, "LIGHTING", "SunAzimuth", s_ui_sun_azimuth);
+	reshade::config_get_value(runtime, "LIGHTING", "SunElevation", s_ui_sun_elevation);
 }
 
 static void do_init()
