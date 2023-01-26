@@ -6,9 +6,11 @@ constexpr uint32_t right = 0;
 constexpr uint32_t up = 1;
 constexpr uint32_t look = 2;
 
-void FpsCamera::init(float fov, float aspect)
+void FpsCamera::init(float _fov, float _aspect)
 {
-	proj = XMMatrixPerspectiveFovRH(fov, aspect, 0.1f, 5000.0f);
+	fov = _fov;
+	aspect = _aspect;
+	proj = XMMatrixTranspose(XMMatrixPerspectiveFovLH(fov, aspect, 0.1f, 5000.0f));
 	view = XMMatrixIdentity();
 	pos = XMVectorZero();
 
@@ -17,9 +19,22 @@ void FpsCamera::init(float fov, float aspect)
 	view.r[look] = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 }
 
-void FpsCamera::look_at(const DirectX::XMVECTOR &pos, const DirectX::XMVECTOR &target)
+void FpsCamera::place(XMVECTOR _pos)
 {
-	view = XMMatrixInverse(nullptr, XMMatrixLookAtLH(pos, target, XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f)));
+	pos = _pos;
+}
+
+void FpsCamera::look_at(XMVECTOR _pos, XMVECTOR target, XMVECTOR _up)
+{
+	pos = _pos;
+
+	XMVECTOR L = XMVector3Normalize(target - pos);
+	XMVECTOR R = XMVector3Cross(L, _up);
+	XMVECTOR U = XMVector3Cross(R, L);
+
+	view.r[right] = R;
+	view.r[up] = U;
+	view.r[look] = L;
 }
 
 void FpsCamera::rotate(float deltaX, float deltaY)
@@ -27,62 +42,99 @@ void FpsCamera::rotate(float deltaX, float deltaY)
 	//allow rotation on the up vector (z)
 	if (fabs(deltaX) > 0.0f)
 	{
-		view = XMMatrixRotationAxis(XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f), deltaX) * view;
-		//view = view * XMMatrixRotationAxis(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), deltaX);
+		XMMATRIX R = XMMatrixRotationZ(deltaX);
+		view.r[right] = XMVector3Transform(view.r[right], R);
+		view.r[up] = XMVector3Transform(view.r[up], R);
+		view.r[look] = XMVector3Transform(view.r[look], R);
 	}		
 
-	// now rotate on the side vector (y)
+	// now rotate on the side vector (x)
 	if (fabs(deltaY) > 0.0f)
 	{
-		XMVECTOR &rightv = view.r[right];
-		view = XMMatrixRotationAxis(rightv, deltaY) * view;
-		//view = view * XMMatrixRotationAxis(right, deltaY);
+		XMMATRIX R = XMMatrixRotationAxis(view.r[right], deltaY);
+		view.r[up] = XMVector3Transform(view.r[up], R);
+		view.r[look] = XMVector3Transform(view.r[look], R);
 	}
 }
 
 void FpsCamera::move_forward(float step)
 {
-	XMMATRIX t = XMMatrixTranspose(view);
-	XMVECTOR &forward = t.r[look];
-	pos += forward * step;
+	pos += view.r[look] * step;
 }
 
-DirectX::XMVECTOR FpsCamera::getPos()
+void FpsCamera::set_fov(float _fov)
+{
+	if (fov != _fov)
+	{
+		fov = _fov;
+		proj = XMMatrixTranspose(XMMatrixPerspectiveFovLH(fov, aspect, 0.1f, 5000.0f));
+	}
+}
+
+DirectX::XMVECTOR FpsCamera::get_pos()
 {
 	return pos;
 }
 
-DirectX::XMMATRIX FpsCamera::getView()
+DirectX::XMMATRIX FpsCamera::get_view_transform()
 {
+	normalize();
 	return view;
 }
 
-DirectX::XMMATRIX FpsCamera::getInvViewProj()
+DirectX::XMMATRIX FpsCamera::get_viewproj()
 {
-	XMMATRIX viewtrans = XMMatrixTranslationFromVector(pos);
-	XMMATRIX viewproj = view * viewtrans * proj;
-	return XMMatrixInverse(nullptr, viewproj);
+	normalize();
+
+	auto dot = [](XMVECTOR &a, XMVECTOR &b) {
+		return XMVectorGetX(XMVector3Dot(a, b));
+	};
+
+	float x = -dot(pos, view.r[right]);
+	float y = -dot(pos, view.r[up]);
+	float z = -dot(pos, view.r[look]);
+
+	view.r[right] = XMVectorSetW(view.r[right], x);
+	view.r[up] = XMVectorSetW(view.r[up], y);
+	view.r[look] = XMVectorSetW(view.r[look], z);
+
+	// we have row vectors so invert the mult order
+	return proj * view;
 }
 
 void FpsCamera::normalize()
 {
-	XMVECTOR r = view.r[right];
-	XMVECTOR u = view.r[up];
-	XMVECTOR l = view.r[look];
+	view.r[look] = XMVector3Normalize(view.r[look]);
 
-	float x = XMVectorGetW(view.r[0]);
-	float y = XMVectorGetW(view.r[1]);
-	float z = XMVectorGetW(view.r[2]);
+	view.r[up] = XMVector3Cross(view.r[right], view.r[look]);
+	view.r[up] = XMVector3Normalize(view.r[up]);
 
-	r = XMVector3Normalize(r);
-	u = XMVector3Normalize(u);
-	l = XMVector3Normalize(l);
+	view.r[right] = XMVector3Cross(view.r[look], view.r[up]);
+	view.r[right] = XMVector3Normalize(view.r[right]);
+}
 
-	view.r[right] = r;
-	view.r[up] = u;
-	view.r[look] = l;
+void GameCamera::set_view(DirectX::XMFLOAT3X4 &affine_view)
+{
+	view = XMMATRIX(
+			XMLoadFloat4((XMFLOAT4 *)affine_view.m[0]),
+			XMLoadFloat4((XMFLOAT4 *)affine_view.m[1]),
+			XMLoadFloat4((XMFLOAT4 *)affine_view.m[2]),
+			XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f));
+	view = XMMatrixTranspose(view);
+	view = XMMatrixInverse(0, view);
+}
 
-	view.r[0] = XMVectorSetW(view.r[0], x);
-	view.r[1] = XMVectorSetW(view.r[1], y);
-	view.r[2] = XMVectorSetW(view.r[2], z);
+void GameCamera::set_viewproj(DirectX::XMMATRIX &_viewproj)
+{
+	viewproj = _viewproj;
+}
+
+DirectX::XMVECTOR GameCamera::get_pos()
+{
+	return view.r[3];
+}
+
+DirectX::XMMATRIX& GameCamera::get_viewproj()
+{
+	return viewproj;
 }

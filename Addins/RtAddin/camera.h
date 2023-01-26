@@ -5,16 +5,36 @@
 struct FpsCamera
 {
 	void init(float fov, float aspect);
-	void look_at(const DirectX::XMVECTOR &pos, const DirectX::XMVECTOR &target);
+	void place(DirectX::XMVECTOR pos);
+	void look_at(DirectX::XMVECTOR pos, DirectX::XMVECTOR target, DirectX::XMVECTOR up);
 	void rotate(float deltaX, float deltaY);
 	void move_forward(float step);
+	void set_fov(float fov);
 
-	DirectX::XMVECTOR getPos();
-	DirectX::XMMATRIX getView();
-	DirectX::XMMATRIX getInvViewProj();
+	DirectX::XMVECTOR get_pos();
+	DirectX::XMMATRIX get_view_transform();
+	DirectX::XMMATRIX get_viewproj();
 	void normalize();
 
+private:
 	DirectX::XMMATRIX view;
 	DirectX::XMMATRIX proj;
 	DirectX::XMVECTOR pos;
+
+	float fov;
+	float aspect;
+};
+
+struct GameCamera
+{
+	void set_view(DirectX::XMFLOAT3X4 &affine_view);
+	void set_viewproj(DirectX::XMMATRIX &viewproj);
+
+	DirectX::XMVECTOR get_pos();
+	DirectX::XMMATRIX& get_viewproj();
+
+private:
+	DirectX::XMVECTOR pos;
+	DirectX::XMMATRIX view;
+	DirectX::XMMATRIX viewproj;
 };

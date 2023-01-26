@@ -48,16 +48,6 @@ uint load_buffer_elem_nonuniform(uint handle, uint byteOffset)
 	return result;
 }
 
-float3 genRayDir(uint3 tid, float2 dims)
-{
-	float2 crd = float2(tid.xy);
-
-	float2 d = ((crd / dims) * 2.f - 1.f);
-	float aspectRatio = dims.x / dims.y;
-
-	return normalize(float3(d.x * aspectRatio * g_constants.fov, -d.y, 1));
-}
-
 uint MurmurMix(uint Hash)
 {
 	Hash ^= Hash >> 16;
@@ -171,12 +161,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	uint ray_flags = 0; // Any this ray requires in addition those above.
 	uint ray_instance_mask = 0xffffffff;
 
-	float3 raydir = genRayDir(tid, float2(width, height));
-	raydir = mul(float4(raydir, 0.0), g_constants.viewMatrix).xyz;
-
 	float3 rayorigin = g_constants.viewPos.xyz;
-
-	if (g_constants.usePrebuiltCamMat)
+	float3 raydir = 0.0;
 	{
 		//get far end of the ray
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);

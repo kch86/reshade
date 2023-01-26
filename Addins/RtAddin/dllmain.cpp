@@ -195,7 +195,7 @@ namespace
 	float s_ui_sun_elevation = 0.0;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
-	bool s_ui_use_viewproj = true;
+	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
 	bool s_ui_show_normals = false;
@@ -226,9 +226,8 @@ namespace
 	pipeline s_current_ps_pipeline;
 	bvh_manager s_bvh_manager;
 
-	XMMATRIX s_viewproj;
-	XMMATRIX s_view;
 	XMMATRIX s_current_wvp = XMMatrixIdentity();
+	GameCamera s_game_camera;
 	FpsCamera s_camera;
 	bool s_got_viewproj = false;
 
@@ -896,16 +895,9 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		s_got_viewproj = true;
 
 		XMMATRIX *matrices = (XMMATRIX *)values;
-		s_viewproj = matrices[0];
-
 		XMFLOAT3X4 viewAffine = *((XMFLOAT3X4 *)&matrices[1]);
-		s_view = XMMATRIX(
-			XMLoadFloat4((XMFLOAT4*)viewAffine.m[0]),
-			XMLoadFloat4((XMFLOAT4*)viewAffine.m[1]),
-			XMLoadFloat4((XMFLOAT4*)viewAffine.m[2]),
-			XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f));
-		s_view = XMMatrixTranspose(s_view);
-		s_view = XMMatrixInverse(0, s_view);
+		s_game_camera.set_view(viewAffine);
+		s_game_camera.set_viewproj(matrices[0]);
 	}
 
 	if (s_current_vs_pipeline.handle != 0 && (stages & shader_stage::vertex) != 0)
@@ -1170,7 +1162,7 @@ static void update_rt()
 	s_tlas.free();
 
 	s_tlas = s_bvh_manager.build_tlas(
-		s_got_viewproj ? &s_viewproj : nullptr,
+		s_got_viewproj ? &s_game_camera.get_viewproj() : nullptr,
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
 
@@ -1204,17 +1196,28 @@ void updateCamera(effect_runtime *runtime)
 	{
 		s_camera.move_forward(-0.5f);
 	}
+
+	s_camera.set_fov(s_ui_fov * math::DegToRad);
 }
 
 XMMATRIX getViewMatrix()
 {
-	if (s_ui_use_viewproj)
+	if (s_ui_use_game_camera)
 	{
-		return XMMatrixInverse(0, s_viewproj);
+		return XMMatrixInverse(0, s_game_camera.get_viewproj());
 	}
 
-	//return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
-	return s_camera.getView();
+	return XMMatrixInverse(0, s_camera.get_viewproj());
+}
+
+XMVECTOR getViewPos()
+{
+	if (s_ui_use_game_camera)
+	{
+		return s_game_camera.get_pos();
+	}
+
+	return s_camera.get_pos();
 }
 
 XMFLOAT3 getSunDirection(float azimuth, float elevation)
@@ -1276,18 +1279,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
-	//cb.viewPos = s_cam_pos;
-	cb.viewPos = s_camera.getPos();
-	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
-	cb.usePrebuiltCamMat = s_ui_use_viewproj;
+	cb.viewPos = getViewPos();
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
 	cb.showTexture = s_ui_show_texture;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
-	if (cb.usePrebuiltCamMat)
-	{
-		cb.viewPos = s_view.r[3];
-	}
 
 	auto get_srv = [&](scopedresourceview& srv)
 	{
@@ -1463,7 +1459,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 
-	ImGui::Checkbox("UseViewProjMat", &s_ui_use_viewproj);
+	ImGui::Checkbox("UseGameCamera", &s_ui_use_game_camera);
 	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
 	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
 	ImGui::Checkbox("Render Before UI", &s_ui_render_before_ui);
@@ -1484,17 +1480,20 @@ static void on_init_runtime(effect_runtime *runtime)
 	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
 	reshade::config_get_value(runtime, "LIGHTING", "SunAzimuth", s_ui_sun_azimuth);
 	reshade::config_get_value(runtime, "LIGHTING", "SunElevation", s_ui_sun_elevation);
+
+	uint32_t width;
+	uint32_t height;
+	runtime->get_screenshot_width_and_height(&width, &height);
+
+	s_camera.init(60.0f * math::DegToRad, width / float(height));
+	s_camera.place(XMVectorSet(0.0f, 0.0f, 5.0f, 0.0f));
+	s_camera.move_forward(-7.0f);
 }
 
 static void do_init()
 {
 	init_vs_mappings();
 	init_ps_mappings();
-
-	s_camera.init(60.0f, 1.0f);
-
-	s_camera.pos = XMVectorSet(0.0f, 0.0f, 5.0f, 0.0f);
-	s_camera.move_forward(-7.0f);
 }
 
 static void do_shutdown()

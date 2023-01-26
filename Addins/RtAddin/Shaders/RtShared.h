@@ -30,12 +30,11 @@ struct RtConstants
 
 	float4 viewPos;
 
-	float fov;
-	uint usePrebuiltCamMat;
 	uint showNormal;
 	uint showUvs;
-
 	uint showTexture;
+	uint pad;
+
 	float3 sunDirection;
 };
 
