@@ -24,6 +24,7 @@
 #include "CompiledShaders/Raytracing_blit_ps.hlsl.h"
 #include "Shaders/RtShared.h"
 #include "hash.h"
+#include "camera.h"
 
 using namespace reshade::api;
 using namespace DirectX;
@@ -203,9 +204,6 @@ namespace
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
 	bool s_ui_render_before_ui = true;
-	float s_cam_pitch = 0.0;
-	float s_cam_yaw = 0.0;
-	XMVECTOR s_cam_pos = XMVectorZero();
 
 	uint32_t s_mouse_x = 0;
 	uint32_t s_mouse_y = 0;
@@ -231,6 +229,7 @@ namespace
 	XMMATRIX s_viewproj;
 	XMMATRIX s_view;
 	XMMATRIX s_current_wvp = XMMatrixIdentity();
+	FpsCamera s_camera;
 	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
@@ -1194,38 +1193,16 @@ void updateCamera(effect_runtime *runtime)
 
 	if (s_ctrl_down)
 	{
-		s_cam_pitch += deltaY;
-		s_cam_yaw += deltaX;
+		s_camera.rotate(deltaX, deltaY);
 	}	
-
-	constexpr float limit = XM_PIDIV2 - 0.01f;
-	s_cam_pitch = max(-limit, s_cam_pitch);
-	s_cam_pitch = min(+limit, s_cam_pitch);
-
-	// keep longitude in sane range by wrapping
-	if (s_cam_yaw > XM_PI)
-	{
-		s_cam_yaw -= XM_2PI;
-	}
-	else if (s_cam_yaw < -XM_PI)
-	{
-		s_cam_yaw += XM_2PI;
-	}
-
-	float y = sinf(s_cam_pitch);
-	float r = cosf(s_cam_pitch);
-	float z = r * cosf(s_cam_yaw);
-	float x = r * sinf(s_cam_yaw);
-
-	XMVECTOR dir = XMVectorSet(x, y, z, 0.0f) * XMVectorReplicate(1.0f);
 
 	if (runtime->is_key_down('W'))
 	{
-		s_cam_pos += dir;
+		s_camera.move_forward(0.5f);
 	}
 	if (runtime->is_key_down('S'))
 	{
-		s_cam_pos -= dir;
+		s_camera.move_forward(-0.5f);
 	}
 }
 
@@ -1236,7 +1213,8 @@ XMMATRIX getViewMatrix()
 		return XMMatrixInverse(0, s_viewproj);
 	}
 
-	return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
+	//return XMMatrixRotationRollPitchYaw(s_cam_pitch, s_cam_yaw, 0.0);
+	return s_camera.getView();
 }
 
 XMFLOAT3 getSunDirection(float azimuth, float elevation)
@@ -1298,7 +1276,8 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
-	cb.viewPos = s_cam_pos;
+	//cb.viewPos = s_cam_pos;
+	cb.viewPos = s_camera.getPos();
 	cb.fov = tan(s_ui_fov * XM_PI / 180.0f);
 	cb.usePrebuiltCamMat = s_ui_use_viewproj;
 	cb.showNormal = s_ui_show_normals;
@@ -1511,6 +1490,11 @@ static void do_init()
 {
 	init_vs_mappings();
 	init_ps_mappings();
+
+	s_camera.init(60.0f, 1.0f);
+
+	s_camera.pos = XMVectorSet(0.0f, 0.0f, 5.0f, 0.0f);
+	s_camera.move_forward(-7.0f);
 }
 
 static void do_shutdown()

@@ -55,7 +55,7 @@ float3 genRayDir(uint3 tid, float2 dims)
 	float2 d = ((crd / dims) * 2.f - 1.f);
 	float aspectRatio = dims.x / dims.y;
 
-	return normalize(float3(d.x * aspectRatio * g_constants.fov, -d.y, -1));
+	return normalize(float3(d.x * aspectRatio * g_constants.fov, -d.y, 1));
 }
 
 uint MurmurMix(uint Hash)

@@ -36,6 +36,9 @@
     <ClCompile Include="hash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="state_tracking.hpp">
@@ -64,6 +67,9 @@
     </ClInclude>
     <ClInclude Include="Shaders\RtShared.h">
       <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="camera.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

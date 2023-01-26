@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bvh_manager.cpp" />
+    <ClCompile Include="camera.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hash.cpp" />
     <ClCompile Include="raytracing.cpp" />
@@ -159,6 +160,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bvh_manager.h" />
+    <ClInclude Include="camera.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="dxhelpers.h" />
     <ClInclude Include="hash.h" />
