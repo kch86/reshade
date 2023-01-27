@@ -18,6 +18,7 @@ void bvh_manager::update()
 void bvh_manager::destroy()
 {
 	m_geometry.clear();
+	m_geo_state.clear();
 	m_bvhs.clear();
 	m_instances.clear();
 	m_attachments.clear();
@@ -38,7 +39,7 @@ void bvh_manager::prune_stale_geo()
 	uint32_t count = m_geometry.size();
 	for (uint32_t i = 0; i < count; i++)
 	{
-		if (m_needs_rebuild[i] && (m_frame_id - m_last_rebuild[i]) > 100)
+		if (m_geo_state[i].needs_rebuild && (m_frame_id - m_geo_state[i].last_rebuild) > 100)
 		{
 			m_geometry[i] = m_geometry[count - 1];
 
@@ -50,8 +51,7 @@ void bvh_manager::prune_stale_geo()
 			m_attachments[i].data.clear();
 			m_attachments[i].data = std::move(m_attachments[count - 1].data);
 
-			m_needs_rebuild[i] = m_needs_rebuild[count - 1];
-			m_last_rebuild[i] = m_last_rebuild[count - 1];
+			m_geo_state[i] = m_geo_state[count - 1];
 
 			//since we moved the last one here, we need to check i again
 			--i;
@@ -64,8 +64,7 @@ void bvh_manager::prune_stale_geo()
 	m_bvhs.resize(count);
 	m_instances.resize(count);
 	m_attachments.resize(count);
-	m_needs_rebuild.resize(count);
-	m_last_rebuild.resize(count);
+	m_geo_state.resize(count);
 }
 
 void bvh_manager::on_geo_updated(resource res)
@@ -76,7 +75,7 @@ void bvh_manager::on_geo_updated(resource res)
 	{
 		if (m_geometry[i].vb.res == res.handle)
 		{
-			m_needs_rebuild[i] = true;
+			m_geo_state[i].needs_rebuild = true;
 		}
 	}
 }
@@ -133,8 +132,12 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			.mtrl = desc.material
 		});
 		m_geometry.push_back(desc.blas_desc);
-		m_needs_rebuild.push_back(false);
-		m_last_rebuild.push_back(m_frame_id);
+		m_geo_state.push_back({
+			.last_visible = m_frame_id,
+			.last_rebuild = m_frame_id,
+			.needs_rebuild = false,
+			.dynamic = !desc.is_static
+		});
 
 		ScopedAttachment gpuattach;
 		for (const AttachmentDesc &attachment : desc.attachments)
@@ -194,12 +197,16 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	else
 	{
 		const uint32_t index = result - m_geometry.begin();
-		if (m_needs_rebuild[index])
+
+		GeometryState &geostate = m_geo_state[index];
+		geostate.last_visible = m_frame_id;
+
+		if (geostate.needs_rebuild)
 		{
 			m_bvhs[index].free();
 			m_bvhs[index] = std::move(buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc));
-			m_needs_rebuild[index] = false;
-			m_last_rebuild[index] = m_frame_id;
+			geostate.needs_rebuild = false;
+			geostate.last_rebuild = m_frame_id;
 		}
 		if (instanceIndex < m_instances[index].size())
 		{
@@ -235,7 +242,9 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		for (size_t i = 0; i < m_instances.size(); i++)
 		{
 			assert(m_bvhs[i].handle().handle != 0);
-			if (m_needs_rebuild[i])
+
+			const GeometryState &geostate = m_geo_state[i];
+			if (geostate.needs_rebuild || (geostate.dynamic && geostate.last_visible != m_frame_id))
 				continue;
 
 			rt_instance_desc instance{};

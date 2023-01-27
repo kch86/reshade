@@ -40,6 +40,7 @@ public:
 		std::span<AttachmentDesc> attachments = {};
 		Material material = {};
 		bool dynamic = false;
+		bool is_static = false;
 	};
 public:
 	bvh_manager() = default;
@@ -78,12 +79,19 @@ private:
 		Material mtrl;
 	};
 
+	struct GeometryState
+	{
+		uint32_t last_visible;
+		uint32_t last_rebuild;
+		bool needs_rebuild;
+		bool dynamic;
+	};
+
 	using ScopedAttachment = AttachmentT<scopedresourceview>;
 	using Attachment = AttachmentT<reshade::api::resource_view>;
 	using GpuAttachment = AttachmentT<uint32_t>;
 
-	std::vector<bool> m_needs_rebuild;
-	std::vector<uint64_t> m_last_rebuild;
+	std::vector<GeometryState> m_geo_state;
 	std::vector<BlasBuildDesc> m_geometry;
 	std::vector<scopedresource> m_bvhs;
 	std::vector<std::vector<RtInstance>> m_instances;
@@ -95,5 +103,5 @@ private:
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
 	uint64_t m_current_draw_stream_hash = 0;
-	uint64_t m_frame_id = 0;
+	uint32_t m_frame_id = 0;
 };
