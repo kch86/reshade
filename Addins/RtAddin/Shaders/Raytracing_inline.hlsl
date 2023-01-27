@@ -114,13 +114,13 @@ float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 	return uv;
 }
 
-float3 fetchTexture(uint instance_id, float2 uv)
+float4 fetchTexture(uint instance_id, float2 uv)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
 	if (att.tex0.id == 0x7FFFFFFF)
 	{
-		return 1.0.xxx;
+		return 1.0.xxxx;
 	}
 
 	Texture2D<float4> tex0 = ResourceDescriptorHeap[NonUniformResourceIndex(att.tex0.id)];
@@ -130,7 +130,16 @@ float3 fetchTexture(uint instance_id, float2 uv)
 
 	uint2 index = uint2(uv * float2(width, height) + 0.5);
 
-	return tex0[index].rgb;
+	float4 texcolor = tex0[index];
+
+	return texcolor;
+}
+
+float3 evalMaterial(float4 texcolor, uint instance_id)
+{
+	RtInstanceData instanceData = g_instance_data_buffer[instance_id];
+
+	return texcolor.rgb * instanceData.diffuse.rgb;
 }
 
 [numthreads(8, 8, 1)]
@@ -214,7 +223,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 								  query.CommittedPrimitiveIndex(),
 								  query.CommittedTriangleBarycentrics());
 
-			value.rgb = fetchTexture(query.CommittedInstanceID(), uvs);
+			float4 texcolor = fetchTexture(query.CommittedInstanceID(), uvs);
+			texcolor.rgb = evalMaterial(texcolor, query.CommittedInstanceID());
+			value.rgb = texcolor.rgb;
 		}
 		else
 		{

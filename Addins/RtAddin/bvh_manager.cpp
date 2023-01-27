@@ -386,14 +386,7 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(r
 
 		void *ptr;
 		d->map_buffer_region(d3d12res, 0, total_byte_count, map_access::write_only, &ptr);
-
-		RtInstanceData *data = (RtInstanceData *)ptr;
-		uint32_t index = 0;
-		for (const RtInstanceData &src : m_instance_data_flat)
-		{
-			data[index] = src;
-		}
-		
+		memcpy(ptr, m_instance_data_flat.data(), total_byte_count);		
 		d->unmap_buffer_region(d3d12res);
 
 		// size in element count not bytes
