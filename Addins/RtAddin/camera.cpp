@@ -62,6 +62,11 @@ void FpsCamera::move_forward(float step)
 	pos += view.r[look] * step;
 }
 
+void FpsCamera::move_lateral(float step)
+{
+	pos += view.r[right] * step;
+}
+
 void FpsCamera::set_fov(float _fov)
 {
 	if (fov != _fov)

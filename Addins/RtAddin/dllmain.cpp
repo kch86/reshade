@@ -1286,9 +1286,17 @@ void updateCamera(effect_runtime *runtime)
 	{
 		s_camera.move_forward(0.5f);
 	}
-	if (runtime->is_key_down('S'))
+	else if (runtime->is_key_down('S'))
 	{
 		s_camera.move_forward(-0.5f);
+	}
+	if (runtime->is_key_down('A'))
+	{
+		s_camera.move_lateral(-0.5f);
+	}
+	else if (runtime->is_key_down('D'))
+	{
+		s_camera.move_lateral(0.5f);
 	}
 
 	s_camera.set_fov(s_ui_fov * math::DegToRad);

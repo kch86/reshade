@@ -9,6 +9,7 @@ struct FpsCamera
 	void look_at(DirectX::XMVECTOR pos, DirectX::XMVECTOR target, DirectX::XMVECTOR up);
 	void rotate(float deltaX, float deltaY);
 	void move_forward(float step);
+	void move_lateral(float step);
 	void set_fov(float fov);
 
 	DirectX::XMVECTOR get_pos();
