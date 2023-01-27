@@ -24,6 +24,14 @@ using uint3 = Uint3;
 
 #endif
 
+struct RtInstanceAttachElem
+{
+	uint id;
+	uint offset; // in bytes, for buffers this is a multiple of uint
+	uint stride; // bytes
+	uint format;
+};
+
 struct RtConstants
 {
 	float4x4 viewMatrix;

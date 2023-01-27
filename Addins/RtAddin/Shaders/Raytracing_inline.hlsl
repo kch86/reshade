@@ -1,23 +1,16 @@
 #include "RtShared.h"
 
-struct AttachElem
-{
-	uint id;
-	uint offset; // in bytes, for buffers this is a multiple of uint
-	uint stride; // bytes
-	uint format;
-};
 
-struct Attachments
+struct RtInstanceAttachments
 {
-	AttachElem ib;
-	AttachElem vb;
-	AttachElem uv;
-	AttachElem tex0;
+	RtInstanceAttachElem ib;
+	RtInstanceAttachElem vb;
+	RtInstanceAttachElem uv;
+	RtInstanceAttachElem tex0;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
-StructuredBuffer<Attachments> g_attachments_buffer : register(t0, space1);
+StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
 
@@ -79,7 +72,7 @@ float3 instanceIdToColor(uint id)
 
 float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 {
-	Attachments att = g_attachments_buffer[instance_id];
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
 	// since vb streams are interleaved, this needs to be a byte address buffer
 	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
@@ -102,7 +95,7 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 
 float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 {
-	Attachments att = g_attachments_buffer[instance_id];
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
 	if (att.uv.id == 0x7FFFFFFF)
 	{
@@ -131,7 +124,7 @@ float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 
 float3 fetchTexture(uint instance_id, float2 uv)
 {
-	Attachments att = g_attachments_buffer[instance_id];
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
 	if (att.tex0.id == 0x7FFFFFFF)
 	{

@@ -60,13 +60,6 @@ private:
 		};
 		std::vector<Elem> data;
 	};
-	struct GpuAttachmentElem
-	{
-		uint32_t srv;
-		uint32_t offset; // in elements
-		uint32_t stride; // in bytes
-		uint32_t fmt;
-	};
 
 	using ScopedAttachment = AttachmentT<scopedresourceview>;
 	using Attachment = AttachmentT<reshade::api::resource_view>;

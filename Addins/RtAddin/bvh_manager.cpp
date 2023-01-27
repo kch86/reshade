@@ -1,9 +1,9 @@
 
 #include "bvh_manager.h"
 #include "raytracing.h"
+#include "Shaders/RtShared.h"
 
 #include <reshade.hpp>
-
 #include "hash.h"
 
 using namespace reshade::api;
@@ -284,7 +284,7 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 		device *d = cmd_list->get_device();
 
 		// 1 "element" is however many attachments we have
-		const uint32_t elem_byte_count = sizeof(GpuAttachmentElem);
+		const uint32_t elem_byte_count = sizeof(RtInstanceAttachElem);
 		const uint32_t attachment_count = m_attachments_flat[0].data.size();
 		const uint32_t attachment_byte_count = elem_byte_count * attachment_count;
 		const uint32_t total_count = m_attachments_flat.size();
@@ -305,7 +305,7 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 		void *ptr;
 		d->map_buffer_region(d3d12res, 0, total_byte_count, map_access::write_only, &ptr);
 
-		GpuAttachmentElem *data = (GpuAttachmentElem *)ptr;
+		RtInstanceAttachElem *data = (RtInstanceAttachElem *)ptr;
 		for (uint32_t i = 0; i < m_attachments_flat.size(); i++)
 		{
 			for (uint32_t att = 0; att < attachment_count; att++)
@@ -315,16 +315,16 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 				{
 					const uint32_t index = d->get_resource_view_descriptor_index(elem.srv);
 					assert(index < d->get_descriptor_count(true));
-					data[att].srv = index;
+					data[att].id = index;
 				}
 				else
 				{
-					data[att].srv = 0x7FFFFFFF;
+					data[att].id = 0x7FFFFFFF;
 				}					
 
 				data[att].offset = elem.offset;
 				data[att].stride = elem.stride;
-				data[att].fmt = elem.fmt;
+				data[att].format = elem.fmt;
 			}
 			data += attachment_count;
 		}
