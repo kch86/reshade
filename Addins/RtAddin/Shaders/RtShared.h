@@ -32,6 +32,20 @@ struct RtInstanceAttachElem
 	uint format;
 };
 
+struct RtInstanceAttachments
+{
+	RtInstanceAttachElem ib;
+	RtInstanceAttachElem vb;
+	RtInstanceAttachElem uv;
+	RtInstanceAttachElem tex0;
+};
+
+struct RtInstanceData
+{
+	float4 diffuse;
+	float4 specular;
+};
+
 struct RtConstants
 {
 	float4x4 viewMatrix;

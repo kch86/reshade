@@ -1,16 +1,8 @@
 #include "RtShared.h"
 
-
-struct RtInstanceAttachments
-{
-	RtInstanceAttachElem ib;
-	RtInstanceAttachElem vb;
-	RtInstanceAttachElem uv;
-	RtInstanceAttachElem tex0;
-};
-
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
+StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
 

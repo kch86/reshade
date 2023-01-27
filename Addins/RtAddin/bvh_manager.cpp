@@ -125,9 +125,13 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	{
 		scopedresource bvh = buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc);
 
+		assert(instanceIndex == 0);
 		m_bvhs.push_back(std::move(bvh));
 		m_instances.push_back({});
-		m_instances.back().push_back(desc.transform); assert(instanceIndex == 0);
+		m_instances.back().push_back({
+			.transform = desc.transform,
+			.mtrl = desc.material
+		});
 		m_geometry.push_back(desc.blas_desc);
 		m_needs_rebuild.push_back(false);
 		m_last_rebuild.push_back(m_frame_id);
@@ -199,11 +203,15 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		}
 		if (instanceIndex < m_instances[index].size())
 		{
-			m_instances[index][instanceIndex] = desc.transform;
+			m_instances[index][instanceIndex].transform = desc.transform;
+			m_instances[index][instanceIndex].mtrl = desc.material;
 		}
 		else
 		{
-			m_instances[index].push_back(desc.transform);
+			m_instances[index].push_back({
+				.transform = desc.transform,
+				.mtrl = desc.material
+			});
 		}
 	}
 }
@@ -218,7 +226,11 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		std::vector<Attachment> attachments;
 		attachments.reserve(m_bvhs.size());
 
+		std::vector<RtInstanceData> instance_data;
+		instance_data.reserve(m_bvhs.size());
+
 		assert(m_bvhs.size() == m_instances.size());
+
 		int totalInstanceCount = 0;
 		for (size_t i = 0; i < m_instances.size(); i++)
 		{
@@ -248,7 +260,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				if (base_transform)
 				{
 					XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, *base_transform);
-					XMMATRIX wvp = instanceData;
+					XMMATRIX wvp = instanceData.transform;
 					XMMATRIX world = inv_viewproj * wvp;
 
 					memcpy(instance.transform, &world, sizeof(instance.transform));
@@ -262,11 +274,17 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 
 				instances.push_back(instance);				
 				attachments.push_back(attachment);
+
+				RtInstanceData rt_instance_data;
+				rt_instance_data.diffuse = instanceData.mtrl.diffuse;
+				rt_instance_data.specular = instanceData.mtrl.specular;
+				instance_data.push_back(rt_instance_data);
 			}
 		}
 
 		m_instances_flat = instances;
 		m_attachments_flat = attachments;
+		m_instance_data_flat = instance_data;
 
 		TlasBuildDesc desc = {
 			.instances = {m_instances_flat.data(), m_instances_flat.size() }
@@ -334,6 +352,54 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 		resource_view_desc view_desc(format::unknown, 0, m_attachments_flat.size());
 		view_desc.flags = resource_view_flags::structured;
 		view_desc.buffer.stride = attachment_byte_count;
+
+		resource_view srv;
+		d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+		return { scopedresource(d, d3d12res), scopedresourceview(d, srv) };
+	}
+	return { scopedresource(), scopedresourceview() };
+}
+
+std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(reshade::api::command_list *cmd_list)
+{
+	if (m_instance_data_flat.size() > 0)
+	{
+		device *d = cmd_list->get_device();
+
+		// 1 "element" is however many attachments we have
+		const uint32_t elem_byte_count = sizeof(RtInstanceData);
+		const uint32_t total_count = m_instance_data_flat.size();
+		const uint32_t total_byte_count = total_count * elem_byte_count;
+
+		//size for the resource is in bytes
+		resource_desc res_desc = resource_desc(total_byte_count, memory_heap::cpu_to_gpu, resource_usage::shader_resource);
+		res_desc.buffer.stride = elem_byte_count;
+		res_desc.flags = resource_flags::structured;
+
+		resource d3d12res;
+		d->create_resource(
+			res_desc,
+			nullptr,
+			resource_usage::cpu_access,
+			&d3d12res);
+
+		void *ptr;
+		d->map_buffer_region(d3d12res, 0, total_byte_count, map_access::write_only, &ptr);
+
+		RtInstanceData *data = (RtInstanceData *)ptr;
+		uint32_t index = 0;
+		for (const RtInstanceData &src : m_instance_data_flat)
+		{
+			data[index] = src;
+		}
+		
+		d->unmap_buffer_region(d3d12res);
+
+		// size in element count not bytes
+		resource_view_desc view_desc(format::unknown, 0, m_attachments_flat.size());
+		view_desc.flags = resource_view_flags::structured;
+		view_desc.buffer.stride = elem_byte_count;
 
 		resource_view srv;
 		d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);

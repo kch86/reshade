@@ -157,6 +157,14 @@ namespace
 		}
 	};
 
+	struct MaterialMapping
+	{
+		// offsets in float4 slots as in the shader disasm
+		int diffuse_offset;
+		int specular_offset;
+		int specular_power_offset;
+	};
+
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
@@ -167,6 +175,8 @@ namespace
 	scopedresource s_tlas;
 	scopedresource s_attachments_buffer;
 	scopedresourceview s_attachments_srv;
+	scopedresource s_instance_data_buffer;
+	scopedresourceview s_instance_data_srv;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
 
@@ -215,6 +225,9 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
 	std::unordered_set<uint64_t> s_ps_texbinding_map;
+	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
+
+	Material s_current_material;
 
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
@@ -254,20 +267,56 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 
 static void init_vs_mappings()
 {
-	struct VsTransformMap
+	// vs transform constants mappings
 	{
-		uint64_t hash;
-		uint32_t offset;
-	};
+		struct VsTransformMap
+		{
+			uint64_t hash;
+			uint32_t offset; //offset in float4 slots as in the shader disasm
+		};
 
-	static VsTransformMap hashes[] = {
-		{6550593362979704143, 74},
-		{5461187419696972836, 10},
-	};
+		static VsTransformMap hashes[] = {
+			{6550593362979704143, 74},
+			{5461187419696972836, 10},
+		};
 
-	for (const VsTransformMap& mapping : hashes)
+		for (const VsTransformMap &mapping : hashes)
+		{
+			s_vs_transform_map[mapping.hash] = mapping.offset;
+		}
+	}
+
+	// car constants mapping
 	{
-		s_vs_transform_map[mapping.hash] = mapping.offset;
+		struct VsMaterialMap
+		{
+			uint64_t hash;
+			MaterialMapping mtrl;
+		};
+
+		static VsMaterialMap hashes[] = {
+			{
+				5461187419696972836,
+				{
+					.diffuse_offset = 18,
+					.specular_offset = 20,
+					.specular_power_offset = 22
+				}
+			},
+			{
+				6550593362979704143,
+				{
+					.diffuse_offset = 82,
+					.specular_offset = -1,
+					.specular_power_offset = -1
+				}
+			}
+		};
+
+		for (const VsMaterialMap &mapping : hashes)
+		{
+			s_vs_material_map[mapping.hash] = mapping.mtrl;
+		}
 	}
 }
 
@@ -316,7 +365,7 @@ static void init_pipeline()
 	{
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants)/sizeof(int), .visibility = shader_stage::compute}),
 		};
@@ -902,6 +951,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 	if (s_current_vs_pipeline.handle != 0 && (stages & shader_stage::vertex) != 0)
 	{
+		// extract the wvp from vertex shader constants
 		// some vs do not have the WVP at slot 0
 		// we hashed those shaders earlier and check them here
 		{
@@ -920,7 +970,31 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				XMMATRIX *matrices = (XMMATRIX *)values;
 				s_current_wvp = matrices[0];
 			}
-		}	
+		}
+
+		// extract material data from vertex constants
+		{
+			assert(s_vs_hash_map.contains(s_current_vs_pipeline.handle));
+			const uint64_t hash = s_vs_hash_map[s_current_vs_pipeline.handle];
+			if (auto offset = s_vs_material_map.find(hash); offset != s_vs_material_map.end())
+			{
+				XMVECTOR *vectors = (XMVECTOR *)values;
+
+				auto get_elem = [=](int offset, XMVECTOR default_value) {
+					if (offset > 0)
+					{
+						return vectors[offset];
+					}
+
+					return default_value;
+				};
+
+				s_current_material = {
+					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
+					.specular = get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}),
+				};
+			}
+		}
 	}
 }
 static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pipeline_layout layout, uint32_t param_index, const descriptor_set_update &update)
@@ -1121,6 +1195,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.blas_desc = desc,
 		.transform = s_current_wvp,
 		.attachments = attachments,
+		.material = s_current_material,
 		.dynamic = dynamic_resource,
 	};
 
@@ -1166,12 +1241,25 @@ static void update_rt()
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
 
-	auto [buffer, srv] = s_bvh_manager.build_attachments(s_d3d12cmdlist);
+	// build all the bindless attachments
+	{
+		auto [buffer, srv] = s_bvh_manager.build_attachments(s_d3d12cmdlist);
 
-	s_attachments_buffer.free();
-	s_attachments_srv.free();
-	s_attachments_buffer = std::move(buffer);
-	s_attachments_srv = std::move(srv);
+		s_attachments_buffer.free();
+		s_attachments_srv.free();
+		s_attachments_buffer = std::move(buffer);
+		s_attachments_srv = std::move(srv);
+	}
+
+	// build the per instance data buffer
+	{
+		auto [buffer, srv] = s_bvh_manager.build_instance_data(s_d3d12cmdlist);
+
+		s_instance_data_buffer.free();
+		s_instance_data_srv.free();
+		s_instance_data_buffer = std::move(buffer);
+		s_instance_data_srv = std::move(srv);
+	}
 }
 
 void updateCamera(effect_runtime *runtime)
@@ -1292,6 +1380,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	resource_view srvs[] = {
 		get_srv(s_attachments_srv),
+		get_srv(s_instance_data_srv),
 	};
 
 	//update descriptors
@@ -1302,7 +1391,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 			.descriptors = &tlas_srv, // bind tlas srv
 		},
 		{
-			.count = 1,
+			.count = ARRAYSIZE(srvs),
 			.type = descriptor_type::shader_resource_view,
 			.descriptors = srvs, // bind tlas srv
 		},
@@ -1508,6 +1597,9 @@ static void do_shutdown()
 
 	s_attachments_buffer.free();
 	s_attachments_srv.free();
+
+	s_instance_data_buffer.free();
+	s_instance_data_srv.free();
 
 	s_empty_buffer.free();
 	s_empty_srv.free();
