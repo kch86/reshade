@@ -1,5 +1,23 @@
 #include "RtShared.h"
 
+struct Material
+{
+	float3 albedo;
+	float3 albedo_tint;
+	float3 specular;
+};
+
+struct Surface
+{
+	float3 pos;
+	float3 norm;
+};
+
+struct Shade
+{
+	float3 radiance;
+};
+
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
 StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
@@ -135,11 +153,32 @@ float4 fetchTexture(uint instance_id, float2 uv)
 	return texcolor;
 }
 
-float3 evalMaterial(float4 texcolor, uint instance_id)
+Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 {
-	RtInstanceData instanceData = g_instance_data_buffer[instance_id];
+	RtInstanceData data = g_instance_data_buffer[instance_id];
 
-	return texcolor.rgb * instanceData.diffuse.rgb;
+	Material mtrl;
+	mtrl.albedo = textureAlbedo;
+	mtrl.albedo_tint = data.diffuse.rgb;
+	mtrl.specular = data.specular.rgb;
+	return mtrl;
+}
+
+float3 evalMaterial(Material mtrl, Shade shade)
+{
+	float3 outIrradiance = 0.0;
+
+	outIrradiance = shade.radiance * mtrl.albedo * mtrl.albedo_tint;
+
+	return outIrradiance;
+}
+
+Shade shadeSurface(Surface surface)
+{
+	Shade shade;
+	shade.radiance = dot(surface.norm, g_constants.sunDirection) * 1.0.xxx; //add sun color
+
+	return shade;
 }
 
 [numthreads(8, 8, 1)]
@@ -200,32 +239,54 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	}
 
 	bool miss = true;
+	Surface surface;
+
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
+		const uint instanceId = query.CommittedInstanceID();
+
 		if (g_constants.showNormal)
 		{
-			value.rgb = fetchNormal(query.CommittedInstanceID(),
-				query.CommittedPrimitiveIndex(),
-				(float3x3)query.CommittedObjectToWorld3x4());
+			value.rgb = fetchNormal(instanceId,
+									query.CommittedPrimitiveIndex(),
+									(float3x3)query.CommittedObjectToWorld3x4());
 
 			value.rgb = value.rgb * 0.5 + 0.5;
 		}
 		else if (g_constants.showUvs)
 		{
-			float2 uvs = fetchUvs(query.CommittedInstanceID(),
+			float2 uvs = fetchUvs(instanceId,
 				query.CommittedPrimitiveIndex(),
 				query.CommittedTriangleBarycentrics());
 			value.rgb = float3(uvs, 0.0);
 		}
 		else if (g_constants.showTexture)
 		{
-			float2 uvs = fetchUvs(query.CommittedInstanceID(),
+			float2 uvs = fetchUvs(instanceId,
 								  query.CommittedPrimitiveIndex(),
 								  query.CommittedTriangleBarycentrics());
 
-			float4 texcolor = fetchTexture(query.CommittedInstanceID(), uvs);
-			texcolor.rgb = evalMaterial(texcolor, query.CommittedInstanceID());
+			float4 texcolor = fetchTexture(instanceId, uvs);
 			value.rgb = texcolor.rgb;
+		}
+		else if (g_constants.showShaded)
+		{
+			surface.pos = ray.Origin + ray.Direction * query.CommittedRayT();
+			surface.norm = fetchNormal(instanceId,
+									   query.CommittedPrimitiveIndex(),
+									   (float3x3)query.CommittedObjectToWorld3x4());
+
+			float2 uvs = fetchUvs(instanceId,
+								  query.CommittedPrimitiveIndex(),
+								  query.CommittedTriangleBarycentrics());
+
+			float4 texcolor = fetchTexture(instanceId, uvs);
+			Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
+
+			Shade shade = shadeSurface(surface);
+			float3 irradiance = evalMaterial(mtrl, shade);
+			
+			value.rgb = irradiance.rgb;
 		}
 		else
 		{
@@ -234,13 +295,11 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		miss = false;
 	}
 
-	if (!miss)
+	if (!miss && g_constants.showShaded)
 	{
-		float3 n = fetchNormal(query.CommittedInstanceID(),
-							   query.CommittedPrimitiveIndex(),
-							   (float3x3)query.CommittedObjectToWorld3x4());
+		float3 origin = surface.pos;
+		float3 n = surface.norm;
 
-		float3 origin = ray.Origin + ray.Direction * query.CommittedRayT();
 		origin = origin + n * length(origin - ray.Origin) * 0.00001;
 
 		ray.Origin = origin;
