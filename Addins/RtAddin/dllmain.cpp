@@ -994,6 +994,10 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					.specular = get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}),
 				};
 			}
+			else
+			{
+				s_current_material = {};
+			}
 		}
 	}
 }
