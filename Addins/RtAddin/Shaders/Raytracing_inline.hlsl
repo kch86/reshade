@@ -1,5 +1,6 @@
 #include "RtShared.h"
 #include "Raytracing.h"
+#include "Color.h"
 
 struct Material
 {
@@ -181,9 +182,9 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 	RtInstanceData data = g_instance_data_buffer[instance_id];
 
 	Material mtrl;
-	mtrl.albedo = textureAlbedo;
-	mtrl.albedo_tint = data.diffuse.rgb;
-	mtrl.specular = data.specular.rgb;
+	mtrl.albedo = to_linear_from_srgb(textureAlbedo);
+	mtrl.albedo_tint = to_linear_from_srgb(data.diffuse.rgb);
+	mtrl.specular = to_linear_from_srgb(data.specular.rgb);
 	return mtrl;
 }
 
@@ -288,6 +289,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 					value.rgb = 0.0;
 				}
 			}
+
+			//convert to srgb
+			value.rgb = to_srgb_from_linear(value.rgb);
 		}
 		else
 		{

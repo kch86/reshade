@@ -165,6 +165,7 @@
     <ClInclude Include="dxhelpers.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="raytracing.h" />
+    <ClInclude Include="Shaders\Color.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />
     <ClInclude Include="Shaders\RayTracingHlslCompat.h" />
     <ClInclude Include="Shaders\RtShared.h" />
