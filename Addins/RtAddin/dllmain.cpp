@@ -465,8 +465,6 @@ static void on_init_device(device *device)
 
 		init_pipeline();
 		init_default_resources();
-		createDxrDevice(device);
-		testCompilePso(device);
 	}
 }
 static void on_destroy_device(device *device)

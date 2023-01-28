@@ -74,9 +74,6 @@ private:
 using scopedresource = delayFreedHandle<reshade::api::resource>;
 using scopedresourceview = delayFreedHandle<reshade::api::resource_view>;
 
-void createDxrDevice(reshade::api::device *device);
-void testCompilePso(reshade::api::device *device);
-
 struct BlasBuildDesc
 {
 	struct
@@ -107,7 +104,6 @@ struct TlasBuildDesc
 {
 	std::span<reshade::api::rt_instance_desc> instances;
 };
-
 
 scopedresource buildBlas(reshade::api::device* d3d9On12Device,
 				   reshade::api::command_list *cmdlist,
