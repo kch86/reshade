@@ -95,19 +95,38 @@ uint3 fetchIndices(uint instance_id, uint primitive_id)
 	return indices;
 }
 
-float3 fetchNormal(uint instance_id, uint3 indices, float3x3 transform)
+float3 fetchNormal(uint instance_id, uint3 indices, float2 barries, float3x3 transform)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
-	// since vb streams are interleaved, this needs to be a byte address buffer
-	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+	float3 n;
 
-	uint stride = att.vb.stride;
-	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
-	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
-	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+	// if there isn't a valid normal stream, fallback to triangle normal
+	if (att.norm.id == 0x7FFFFFFF)
+	{
+		ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
 
-	float3 n = normalize(cross((v1 - v0), (v2 - v0)));
+		uint stride = att.vb.stride;
+		float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
+		float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
+		float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+
+		n = normalize(cross((v1 - v0), (v2 - v0)));
+	}
+	else
+	{
+		// since vb streams are interleaved, this needs to be a byte address buffer
+		ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.norm.id)];
+
+		uint stride = att.norm.stride;
+		float3 n0 = asfloat(vb.Load3(indices.x * stride + att.norm.offset));
+		float3 n1 = asfloat(vb.Load3(indices.y * stride + att.norm.offset));
+		float3 n2 = asfloat(vb.Load3(indices.z * stride + att.norm.offset));
+
+		n = n0 * (1.0 - barries.y - barries.x) + n1 * barries.x + n2 * barries.y;
+		n = normalize(n);
+	}
+
 	n = mul(transform, n);
 	return normalize(n);
 }
@@ -241,18 +260,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		value = float4(0, 0, 0, 1);
 	}
 
-	bool miss = true;
-	Surface surface;
-
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
 		const uint instanceId = query.CommittedInstanceID();
+		const uint primitiveIndex = query.CommittedPrimitiveIndex();
+		const float2 barries = query.CommittedTriangleBarycentrics();
 
 		if (g_constants.showNormal)
 		{
-			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
+			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 			value.rgb = fetchNormal(instanceId,
 									indices,
+									barries,
 									(float3x3)query.CommittedObjectToWorld3x4());
 
 			value.rgb = value.rgb * 0.5 + 0.5;
@@ -260,32 +279,34 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		else if (g_constants.showUvs)
 		{
 			float2 uvs = fetchUvs(instanceId,
-				query.CommittedPrimitiveIndex(),
-				query.CommittedTriangleBarycentrics());
+								  primitiveIndex,
+								  barries);
 			value.rgb = float3(uvs, 0.0);
 		}
 		else if (g_constants.showTexture)
 		{
-			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
+			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 			float2 uvs = fetchUvs(instanceId,
 								  indices,
-								  query.CommittedTriangleBarycentrics());
+								  barries);
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
 			value.rgb = texcolor.rgb;
 		}
 		else if (g_constants.showShaded)
 		{
-			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
+			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 
+			Surface surface;
 			surface.pos = ray.Origin + ray.Direction * query.CommittedRayT();
 			surface.norm = fetchNormal(instanceId,
 									   indices,
+									   barries,
 									   (float3x3)query.CommittedObjectToWorld3x4());
 
 			float2 uvs = fetchUvs(instanceId,
 								  indices,
-								  query.CommittedTriangleBarycentrics());
+								  barries);
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
 			Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
@@ -294,31 +315,25 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			float3 irradiance = evalMaterial(mtrl, shade);
 			
 			value.rgb = irradiance.rgb;
+
+			// launch shadow ray
+			{
+				ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+				ray.Direction = normalize(g_constants.sunDirection);
+
+				ray_flags |= RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+				query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
+				query.Proceed();
+
+				if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+				{
+					value.rgb = 0.0;
+				}
+			}
 		}
 		else
 		{
 			value.rgb = instanceIdToColor(instanceId);
-		}
-		miss = false;
-	}
-
-	if (!miss && g_constants.showShaded)
-	{
-		float3 origin = surface.pos;
-		float3 n = surface.norm;
-
-		origin = origin + n * length(origin - ray.Origin) * 0.00001;
-
-		ray.Origin = origin;
-		ray.Direction = normalize(g_constants.sunDirection);
-		
-		ray_flags |= RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
-		query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
-		query.Proceed();
-
-		if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-		{
-			value.rgb = 0.0;
 		}
 	}
 	

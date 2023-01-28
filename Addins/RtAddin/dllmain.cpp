@@ -64,16 +64,8 @@ namespace
 		};
 
 		stream pos;
+		stream normal;
 		stream uv;
-	};
-
-	struct IndexData
-	{
-		resource ib = {};
-		uint32_t offset = 0;
-		uint32_t stride = 0;
-		uint64_t size_bytes = 0;
-		format fmt = format::unknown;
 	};
 
 	struct StreamData
@@ -90,7 +82,17 @@ namespace
 		};
 
 		stream pos;
+		stream normal;
 		stream uv;
+	};
+
+	struct IndexData
+	{
+		resource ib = {};
+		uint32_t offset = 0;
+		uint32_t stride = 0;
+		uint64_t size_bytes = 0;
+		format fmt = format::unknown;
 	};
 
 	struct BoundTextureData
@@ -511,6 +513,24 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 
 			uint32_t stream_count = 0;
 
+#if 0
+			// todo: there are a bunch of texcoord streams. maybbe some are normals mislabeled...
+			{
+				std::stringstream s;
+				s << "init_pipeline(input_layout, " << (void*)handle.handle << ", ";
+
+				for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
+				{
+					const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
+
+					s << elem.semantic << ", ";
+				}
+
+				s << ")";
+				reshade::log_message(3, s.str().c_str());
+			}
+#endif	
+
 			for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
 			{
 				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
@@ -525,6 +545,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 					info.pos.index = elem.buffer_binding;
 					info.pos.stride = elem.stride;
 				}
+				// there are a lot of texcoord semantics, i'm surprised this is working at all?
 				else if (strstr(elem.semantic, "TEXCOORD") != nullptr)
 				{
 					info.uv.format = elem.format;
@@ -573,6 +594,38 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 
 					reshade::log_message(3, s.str().c_str());
 				}
+				else if (strstr(elem.semantic, "NORMAL") != nullptr)
+				{
+					info.normal.format = elem.format;
+					info.normal.offset = elem.offset;
+					info.normal.index = elem.buffer_binding;
+					info.normal.stride = elem.stride;
+
+					std::stringstream s;
+
+					s << "vertex_buffer_stream_normal(" << handle.handle << ", ";
+
+					if (info.normal.format == format::r32g32b32a32_float)
+					{
+						s << "float32x4";
+					}
+					else if (info.normal.format == format::r32g32b32_float)
+					{
+						s << "float32x3";
+					}
+					else if (info.normal.format == format::r16g16b16a16_float)
+					{
+						s << "float16x4";
+					}
+					else
+					{
+						s << "unkown";
+					}
+					s << ", " << elemIdx;
+					s << ")";
+
+					reshade::log_message(3, s.str().c_str());
+				}
 			}
 
 			if (info.pos.format != format::unknown)
@@ -594,6 +647,10 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				if (info.uv.format != format::unknown)
 				{
 					info.uv.stride = strides[info.uv.index];
+				}
+				if (info.normal.format != format::unknown)
+				{
+					info.normal.stride = strides[info.normal.index];
 				}
 
 				const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -900,6 +957,10 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	{
 		s_currentVB.uv = {};
 	}
+	if (streamInfo.normal.format == format::unknown)
+	{
+		s_currentVB.normal = {};
+	}
 
 	if (first <= streamInfo.pos.index && count > (streamInfo.pos.index - first))
 	{
@@ -924,6 +985,18 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 
 		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.uv.res);
 		s_currentVB.uv.size_bytes = desc.buffer.size;
+	}
+	if (streamInfo.normal.format != format::unknown && first <= streamInfo.normal.index && count > (streamInfo.normal.index - first))
+	{
+		s_currentVB.normal.res = buffers[streamInfo.normal.index];
+		s_currentVB.normal.offset = (uint32_t)offsets[streamInfo.normal.index];
+		s_currentVB.normal.elem_offset = streamInfo.normal.offset;
+		s_currentVB.normal.count = 0;
+		s_currentVB.normal.stride = strides[streamInfo.normal.index];
+		s_currentVB.normal.fmt = streamInfo.normal.format;
+
+		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.normal.res);
+		s_currentVB.normal.size_bytes = desc.buffer.size;
 	}
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
@@ -1132,6 +1205,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	};
 
 	const bool has_uvs = s_currentVB.uv.res.handle != 0;
+	const bool has_normal = s_currentVB.normal.res.handle != 0;
 	uint32_t texslot = 0;
 	uint64_t texhandle = 0;
 
@@ -1183,6 +1257,18 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.count = vertex_count,
 			.stride = s_currentVB.uv.stride,
 			.fmt = s_currentVB.uv.fmt,
+			.view_as_raw = true,
+		},
+		// normal
+		{
+			// normal may not always be available
+			.res = has_normal ? s_shadow_resources[s_currentVB.normal.res.handle].handle() : resource{0},
+			.type = resource_type::buffer,
+			.offset = has_normal ? (s_currentVB.normal.offset + (vertex_offset * s_currentVB.normal.stride)) / s_currentVB.normal.stride : 0,
+			.elem_offset = s_currentVB.normal.elem_offset,
+			.count = vertex_count,
+			.stride = s_currentVB.normal.stride,
+			.fmt = s_currentVB.normal.fmt,
 			.view_as_raw = true,
 		},
 		// texture 0 (only if the texcoord is valid)

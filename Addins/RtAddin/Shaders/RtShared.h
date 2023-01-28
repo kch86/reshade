@@ -37,6 +37,7 @@ struct RtInstanceAttachments
 	RtInstanceAttachElem ib;
 	RtInstanceAttachElem vb;
 	RtInstanceAttachElem uv;
+	RtInstanceAttachElem norm;
 	RtInstanceAttachElem tex0;
 };
 
