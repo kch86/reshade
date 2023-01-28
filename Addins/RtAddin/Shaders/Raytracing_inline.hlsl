@@ -80,18 +80,27 @@ float3 instanceIdToColor(uint id)
 	return IntToColor(id);
 }
 
-float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
+uint3 fetchIndices(uint instance_id, uint primitive_id)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
-	// since vb streams are interleaved, this needs to be a byte address buffer
-	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+	// we declare the buffer with the right format so it will decode 16 and 32-bit indices
 	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
 
 	uint3 indices = uint3(
 		ib[primitive_id * 3 + 0],
 		ib[primitive_id * 3 + 1],
 		ib[primitive_id * 3 + 2]);
+
+	return indices;
+}
+
+float3 fetchNormal(uint instance_id, uint3 indices, float3x3 transform)
+{
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
+
+	// since vb streams are interleaved, this needs to be a byte address buffer
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
 
 	uint stride = att.vb.stride;
 	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
@@ -103,7 +112,7 @@ float3 fetchNormal(uint instance_id, uint primitive_id, float3x3 transform)
 	return normalize(n);
 }
 
-float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
+float2 fetchUvs(uint instance_id, uint3 indices, float2 barries)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
@@ -114,12 +123,6 @@ float2 fetchUvs(uint instance_id, uint primitive_id, float2 barries)
 
 	// since vb streams are interleaved, this needs to be a byte address buffer
 	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.uv.id)];
-	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
-
-	uint3 indices = uint3(
-		ib[primitive_id * 3 + 0],
-		ib[primitive_id * 3 + 1],
-		ib[primitive_id * 3 + 2]);
 
 	uint stride = att.uv.stride;
 	float2 u0 = asfloat(vb.Load2(indices.x * stride + att.uv.offset));
@@ -247,8 +250,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 		if (g_constants.showNormal)
 		{
+			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
 			value.rgb = fetchNormal(instanceId,
-									query.CommittedPrimitiveIndex(),
+									indices,
 									(float3x3)query.CommittedObjectToWorld3x4());
 
 			value.rgb = value.rgb * 0.5 + 0.5;
@@ -262,8 +266,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 		else if (g_constants.showTexture)
 		{
+			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
 			float2 uvs = fetchUvs(instanceId,
-								  query.CommittedPrimitiveIndex(),
+								  indices,
 								  query.CommittedTriangleBarycentrics());
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
@@ -271,13 +276,15 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 		else if (g_constants.showShaded)
 		{
+			const uint3 indices = fetchIndices(instanceId, query.CommittedPrimitiveIndex());
+
 			surface.pos = ray.Origin + ray.Direction * query.CommittedRayT();
 			surface.norm = fetchNormal(instanceId,
-									   query.CommittedPrimitiveIndex(),
+									   indices,
 									   (float3x3)query.CommittedObjectToWorld3x4());
 
 			float2 uvs = fetchUvs(instanceId,
-								  query.CommittedPrimitiveIndex(),
+								  indices,
 								  query.CommittedTriangleBarycentrics());
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
@@ -290,7 +297,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 		else
 		{
-			value.rgb = instanceIdToColor(query.CommittedInstanceID());
+			value.rgb = instanceIdToColor(instanceId);
 		}
 		miss = false;
 	}
