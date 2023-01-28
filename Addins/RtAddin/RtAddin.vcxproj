@@ -171,13 +171,13 @@
     <ClInclude Include="state_tracking.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\Raytracing.hlsl">
+    <ClInclude Include="Shaders\Raytracing.h">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Library</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">6.3</ShaderModel>
       <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">g_p%(Filename)</VariableName>
       <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\%(Filename).hlsl.h</HeaderFileOutput>
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">/Zpr %(AdditionalOptions)</AdditionalOptions>
-    </FxCompile>
+    </ClInclude>
     <CopyFileToFolders Include="Shaders\Simple.fx">
       <FileType>Document</FileType>
       <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)reshade-shaders\Shaders;</DestinationFolders>

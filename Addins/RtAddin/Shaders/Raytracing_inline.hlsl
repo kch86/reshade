@@ -1,4 +1,5 @@
 #include "RtShared.h"
+#include "Raytracing.h"
 
 struct Material
 {
@@ -95,7 +96,7 @@ uint3 fetchIndices(uint instance_id, uint primitive_id)
 	return indices;
 }
 
-float3 fetchNormal(uint instance_id, uint3 indices, float2 barries, float3x3 transform)
+float3 fetchNormal(uint instance_id, uint3 indices, float2 baries, float3x3 transform)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
@@ -123,7 +124,7 @@ float3 fetchNormal(uint instance_id, uint3 indices, float2 barries, float3x3 tra
 		float3 n1 = asfloat(vb.Load3(indices.y * stride + att.norm.offset));
 		float3 n2 = asfloat(vb.Load3(indices.z * stride + att.norm.offset));
 
-		n = n0 * (1.0 - barries.y - barries.x) + n1 * barries.x + n2 * barries.y;
+		n = n0 * (1.0 - baries.y - baries.x) + n1 * baries.x + n2 * baries.y;
 		n = normalize(n);
 	}
 
@@ -131,7 +132,7 @@ float3 fetchNormal(uint instance_id, uint3 indices, float2 barries, float3x3 tra
 	return normalize(n);
 }
 
-float2 fetchUvs(uint instance_id, uint3 indices, float2 barries)
+float2 fetchUvs(uint instance_id, uint3 indices, float2 baries)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
@@ -148,7 +149,7 @@ float2 fetchUvs(uint instance_id, uint3 indices, float2 barries)
 	float2 u1 = asfloat(vb.Load2(indices.y * stride + att.uv.offset));
 	float2 u2 = asfloat(vb.Load2(indices.z * stride + att.uv.offset));
 
-	float2 uv = u0 * (1.0 - barries.y - barries.x) + u1 * barries.x + u2 * barries.y;
+	float2 uv = u0 * (1.0 - baries.y - baries.x) + u1 * baries.x + u2 * baries.y;
 	uv = frac(uv);
 
 	return uv;
@@ -206,20 +207,13 @@ Shade shadeSurface(Surface surface)
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
-#if 1
-
-	uint width, height;
-	g_rtOutput.GetDimensions(width, height);
-
-	RayQuery<RAY_FLAG_FORCE_OPAQUE> query;
-
-	uint ray_flags = 0; // Any this ray requires in addition those above.
-	uint ray_instance_mask = 0xffffffff;
-
 	float3 rayorigin = g_constants.viewPos.xyz;
 	float3 raydir = 0.0;
 	{
 		//get far end of the ray
+		uint width, height;
+		g_rtOutput.GetDimensions(width, height);
+
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);
 		float4 ndc = float4(d.x, -d.y, 1.0, 1.0);
 		float4 worldpos = mul(ndc, g_constants.viewMatrix);
@@ -234,61 +228,32 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 
-	query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
+	RayHit hit = trace_ray_closest(g_rtScene, ray);
 
-	float4 value = float4(1.0, 0.2, 1.0, 1.0);
+	float4 value = float4(0.0, 0.0, 0.0, 1.0);
 
-	const uint MaxIter = 512;
-	uint iter = 0;
-	while (query.Proceed() && iter < MaxIter)
+	if (hit.hitT >= 0.0)
 	{
-		if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-		{
-			value = float4(0, 1, 0, 1);
-			//TODO: call commit hit here
-			break;
-		}
-		iter++;
-	}
-
-	if (iter > 0)
-	{
-		value = 1.0;
-	}
-	else if (iter == 0)
-	{
-		value = float4(0, 0, 0, 1);
-	}
-
-	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-	{
-		const uint instanceId = query.CommittedInstanceID();
-		const uint primitiveIndex = query.CommittedPrimitiveIndex();
-		const float2 barries = query.CommittedTriangleBarycentrics();
+		const uint instanceId = hit.instanceId;
+		const uint primitiveIndex = hit.primitiveId;
+		const float2 baries = hit.barycentrics;
+		const float3x3 transform = (float3x3)hit.transform;
 
 		if (g_constants.showNormal)
 		{
 			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-			value.rgb = fetchNormal(instanceId,
-									indices,
-									barries,
-									(float3x3)query.CommittedObjectToWorld3x4());
-
+			value.rgb = fetchNormal(instanceId, indices, baries, transform);
 			value.rgb = value.rgb * 0.5 + 0.5;
 		}
 		else if (g_constants.showUvs)
 		{
-			float2 uvs = fetchUvs(instanceId,
-								  primitiveIndex,
-								  barries);
+			float2 uvs = fetchUvs(instanceId, primitiveIndex, baries);
 			value.rgb = float3(uvs, 0.0);
 		}
 		else if (g_constants.showTexture)
 		{
 			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-			float2 uvs = fetchUvs(instanceId,
-								  indices,
-								  barries);
+			float2 uvs = fetchUvs(instanceId, indices, baries);
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
 			value.rgb = texcolor.rgb;
@@ -298,15 +263,10 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 
 			Surface surface;
-			surface.pos = ray.Origin + ray.Direction * query.CommittedRayT();
-			surface.norm = fetchNormal(instanceId,
-									   indices,
-									   barries,
-									   (float3x3)query.CommittedObjectToWorld3x4());
+			surface.pos = ray.Origin + ray.Direction * hit.hitT;
+			surface.norm = fetchNormal(instanceId, indices, baries, transform);
 
-			float2 uvs = fetchUvs(instanceId,
-								  indices,
-								  barries);
+			float2 uvs = fetchUvs(instanceId, indices, baries);
 
 			float4 texcolor = fetchTexture(instanceId, uvs);
 			Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
@@ -321,11 +281,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
 				ray.Direction = normalize(g_constants.sunDirection);
 
-				ray_flags |= RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
-				query.TraceRayInline(g_rtScene, ray_flags, ray_instance_mask, ray);
-				query.Proceed();
+				hit = trace_ray_occlusion(g_rtScene, ray);
 
-				if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+				if (hit.hitT >= 0.0)
 				{
 					value.rgb = 0.0;
 				}
@@ -336,10 +294,6 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			value.rgb = instanceIdToColor(instanceId);
 		}
 	}
-	
-#else
-	float4 value = float4(1.0, 0.2, 1.0, 1.0);
-#endif
 
 	g_rtOutput[tid.xy] = value;
 }

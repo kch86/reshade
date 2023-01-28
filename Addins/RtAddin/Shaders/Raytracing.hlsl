@@ -1,7 +1,0 @@
-#ifndef RAYTRACING_HLSL
-#define RAYTRACING_HLSL
-
-///
-
-
-#endif // RAYTRACING_HLSL
