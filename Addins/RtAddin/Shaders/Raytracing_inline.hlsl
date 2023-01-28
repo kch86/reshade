@@ -183,7 +183,7 @@ float3 evalMaterial(Material mtrl, Shade shade)
 {
 	float3 outIrradiance = 0.0;
 
-	outIrradiance = shade.diffuse_radiance * mtrl.albedo * mtrl.albedo_tint;
+	outIrradiance = mtrl.albedo * mtrl.albedo_tint;
 
 	return outIrradiance;
 }
@@ -249,7 +249,8 @@ float3 path_trace(RayDesc ray, uint2 rng)
 		Shade shade = shadeSurface(surface);
 
 		// do material (apply albedo + specular)
-		float3 radiance = evalMaterial(mtrl, shade);
+		float3 irradiance = evalMaterial(mtrl, shade);
+		float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
 
 		// launch shadow ray
 		{
@@ -264,8 +265,8 @@ float3 path_trace(RayDesc ray, uint2 rng)
 			}
 		}
 
-		weight *= radiance;
-		total_radiance += weight;
+		weight *= irradiance;
+		total_radiance += weight * radiance;
 
 		//ray.Origin = surface.pos;
 		ray.Direction = sample_hemisphere(pcg2d_rng(rng), surface.norm);
