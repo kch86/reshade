@@ -268,7 +268,7 @@ float3 path_trace(RayDesc ray, uint2 rng)
 		weight *= irradiance;
 		total_radiance += weight * radiance;
 
-		//ray.Origin = surface.pos;
+		// ray origin already set to the right thing with the shadow ray test
 		ray.Direction = sample_hemisphere(pcg2d_rng(rng), surface.norm);
 	}
 
