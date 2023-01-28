@@ -167,6 +167,7 @@
     <ClInclude Include="raytracing.h" />
     <ClInclude Include="Shaders\Color.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />
+    <ClInclude Include="Shaders\Material.h" />
     <ClInclude Include="Shaders\RayTracingHlslCompat.h" />
     <ClInclude Include="Shaders\RtShared.h" />
     <ClInclude Include="state_tracking.hpp" />

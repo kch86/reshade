@@ -77,6 +77,9 @@
     <ClInclude Include="Shaders\Color.h">
       <Filter>Shaders</Filter>
     </ClInclude>
+    <ClInclude Include="Shaders\Material.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Raytracing_inline.hlsl">

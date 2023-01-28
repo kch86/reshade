@@ -1,23 +1,13 @@
 #include "RtShared.h"
 #include "Raytracing.h"
 #include "Color.h"
+#include "Material.h"
 
-struct Material
-{
-	float3 albedo;
-	float3 albedo_tint;
-	float3 specular;
-};
-
-struct Surface
-{
-	float3 pos;
-	float3 norm;
-};
 
 struct Shade
 {
-	float3 radiance;
+	float3 diffuse_radiance;
+	float3 specular_radiance;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
@@ -192,7 +182,7 @@ float3 evalMaterial(Material mtrl, Shade shade)
 {
 	float3 outIrradiance = 0.0;
 
-	outIrradiance = shade.radiance * mtrl.albedo * mtrl.albedo_tint;
+	outIrradiance = shade.diffuse_radiance * mtrl.albedo * mtrl.albedo_tint;
 
 	return outIrradiance;
 }
@@ -200,7 +190,25 @@ float3 evalMaterial(Material mtrl, Shade shade)
 Shade shadeSurface(Surface surface)
 {
 	Shade shade;
-	shade.radiance = dot(surface.norm, g_constants.sunDirection) * 1.0.xxx; //add sun color
+
+	Light light;
+	light.dir = g_constants.sunDirection;
+	light.color = 1.0.xxx;
+
+	float3 h = normalize(light.dir + surface.view);
+
+	light.n_dot_l = saturate(dot(surface.norm, light.dir));
+	light.l_dot_h = saturate(dot(light.dir, h));
+	light.n_dot_h = saturate(dot(surface.norm, h));
+
+	const float3 diffuse = diffuse_burley(surface, light);
+	const float3 specular = 0.0;
+
+	const float3 light_intensity = light.n_dot_l * light.color;
+
+	shade.diffuse_radiance = light_intensity * diffuse;
+	shade.specular_radiance = light_intensity * specular;
+	//shade.radiance = dot(surface.norm, g_constants.sunDirection) * 1.0.xxx; //add sun color
 
 	return shade;
 }
@@ -261,18 +269,25 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 		else if (g_constants.showShaded)
 		{
+			// fetch data
 			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+			const float2 uvs = fetchUvs(instanceId, indices, baries);
+			const float4 texcolor = fetchTexture(instanceId, uvs);
+			const float3 normal = fetchNormal(instanceId, indices, baries, transform);
+			const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
 
+			// setup our surface properties
 			Surface surface;
 			surface.pos = ray.Origin + ray.Direction * hit.hitT;
-			surface.norm = fetchNormal(instanceId, indices, baries, transform);
+			surface.norm = normal;
+			surface.view = normalize(ray.Origin - surface.pos);
+			surface.n_dot_v = dot(surface.norm, surface.view);
+			surface.roughness = 0.8; //TODO: fetch roughness
 
-			float2 uvs = fetchUvs(instanceId, indices, baries);
-
-			float4 texcolor = fetchTexture(instanceId, uvs);
-			Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
-
+			// do lighting
 			Shade shade = shadeSurface(surface);
+
+			// do material (apply albedo + specular)
 			float3 irradiance = evalMaterial(mtrl, shade);
 			
 			value.rgb = irradiance.rgb;
