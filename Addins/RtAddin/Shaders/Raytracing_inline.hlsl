@@ -2,6 +2,7 @@
 #include "Raytracing.h"
 #include "Color.h"
 #include "Material.h"
+#include "Sampling.h"
 
 
 struct Shade
@@ -213,6 +214,66 @@ Shade shadeSurface(Surface surface)
 	return shade;
 }
 
+float3 path_trace(RayDesc ray, uint2 rng)
+{
+	float3 total_radiance = 0.0;
+	float3 weight = 1.0;
+
+	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
+	{
+		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		if (hit.hitT < 0.0)
+			break;
+
+		const uint instanceId = hit.instanceId;
+		const uint primitiveIndex = hit.primitiveId;
+		const float2 baries = hit.barycentrics;
+		const float3x3 transform = (float3x3)hit.transform;
+
+		// fetch data
+		const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+		const float2 uvs = fetchUvs(instanceId, indices, baries);
+		const float4 texcolor = fetchTexture(instanceId, uvs);
+		const float3 normal = fetchNormal(instanceId, indices, baries, transform);
+		const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
+
+		// setup our surface properties
+		Surface surface;
+		surface.pos = ray.Origin + ray.Direction * hit.hitT;
+		surface.norm = normal;
+		surface.view = normalize(ray.Origin - surface.pos);
+		surface.n_dot_v = dot(surface.norm, surface.view);
+		surface.roughness = 0.8; //TODO: fetch roughness
+
+		// do lighting
+		Shade shade = shadeSurface(surface);
+
+		// do material (apply albedo + specular)
+		float3 radiance = evalMaterial(mtrl, shade);
+
+		// launch shadow ray
+		{
+			ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+			ray.Direction = normalize(g_constants.sunDirection);
+
+			hit = trace_ray_occlusion(g_rtScene, ray);
+
+			if (hit.hitT >= 0.0)
+			{
+				radiance.rgb = 0.0;
+			}
+		}
+
+		weight *= radiance;
+		total_radiance += weight;
+
+		//ray.Origin = surface.pos;
+		ray.Direction = sample_hemisphere(pcg2d_rng(rng), surface.norm);
+	}
+
+	return total_radiance;
+}
+
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
@@ -237,82 +298,52 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 
-	RayHit hit = trace_ray_closest(g_rtScene, ray);
-
-	float4 value = float4(0.0, 0.0, 0.0, 1.0);
-
-	if (hit.hitT >= 0.0)
+	if (g_constants.showShaded)
 	{
-		const uint instanceId = hit.instanceId;
-		const uint primitiveIndex = hit.primitiveId;
-		const float2 baries = hit.barycentrics;
-		const float3x3 transform = (float3x3)hit.transform;
-
-		if (g_constants.showNormal)
-		{
-			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-			value.rgb = fetchNormal(instanceId, indices, baries, transform);
-			value.rgb = value.rgb * 0.5 + 0.5;
-		}
-		else if (g_constants.showUvs)
-		{
-			float2 uvs = fetchUvs(instanceId, primitiveIndex, baries);
-			value.rgb = float3(uvs, 0.0);
-		}
-		else if (g_constants.showTexture)
-		{
-			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-			float2 uvs = fetchUvs(instanceId, indices, baries);
-
-			float4 texcolor = fetchTexture(instanceId, uvs);
-			value.rgb = texcolor.rgb;
-		}
-		else if (g_constants.showShaded)
-		{
-			// fetch data
-			const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-			const float2 uvs = fetchUvs(instanceId, indices, baries);
-			const float4 texcolor = fetchTexture(instanceId, uvs);
-			const float3 normal = fetchNormal(instanceId, indices, baries, transform);
-			const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
-
-			// setup our surface properties
-			Surface surface;
-			surface.pos = ray.Origin + ray.Direction * hit.hitT;
-			surface.norm = normal;
-			surface.view = normalize(ray.Origin - surface.pos);
-			surface.n_dot_v = dot(surface.norm, surface.view);
-			surface.roughness = 0.8; //TODO: fetch roughness
-
-			// do lighting
-			Shade shade = shadeSurface(surface);
-
-			// do material (apply albedo + specular)
-			float3 irradiance = evalMaterial(mtrl, shade);
-			
-			value.rgb = irradiance.rgb;
-
-			// launch shadow ray
-			{
-				ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
-				ray.Direction = normalize(g_constants.sunDirection);
-
-				hit = trace_ray_occlusion(g_rtScene, ray);
-
-				if (hit.hitT >= 0.0)
-				{
-					value.rgb = 0.0;
-				}
-			}
-
-			//convert to srgb
-			value.rgb = to_srgb_from_linear(value.rgb);
-		}
-		else
-		{
-			value.rgb = instanceIdToColor(instanceId);
-		}
+		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
+		float3 radiance = path_trace(ray, seed);
+		radiance = to_srgb_from_linear(radiance);
+		g_rtOutput[tid.xy] = float4(radiance, 1.0);
 	}
+	else
+	{
+		RayHit hit = trace_ray_closest(g_rtScene, ray);
 
-	g_rtOutput[tid.xy] = value;
+		float4 value = float4(0.0, 0.0, 0.0, 1.0);
+
+		if (hit.hitT >= 0.0)
+		{
+			uint instanceId = hit.instanceId;
+			uint primitiveIndex = hit.primitiveId;
+			float2 baries = hit.barycentrics;
+			float3x3 transform = (float3x3)hit.transform;
+
+			if (g_constants.showNormal)
+			{
+				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+				value.rgb = fetchNormal(instanceId, indices, baries, transform);
+				value.rgb = value.rgb * 0.5 + 0.5;
+			}
+			else if (g_constants.showUvs)
+			{
+				float2 uvs = fetchUvs(instanceId, primitiveIndex, baries);
+				value.rgb = float3(uvs, 0.0);
+			}
+			else if (g_constants.showTexture)
+			{
+				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+				float2 uvs = fetchUvs(instanceId, indices, baries);
+
+				float4 texcolor = fetchTexture(instanceId, uvs);
+				value.rgb = texcolor.rgb;
+			}
+			else
+			{
+				value.rgb = instanceIdToColor(instanceId);
+			}
+		}
+
+		g_rtOutput[tid.xy] = value;
+	}
+	
 }

@@ -16,10 +16,12 @@ struct Uint2
 	uint32_t x, y;
 };
 
+using float2 = DirectX::XMFLOAT2;
 using float3 = DirectX::XMFLOAT3;
 using float4 = DirectX::XMVECTOR;
 using float4x4 = DirectX::XMMATRIX;
 using uint = uint32_t;
+using uint2 = Uint2;
 using uint3 = Uint3;
 
 #endif
@@ -59,6 +61,10 @@ struct RtConstants
 	uint showShaded;
 
 	float3 sunDirection;
+	uint pathCount;
+
+	uint frameIndex;
+	uint3 pad;
 };
 
 #endif

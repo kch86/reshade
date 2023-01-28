@@ -207,6 +207,7 @@ namespace
 	float s_ui_sun_elevation = 0.0;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
+	int s_ui_pathtrace_path_count = 1;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -1463,6 +1464,8 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 	}
 
+	static uint32_t frame_id = 0;
+
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
 	cb.viewPos = getViewPos();
@@ -1471,6 +1474,8 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showTexture = s_ui_show_texture;
 	cb.showShaded = s_ui_show_shaded;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
+	cb.pathCount = s_ui_pathtrace_path_count;
+	cb.frameIndex = frame_id++;
 
 	auto get_srv = [&](scopedresourceview& srv)
 	{
@@ -1662,6 +1667,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);
 	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, -90.0f, 90.0f);
+
+	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 0, 10);
 }
 
 static void on_init_runtime(effect_runtime *runtime)
