@@ -47,6 +47,7 @@ struct RtInstanceData
 {
 	float4 diffuse;
 	float4 specular;
+	float roughness;
 };
 
 struct RtConstants
@@ -66,7 +67,7 @@ struct RtConstants
 	uint pathCount;
 	uint frameIndex;
 	float bounceBoost;
-	uint pad;
+	uint showGi;
 };
 
 #endif

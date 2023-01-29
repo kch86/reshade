@@ -2,8 +2,7 @@
 #define SAMPLING_HLSL
 #define SAMPLING_HLSL
 
-
-#define M_PI 3.141592653589793238462643
+#include "Common.h"
 
 float2 pcg2d_rng(inout uint2 seed)
 {

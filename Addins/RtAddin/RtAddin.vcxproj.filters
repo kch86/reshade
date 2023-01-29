@@ -83,6 +83,9 @@
     <ClInclude Include="Shaders\Sampling.h">
       <Filter>Shaders</Filter>
     </ClInclude>
+    <ClInclude Include="Shaders\Common.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Raytracing_inline.hlsl">

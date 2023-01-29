@@ -95,7 +95,7 @@ namespace
 		format fmt = format::unknown;
 	};
 
-	struct BoundTextureData
+	struct TextureBindings
 	{
 		resource slots[4];
 	};
@@ -193,7 +193,8 @@ namespace
 	IndexData s_currentIB;
 	StreamData s_currentVB;
 	resource_view s_current_rtv = { 0 };
-	BoundTextureData s_currentTextureBindings;
+	resource s_reflection_resource = { 0 };
+	TextureBindings s_currentTextureBindings;
 
 	scopedresource s_empty_buffer;
 	scopedresourceview s_empty_srv;
@@ -206,7 +207,7 @@ namespace
 	float s_ui_sun_azimuth = 0.0;
 	float s_ui_sun_elevation = 0.0;
 	float s_ui_sun_intensity = 2.0;
-	float s_ui_bounce_boost = 0.5;
+	float s_ui_bounce_boost = 1.0;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 2;
@@ -934,6 +935,8 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 	else
 	{
 		s_current_rtv.handle = 0;
+
+		s_reflection_resource = cmd_list->get_device()->get_resource_from_view(new_main_rtv);
 	}
 }
 static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64_t offset, uint32_t index_size)
@@ -1068,6 +1071,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				s_current_material = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					.specular = get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}),
+					.roughness = 0.08f,
 				};
 			}
 			else
@@ -1211,23 +1215,38 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	uint32_t texslot = 0;
 	uint64_t texhandle = 0;
 
-	if (s_current_ps_pipeline.handle)
+	// get the albedo texture slot
 	{
-		assert(s_ps_hash_map.contains(s_current_ps_pipeline.handle));
-		const uint64_t hash = s_ps_hash_map[s_current_ps_pipeline.handle];
-		if (s_ps_texbinding_map.contains(hash))
+		if (s_current_ps_pipeline.handle)
 		{
-			texslot = 1;
+			assert(s_ps_hash_map.contains(s_current_ps_pipeline.handle));
+			const uint64_t hash = s_ps_hash_map[s_current_ps_pipeline.handle];
+			if (s_ps_texbinding_map.contains(hash))
+			{
+				texslot = 1;
+			}
+		}
+		if (texslot == 1 && s_currentTextureBindings.slots[1].handle)
+		{
+			texhandle = s_currentTextureBindings.slots[1].handle;
+		}
+		else
+		{
+			texhandle = s_currentTextureBindings.slots[0].handle;
 		}
 	}
-	if (texslot == 1 && s_currentTextureBindings.slots[1].handle)
+
+	// is the reflection view bound?
+	bool reflection_view_bound = false;
+	for (auto &res : s_currentTextureBindings.slots)
 	{
-		texhandle = s_currentTextureBindings.slots[1].handle;
+		if (res.handle == s_reflection_resource)
+		{
+			reflection_view_bound = true;
+			break;
+		}
 	}
-	else
-	{
-		texhandle = s_currentTextureBindings.slots[0].handle;
-	}
+	
 	bvh_manager::AttachmentDesc attachments[] = {
 		// ib
 		{
@@ -1281,6 +1300,12 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		},
 	};
 
+	Material mtrl = s_current_material;
+	if (reflection_view_bound)
+	{
+		mtrl.roughness = 0.1f;
+	}
+
 	bvh_manager::DrawDesc draw_desc = {
 		.d3d9device = cmd_list->get_device(),
 		.cmd_list = s_d3d12cmdlist,
@@ -1288,7 +1313,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.blas_desc = desc,
 		.transform = s_current_wvp,
 		.attachments = attachments,
-		.material = s_current_material,
+		.material = mtrl,
 		.dynamic = dynamic_resource,
 		.is_static = s_staticgeo_vs_pipeline_is_bound
 	};

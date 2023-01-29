@@ -176,6 +176,7 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 	mtrl.albedo = to_linear_from_srgb(textureAlbedo);
 	mtrl.albedo_tint = to_linear_from_srgb(data.diffuse.rgb);
 	mtrl.specular = to_linear_from_srgb(data.specular.rgb);
+	mtrl.roughness = data.roughness.x;
 	return mtrl;
 }
 
@@ -202,13 +203,13 @@ Shade shadeSurface(Surface surface)
 	light.l_dot_h = saturate(dot(light.dir, h));
 	light.n_dot_h = saturate(dot(surface.norm, h));
 
-	const float3 diffuse = diffuse_burley(surface, light);
-	const float3 specular = 0.0;
+	const float3 diffuse = diffuse_brdf_burley(surface, light);
+	const float3 specular = specular_brdf_ggx(surface, light); //TODO: specular is broken
 
 	const float3 light_intensity = light.n_dot_l * light.color;
 
 	shade.diffuse_radiance = light_intensity * diffuse;
-	shade.specular_radiance = light_intensity * specular;
+	shade.specular_radiance = 0.0;//light_intensity * specular;
 
 	return shade;
 }
@@ -244,7 +245,8 @@ float3 path_trace(RayDesc ray, uint2 rng)
 		surface.norm = normal;
 		surface.view = normalize(ray.Origin - surface.pos);
 		surface.n_dot_v = dot(surface.norm, surface.view);
-		surface.roughness = 0.8; //TODO: fetch roughness
+		surface.roughness = mtrl.roughness;
+		surface.reflectance = mtrl.specular.rgb;
 
 		// do lighting
 		Shade shade = shadeSurface(surface);
@@ -252,6 +254,8 @@ float3 path_trace(RayDesc ray, uint2 rng)
 		// do material (apply albedo + specular)
 		float3 irradiance = evalMaterial(mtrl, shade);
 		float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
+
+		float3 orig_raydir = ray.Direction;
 
 		// launch shadow ray
 		{
@@ -272,21 +276,24 @@ float3 path_trace(RayDesc ray, uint2 rng)
 		total_radiance += weight * irradiance * radiance;
 		weight *= irradiance;
 
-		// uncomment so show gi only
-		//total_radiance += weight * radiance;
+		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), surface.norm);
+
+		// randomly choose to do a reflection ray based on inverse roughness %
+		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - surface.roughness) ) ? 1.0f : 0.0f;
+		float3 refl_dir = reflect(orig_raydir, surface.norm);
+		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(surface.roughness)));
 
 		// ray origin already set to the right thing with the shadow ray test
-		ray.Direction = sample_hemisphere_cosine_fast(pcg2d_rng(rng), surface.norm);
+		ray.Direction = lerp(diffuse_dir, refl_dir, refl_prob);
 
 		// russian roulette
-		{
-			float p = max(weight.r, max(weight.g, weight.b));
-			if (pcg2d_rng(rng).x > p)
-				break;
+		// even though not all paths take this, it does help perf
+		const float kill = max(weight.r, max(weight.g, weight.b));
+		if (pcg2d_rng(rng).x > kill)
+			break;
 
-			// Add the energy we 'lose' by randomly terminating paths
-			weight *= rcp(p);
-		}
+		// weight by the pdf of the decision
+		weight *= rcp(kill);
 	}
 
 	return total_radiance;
@@ -321,7 +328,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		float3 radiance = 0.0;
 
-		const uint loop_count = 4;
+		const uint loop_count = 1;
 
 		[loop]
 		for (int i = 0; i < loop_count; i++)

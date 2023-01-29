@@ -289,6 +289,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				RtInstanceData rt_instance_data;
 				rt_instance_data.diffuse = instanceData.mtrl.diffuse;
 				rt_instance_data.specular = instanceData.mtrl.specular;
+				rt_instance_data.roughness = instanceData.mtrl.roughness;
 				instance_data.push_back(rt_instance_data);
 			}
 		}

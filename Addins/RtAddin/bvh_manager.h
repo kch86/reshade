@@ -12,7 +12,8 @@ struct RtInstanceData;
 struct Material
 {
 	DirectX::XMVECTOR diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
-	DirectX::XMVECTOR specular = { 0.0f, 0.0f, 0.0f, 0.0f };
+	DirectX::XMVECTOR specular = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float roughness = 0.8f;
 };
 
 class bvh_manager
