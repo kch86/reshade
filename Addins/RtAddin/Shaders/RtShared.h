@@ -61,10 +61,12 @@ struct RtConstants
 	uint showShaded;
 
 	float3 sunDirection;
-	uint pathCount;
+	float sunIntensity;
 
+	uint pathCount;
 	uint frameIndex;
-	uint3 pad;
+	float bounceBoost;
+	uint pad;
 };
 
 #endif

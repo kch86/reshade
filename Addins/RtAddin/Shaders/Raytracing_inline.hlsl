@@ -194,7 +194,7 @@ Shade shadeSurface(Surface surface)
 
 	Light light;
 	light.dir = g_constants.sunDirection;
-	light.color = 1.0.xxx;
+	light.color = float3(1.0.xxx) * g_constants.sunIntensity;
 
 	float3 h = normalize(light.dir + surface.view);
 
@@ -209,7 +209,6 @@ Shade shadeSurface(Surface surface)
 
 	shade.diffuse_radiance = light_intensity * diffuse;
 	shade.specular_radiance = light_intensity * specular;
-	//shade.radiance = dot(surface.norm, g_constants.sunDirection) * 1.0.xxx; //add sun color
 
 	return shade;
 }
@@ -218,6 +217,8 @@ float3 path_trace(RayDesc ray, uint2 rng)
 {
 	float3 total_radiance = 0.0;
 	float3 weight = 1.0;
+
+	float bounce_boost = 1.0;
 
 	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
 	{
@@ -265,11 +266,27 @@ float3 path_trace(RayDesc ray, uint2 rng)
 			}
 		}
 
+		bounce_boost += g_constants.bounceBoost * vertex;
+		radiance *= bounce_boost;
+
+		total_radiance += weight * irradiance * radiance;
 		weight *= irradiance;
-		total_radiance += weight * radiance;
+
+		// uncomment so show gi only
+		//total_radiance += weight * radiance;
 
 		// ray origin already set to the right thing with the shadow ray test
-		ray.Direction = sample_hemisphere(pcg2d_rng(rng), surface.norm);
+		ray.Direction = sample_hemisphere_cosine_fast(pcg2d_rng(rng), surface.norm);
+
+		// russian roulette
+		{
+			float p = max(weight.r, max(weight.g, weight.b));
+			if (pcg2d_rng(rng).x > p)
+				break;
+
+			// Add the energy we 'lose' by randomly terminating paths
+			weight *= rcp(p);
+		}
 	}
 
 	return total_radiance;
@@ -302,8 +319,22 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	if (g_constants.showShaded)
 	{
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
-		float3 radiance = path_trace(ray, seed);
-		radiance = to_srgb_from_linear(radiance);
+		float3 radiance = 0.0;
+
+		const uint loop_count = 4;
+
+		[loop]
+		for (int i = 0; i < loop_count; i++)
+		{
+			radiance += path_trace(ray, seed);
+		}
+		radiance /= float(loop_count);
+
+		float4 prevRadiance = g_rtOutput[tid.xy];
+
+		float weight = 1.0 / float(g_constants.frameIndex + 1);
+		radiance = (1.0 - weight) * prevRadiance.rgb + weight * radiance;
+
 		g_rtOutput[tid.xy] = float4(radiance, 1.0);
 	}
 	else

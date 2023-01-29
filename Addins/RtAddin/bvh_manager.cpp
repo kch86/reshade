@@ -82,6 +82,8 @@ void bvh_manager::on_geo_updated(resource res)
 
 void bvh_manager::on_geo_draw(DrawDesc& desc)
 {
+	if (desc.dynamic)
+		return;
 	struct
 	{
 		BlasBuildDesc desc;

@@ -205,9 +205,11 @@ namespace
 	float s_ui_fov = 60.0;
 	float s_ui_sun_azimuth = 0.0;
 	float s_ui_sun_elevation = 0.0;
+	float s_ui_sun_intensity = 2.0;
+	float s_ui_bounce_boost = 0.5;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
-	int s_ui_pathtrace_path_count = 1;
+	int s_ui_pathtrace_path_count = 2;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -249,6 +251,7 @@ namespace
 	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
+	uint32_t s_frame_id = 0;
 
 	bool s_d3d_debug_enabled = false;
 }
@@ -1321,6 +1324,8 @@ static void on_present(effect_runtime *runtime)
 	{
 		s_bvh_manager.destroy();
 	}
+
+	s_frame_id++;
 }
 
 static void update_rt()
@@ -1362,25 +1367,30 @@ void updateCamera(effect_runtime *runtime)
 	s_mouse_x = mousex;
 	s_mouse_y = mousey;
 
-	if (s_ctrl_down)
+	if (s_ctrl_down && (fabs(deltaX) > 0.0f || fabs(deltaY) > 0.0f))
 	{
+		s_frame_id = 0;
 		s_camera.rotate(deltaX, deltaY);
 	}	
 
 	if (runtime->is_key_down('W'))
 	{
+		s_frame_id = 0;
 		s_camera.move_forward(0.5f);
 	}
 	else if (runtime->is_key_down('S'))
 	{
+		s_frame_id = 0;
 		s_camera.move_forward(-0.5f);
 	}
 	if (runtime->is_key_down('A'))
 	{
+		s_frame_id = 0;
 		s_camera.move_lateral(-0.5f);
 	}
 	else if (runtime->is_key_down('D'))
 	{
+		s_frame_id = 0;
 		s_camera.move_lateral(0.5f);
 	}
 
@@ -1431,12 +1441,13 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		resource_desc desc = src_desc;
 		desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
 		desc.heap = memory_heap::gpu_only;
+		desc.texture.format = format::r16g16b16a16_float;
 
 		resource res;
 		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
 		s_output = scopedresource(s_d3d12device, res);
 
-		resource_view_desc view_desc(src_desc.texture.format);
+		resource_view_desc view_desc(desc.texture.format);
 
 		resource_view srv, uav;
 		s_d3d12device->create_resource_view(res, resource_usage::unordered_access, view_desc, &uav);
@@ -1464,8 +1475,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 	}
 
-	static uint32_t frame_id = 0;
-
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
 	cb.viewPos = getViewPos();
@@ -1474,8 +1483,10 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showTexture = s_ui_show_texture;
 	cb.showShaded = s_ui_show_shaded;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
+	cb.sunIntensity = s_ui_sun_intensity;
 	cb.pathCount = s_ui_pathtrace_path_count;
-	cb.frameIndex = frame_id++;
+	cb.frameIndex = s_frame_id;
+	cb.bounceBoost = s_ui_bounce_boost;
 
 	auto get_srv = [&](scopedresourceview& srv)
 	{
@@ -1652,6 +1663,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::SliderFloat("ViewFov: ", &s_ui_fov, 0, 90.0f);
 
+	bool use_game_camera = s_ui_use_game_camera;
 	ImGui::Checkbox("UseGameCamera", &s_ui_use_game_camera);
 	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
 	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
@@ -1667,8 +1679,16 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);
 	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, -90.0f, 90.0f);
+	ImGui::InputFloat("Sun Intensity: ", &s_ui_sun_intensity, 0.1f, 0.5f);
 
+	int path_count = s_ui_pathtrace_path_count;
 	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 0, 10);
+	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
+
+	if (path_count != s_ui_pathtrace_path_count || use_game_camera != s_ui_use_game_camera)
+	{
+		s_frame_id = 0;
+	}
 }
 
 static void on_init_runtime(effect_runtime *runtime)
