@@ -211,6 +211,7 @@ namespace
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 2;
+	int s_ui_pathtrace_iter_count = 3;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -1510,6 +1511,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
 	cb.pathCount = s_ui_pathtrace_path_count;
+	cb.iterCount = s_ui_pathtrace_iter_count;
 	cb.frameIndex = s_frame_id;
 	cb.bounceBoost = s_ui_bounce_boost;
 
@@ -1707,7 +1709,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::InputFloat("Sun Intensity: ", &s_ui_sun_intensity, 0.1f, 0.5f);
 
 	int path_count = s_ui_pathtrace_path_count;
-	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 0, 10);
+	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 1, 10);
+	ImGui::SliderInt("Pathtrace iter count: ", &s_ui_pathtrace_iter_count, 1, 10);
 	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
 
 	if (path_count != s_ui_pathtrace_path_count || use_game_camera != s_ui_use_game_camera)

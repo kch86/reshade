@@ -65,9 +65,9 @@ struct RtConstants
 	float sunIntensity;
 
 	uint pathCount;
+	uint iterCount;
 	uint frameIndex;
-	float bounceBoost;
-	uint showGi;
+	float bounceBoost;;
 };
 
 #endif

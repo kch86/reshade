@@ -11,6 +11,13 @@ struct Shade
 	float3 specular_radiance;
 };
 
+struct ShadeRayResult
+{
+	float3 radiance;
+	float3 irradiance;
+	Surface surface;
+};
+
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
 StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
@@ -214,76 +221,74 @@ Shade shadeSurface(Surface surface)
 	return shade;
 }
 
-float3 path_trace(RayDesc ray, uint2 rng)
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 {
-	float3 total_radiance = 0.0;
-	float3 weight = 1.0;
+	const uint instanceId = hit.instanceId;
+	const uint primitiveIndex = hit.primitiveId;
+	const float2 baries = hit.barycentrics;
+	const float3x3 transform = (float3x3)hit.transform;
+
+	// fetch data
+	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+	const float2 uvs = fetchUvs(instanceId, indices, baries);
+	const float4 texcolor = fetchTexture(instanceId, uvs);
+	const float3 normal = fetchNormal(instanceId, indices, baries, transform);
+	const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
+
+	// setup our surface properties
+	Surface surface;
+	surface.pos = ray.Origin + ray.Direction * hit.hitT;
+	surface.norm = normal;
+	surface.view = normalize(ray.Origin - surface.pos);
+	surface.n_dot_v = dot(surface.norm, surface.view);
+	surface.roughness = mtrl.roughness;
+	surface.reflectance = mtrl.specular.rgb;
+
+	// do lighting
+	Shade shade = shadeSurface(surface);
+
+	float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
+
+	// launch shadow ray
+	{
+		ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+		ray.Direction = normalize(g_constants.sunDirection);
+
+		hit = trace_ray_occlusion(g_rtScene, ray);
+
+		if (hit.hitT >= 0.0)
+		{
+			radiance.rgb = 0.0;
+		}
+	}
+
+	ShadeRayResult result;
+	result.radiance = radiance;
+	result.irradiance = evalMaterial(mtrl, shade);
+	result.surface = surface;
+
+	return result;
+}
+
+float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
+{
+	float3 total_radiance = primaryShade.radiance * primaryShade.irradiance;
+	float3 weight = primaryShade.irradiance;
 
 	float bounce_boost = 1.0;
 
-	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
+	ShadeRayResult shade = primaryShade;
+
+	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
-		RayHit hit = trace_ray_closest(g_rtScene, ray);
-		if (hit.hitT < 0.0)
-			break;
-
-		const uint instanceId = hit.instanceId;
-		const uint primitiveIndex = hit.primitiveId;
-		const float2 baries = hit.barycentrics;
-		const float3x3 transform = (float3x3)hit.transform;
-
-		// fetch data
-		const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-		const float2 uvs = fetchUvs(instanceId, indices, baries);
-		const float4 texcolor = fetchTexture(instanceId, uvs);
-		const float3 normal = fetchNormal(instanceId, indices, baries, transform);
-		const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
-
-		// setup our surface properties
-		Surface surface;
-		surface.pos = ray.Origin + ray.Direction * hit.hitT;
-		surface.norm = normal;
-		surface.view = normalize(ray.Origin - surface.pos);
-		surface.n_dot_v = dot(surface.norm, surface.view);
-		surface.roughness = mtrl.roughness;
-		surface.reflectance = mtrl.specular.rgb;
-
-		// do lighting
-		Shade shade = shadeSurface(surface);
-
-		// do material (apply albedo + specular)
-		float3 irradiance = evalMaterial(mtrl, shade);
-		float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
-
-		float3 orig_raydir = ray.Direction;
-
-		// launch shadow ray
-		{
-			ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
-			ray.Direction = normalize(g_constants.sunDirection);
-
-			hit = trace_ray_occlusion(g_rtScene, ray);
-
-			if (hit.hitT >= 0.0)
-			{
-				radiance.rgb = 0.0;
-			}
-		}
-
-		bounce_boost += g_constants.bounceBoost * vertex;
-		radiance *= bounce_boost;
-
-		total_radiance += weight * irradiance * radiance;
-		weight *= irradiance;
-
-		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), surface.norm);
+		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.norm);
 
 		// randomly choose to do a reflection ray based on inverse roughness %
-		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - surface.roughness) ) ? 1.0f : 0.0f;
-		float3 refl_dir = reflect(orig_raydir, surface.norm);
-		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(surface.roughness)));
+		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.surface.roughness)) ? 1.0f : 0.0f;
+		float3 refl_dir = reflect(ray.Direction, shade.surface.norm);
+		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.surface.roughness)));
 
-		// ray origin already set to the right thing with the shadow ray test
+		ray.Origin = shade.surface.pos + shade.surface.norm * length(shade.surface.pos - ray.Origin) * 0.00001;
 		ray.Direction = lerp(diffuse_dir, refl_dir, refl_prob);
 
 		// russian roulette
@@ -294,6 +299,20 @@ float3 path_trace(RayDesc ray, uint2 rng)
 
 		// weight by the pdf of the decision
 		weight *= rcp(kill);
+
+		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		if (hit.hitT < 0.0)
+			break;
+
+		shade = shade_ray(ray, hit, rng);		
+
+		float3 orig_raydir = ray.Direction;
+
+		bounce_boost += g_constants.bounceBoost * vertex;
+		shade.radiance *= bounce_boost;
+
+		total_radiance += weight * shade.irradiance * shade.radiance;
+		weight *= shade.irradiance;
 	}
 
 	return total_radiance;
@@ -328,14 +347,19 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		float3 radiance = 0.0;
 
-		const uint loop_count = 1;
-
-		[loop]
-		for (int i = 0; i < loop_count; i++)
+		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		if (hit.hitT >= 0.0)
 		{
-			radiance += path_trace(ray, seed);
+			ShadeRayResult shade = shade_ray(ray, hit, seed);
+
+			const uint loop_count = 4;
+			[loop]
+			for (int i = 0; i < loop_count; i++)
+			{
+				radiance += path_trace(ray, shade, seed);
+			}
+			radiance /= float(loop_count);
 		}
-		radiance /= float(loop_count);
 
 		float4 prevRadiance = g_rtOutput[tid.xy];
 
