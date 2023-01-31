@@ -223,6 +223,7 @@ namespace
 	bool s_ui_show_uvs = false;
 	bool s_ui_show_texture = false;
 	bool s_ui_show_shaded = true;
+	bool s_ui_show_motion_vectors = false;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
 	bool s_ui_render_before_ui = true;
@@ -1512,6 +1513,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showNormal = s_ui_show_normals;
 	cb.showUvs = s_ui_show_uvs;
 	cb.showTexture = s_ui_show_texture;
+	cb.showMotionVec = s_ui_show_motion_vectors;
 	cb.showShaded = s_ui_show_shaded;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
@@ -1707,6 +1709,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show normals", &s_ui_show_normals);
 	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
 	ImGui::Checkbox("Show texture", &s_ui_show_texture);
+	ImGui::Checkbox("Show motion vec", &s_ui_show_motion_vectors);
 	ImGui::Checkbox("Show shaded", &s_ui_show_shaded);
 
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);

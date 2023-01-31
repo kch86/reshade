@@ -77,6 +77,7 @@ private:
 	struct RtInstance
 	{
 		DirectX::XMMATRIX transform;
+		DirectX::XMMATRIX prev_transform;
 		Material mtrl;
 	};
 

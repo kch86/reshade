@@ -105,7 +105,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	else
 	{
 		instanceIndex = 0;
-		m_per_frame_instance_counts[combined_hash] = 0;
+		m_per_frame_instance_counts[combined_hash] = 1;
 	}
 
 	auto result = std::find_if(m_geometry.begin(), m_geometry.end(), [&](const BlasBuildDesc &d) {
@@ -131,6 +131,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		m_instances.push_back({});
 		m_instances.back().push_back({
 			.transform = desc.transform,
+			.prev_transform = desc.transform,
 			.mtrl = desc.material
 		});
 		m_geometry.push_back(desc.blas_desc);
@@ -212,6 +213,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		}
 		if (instanceIndex < m_instances[index].size())
 		{
+			m_instances[index][instanceIndex].prev_transform = m_instances[index][instanceIndex].transform;
 			m_instances[index][instanceIndex].transform = desc.transform;
 			m_instances[index][instanceIndex].mtrl = desc.material;
 		}
@@ -265,21 +267,33 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				});
 			}
 
-			const auto &instanceDatas = m_instances[i];
-			for (const auto &instanceData : instanceDatas)
+			auto &instanceDatas = m_instances[i];
+			for (auto &instanceData : instanceDatas)
 			{
+				XMFLOAT3X4 toPrevWorldTransform;
+				XMMATRIX toPrevWorldTransform4x4 = XMMatrixIdentity();
 				if (base_transform)
 				{
+					//matrices are row major, so mult happens right to left
 					XMMATRIX inv_viewproj = XMMatrixInverse(nullptr, *base_transform);
 					XMMATRIX wvp = instanceData.transform;
 					XMMATRIX world = inv_viewproj * wvp;
 
+					// hack: update the instance's transform with this actual world transform
+					// when the object is drawn again, we'll copy this transform  into prev_transform
+					instanceData.transform = world;
+
 					memcpy(instance.transform, &world, sizeof(instance.transform));
+
+					// multiply by this frame's world inverse by the previous frame's world matrix
+					toPrevWorldTransform4x4 = XMMatrixInverse(nullptr, world) * instanceData.prev_transform;
 				}
 				else
 				{
 					instance.transform[0][0] = instance.transform[1][1] = instance.transform[2][2] = 1.0f;
 				}
+				memcpy(&toPrevWorldTransform, &toPrevWorldTransform4x4, sizeof(XMFLOAT3X4));
+
 				instance.instance_id = totalInstanceCount;
 				totalInstanceCount++;
 
@@ -290,6 +304,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				rt_instance_data.diffuse = instanceData.mtrl.diffuse;
 				rt_instance_data.specular = instanceData.mtrl.specular;
 				rt_instance_data.roughness = instanceData.mtrl.roughness;
+				rt_instance_data.toWorldPrevT = toPrevWorldTransform;
 				instance_data.push_back(rt_instance_data);
 			}
 		}

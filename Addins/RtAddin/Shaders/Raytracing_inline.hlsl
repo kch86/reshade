@@ -354,6 +354,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		float3 radiance = 0.0;
 
 		RayHit hit = trace_ray_closest(g_rtScene, ray);
+
+		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
 		{
 			ShadeRayResult shade = shade_ray(ray, hit, seed);
@@ -365,14 +367,21 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				radiance += path_trace(ray, shade, seed);
 			}
 			radiance /= float(loop_count);
-		}
+
+			const RtInstanceData data = g_instance_data_buffer[hit.instanceId];
+			const float3 hitpos = rayorigin + raydir * hit.hitT;
+			const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
+			mv = hitpos - prev_hitpos;
+		}		
 
 		float4 prevRadiance = g_rtOutput[tid.xy];
 
-		float weight = 1.0 / float(g_constants.frameIndex + 1);
-		radiance = (1.0 - weight) * prevRadiance.rgb + weight * radiance;
+		const bool reset = g_constants.frameIndex == 0 || dot(mv, mv) > 0.1;
 
-		g_rtOutput[tid.xy] = float4(radiance, 1.0);
+		float weight = reset ? 1.0f : 1.0f / (1.0f + (1.0f / prevRadiance.a));
+		radiance = lerp(prevRadiance.rgb, radiance, weight);
+
+		g_rtOutput[tid.xy] = float4(radiance, weight);
 	}
 	else
 	{
@@ -382,10 +391,10 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 		if (hit.hitT >= 0.0)
 		{
-			uint instanceId = hit.instanceId;
-			uint primitiveIndex = hit.primitiveId;
-			float2 baries = hit.barycentrics;
-			float3x3 transform = (float3x3)hit.transform;
+			const uint instanceId = hit.instanceId;
+			const uint primitiveIndex = hit.primitiveId;
+			const float2 baries = hit.barycentrics;
+			const float3x3 transform = (float3x3)hit.transform;
 
 			if (g_constants.showNormal)
 			{
@@ -405,6 +414,16 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				float4 texcolor = fetchTexture(instanceId, uvs);
 				value.rgb = texcolor.rgb;
+			}
+			else if (g_constants.showMotionVec)
+			{
+				const RtInstanceData data = g_instance_data_buffer[instanceId];
+
+				const float3 hitpos = ray.Origin + ray.Direction * hit.hitT;
+				const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
+				const float3 mv = hitpos - prev_hitpos;
+
+				value.rgb = abs(mv) / 2.0;
 			}
 			else
 			{
