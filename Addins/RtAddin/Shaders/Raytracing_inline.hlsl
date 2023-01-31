@@ -210,13 +210,13 @@ Shade shadeSurface(Surface surface)
 	light.l_dot_h = saturate(dot(light.dir, h));
 	light.n_dot_h = saturate(dot(surface.norm, h));
 
-	const float3 diffuse = diffuse_brdf_burley(surface, light);
+	const float diffuse = diffuse_brdf_burley(surface, light);
 	const float3 specular = specular_brdf_ggx(surface, light); //TODO: specular is broken
 
 	const float3 light_intensity = light.n_dot_l * light.color;
 
 	shade.diffuse_radiance = light_intensity * diffuse;
-	shade.specular_radiance = 0.0;//light_intensity * specular;
+	shade.specular_radiance = light_intensity * specular;
 
 	return shade;
 }
@@ -302,7 +302,11 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 		RayHit hit = trace_ray_closest(g_rtScene, ray);
 		if (hit.hitT < 0.0)
+		{
+			//TODO: sample a skybox
+			total_radiance += weight * float3(0.1, 0.1, 0.25);;
 			break;
+		}			
 
 		shade = shade_ray(ray, hit, rng);		
 

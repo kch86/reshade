@@ -1071,7 +1071,8 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 
 				s_current_material = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
-					.specular = get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}),
+					//TODO most of the specular color values are bogus pre-pbr values
+					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
 					.roughness = 0.08f,
 				};
 			}

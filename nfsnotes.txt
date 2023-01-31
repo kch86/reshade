@@ -29,3 +29,17 @@ todo:
 - add smarter way to free blases that haven't been seen or built in a while
 -- linkedlist, deque?
 - decode all the texcoord stream elements
+
+
+
+//car vs layout
+//   HarmonicCoeff c0      10
+//   WorldViewProj c10      4
+//   WorldView     c14      3
+//   LocalEyePos   c17      1
+//   DiffuseMin    c18      1
+//   DiffuseRange  c19      1
+//   SpecularMin   c20      1
+//   SpecularRange c21      1
+//   SpecularPower c22      1
+//   EnvmapPower   c23      1
