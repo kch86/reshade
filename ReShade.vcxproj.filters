@@ -648,6 +648,7 @@
     <None Include="tools\update_version.ps1">
       <Filter>resources</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\copy_ps.hlsl">
