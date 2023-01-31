@@ -15,6 +15,7 @@ struct ShadeRayResult
 {
 	float3 radiance;
 	float3 irradiance;
+	float3 specular_color;
 	Surface surface;
 };
 
@@ -266,6 +267,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	result.radiance = radiance;
 	result.irradiance = evalMaterial(mtrl, shade);
 	result.surface = surface;
+	result.specular_color = mtrl.specular.rgb;
 
 	return result;
 }
@@ -304,7 +306,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
-			total_radiance += weight * float3(0.1, 0.1, 0.25);;
+			total_radiance += weight * float3(0.1, 0.1, 0.25) * 1.0;
 			break;
 		}			
 
@@ -316,7 +318,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		shade.radiance *= bounce_boost;
 
 		total_radiance += weight * shade.irradiance * shade.radiance;
-		weight *= shade.irradiance;
+		weight *= lerp(shade.irradiance, shade.specular_color, refl_prob); //is this causing the 3rd/4th bounce issues?
 	}
 
 	return total_radiance;
