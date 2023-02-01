@@ -33,6 +33,7 @@ todo:
 - decode all the texcoord stream elements
 - 3rd bounces seem too dark from shadowed surfaces. maybe a bug here...
 -- missing the albedo color as well....
+- only do 3+ bounces if you've hit a mirror surface
 
 
 

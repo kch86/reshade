@@ -222,6 +222,16 @@ Shade shadeSurface(Surface surface)
 	return shade;
 }
 
+float3 get_ray_hitpoint(RayDesc ray, RayHit hit)
+{
+	return ray.Origin + ray.Direction * hit.hitT;
+}
+
+float3 get_ray_origin_offset(Surface surface, RayDesc ray)
+{
+	return surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+}
+
 ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 {
 	const uint instanceId = hit.instanceId;
@@ -238,7 +248,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 
 	// setup our surface properties
 	Surface surface;
-	surface.pos = ray.Origin + ray.Direction * hit.hitT;
+	surface.pos = get_ray_hitpoint(ray, hit);
 	surface.norm = normal;
 	surface.view = normalize(ray.Origin - surface.pos);
 	surface.n_dot_v = dot(surface.norm, surface.view);
@@ -252,7 +262,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 
 	// launch shadow ray
 	{
-		ray.Origin = surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+		ray.Origin = get_ray_origin_offset(surface, ray);
 		ray.Direction = normalize(g_constants.sunDirection);
 
 		hit = trace_ray_occlusion(g_rtScene, ray);
@@ -283,6 +293,18 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
+		// russian roulette. if expected lum is low, randomly kill
+		// even though not all paths take this, it does help perf
+		if (vertex > 1)
+		{
+			const float kill = get_luminance(weight);
+			if (pcg2d_rng(rng).x > kill)
+				break;
+
+			// weight by the pdf of the decision
+			weight *= rcp(kill);
+		}		
+
 		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.norm);
 
 		// randomly choose to do a reflection ray based on inverse roughness %
@@ -290,17 +312,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		float3 refl_dir = reflect(ray.Direction, shade.surface.norm);
 		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.surface.roughness)));
 
-		ray.Origin = shade.surface.pos + shade.surface.norm * length(shade.surface.pos - ray.Origin) * 0.00001;
+		ray.Origin = get_ray_origin_offset(shade.surface, ray);
 		ray.Direction = lerp(diffuse_dir, refl_dir, refl_prob);
-
-		// russian roulette
-		// even though not all paths take this, it does help perf
-		const float kill = max(weight.r, max(weight.g, weight.b));
-		if (pcg2d_rng(rng).x > kill)
-			break;
-
-		// weight by the pdf of the decision
-		weight *= rcp(kill);
 
 		RayHit hit = trace_ray_closest(g_rtScene, ray);
 		if (hit.hitT < 0.0)
@@ -360,16 +373,15 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		{
 			ShadeRayResult shade = shade_ray(ray, hit, seed);
 
-			const uint loop_count = 4;
 			[loop]
-			for (int i = 0; i < loop_count; i++)
+			for (int i = 0; i < g_constants.iterCount; i++)
 			{
 				radiance += path_trace(ray, shade, seed);
 			}
-			radiance /= float(loop_count);
+			radiance /= float(g_constants.iterCount);
 
 			const RtInstanceData data = g_instance_data_buffer[hit.instanceId];
-			const float3 hitpos = rayorigin + raydir * hit.hitT;
+			const float3 hitpos = get_ray_hitpoint(ray, hit);
 			const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
 			mv = hitpos - prev_hitpos;
 		}		
@@ -419,7 +431,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			{
 				const RtInstanceData data = g_instance_data_buffer[instanceId];
 
-				const float3 hitpos = ray.Origin + ray.Direction * hit.hitT;
+				const float3 hitpos = get_ray_hitpoint(ray, hit);
 				const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
 				const float3 mv = hitpos - prev_hitpos;
 
