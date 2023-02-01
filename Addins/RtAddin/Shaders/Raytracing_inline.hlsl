@@ -9,6 +9,7 @@ struct Shade
 {
 	float3 diffuse_radiance;
 	float3 specular_radiance;
+	float attenuation;
 };
 
 struct ShadeRayResult
@@ -207,7 +208,8 @@ Shade shadeSurface(Surface surface)
 
 	float3 h = normalize(light.dir + surface.view);
 
-	light.n_dot_l = saturate(dot(surface.norm, light.dir));
+	float NoL = dot(surface.norm, light.dir);
+	light.n_dot_l = saturate(NoL);
 	light.l_dot_h = saturate(dot(light.dir, h));
 	light.n_dot_h = saturate(dot(surface.norm, h));
 
@@ -218,6 +220,7 @@ Shade shadeSurface(Surface surface)
 
 	shade.diffuse_radiance = light_intensity * diffuse;
 	shade.specular_radiance = light_intensity * specular;
+	shade.attenuation = NoL;
 
 	return shade;
 }
@@ -261,6 +264,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
 
 	// launch shadow ray
+	if(shade.attenuation > 0.0)
 	{
 		ray.Origin = get_ray_origin_offset(surface, ray);
 		ray.Direction = normalize(g_constants.sunDirection);
@@ -331,7 +335,13 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		shade.radiance *= bounce_boost;
 
 		total_radiance += weight * shade.irradiance * shade.radiance;
-		weight *= lerp(shade.irradiance, shade.specular_color, refl_prob); //is this causing the 3rd/4th bounce issues?
+
+		// weighting by specular is causing bounces 3+ to lose albedo contribution
+		//weight *= lerp(shade.irradiance, shade.specular_color, refl_prob);
+
+		// hack only weight by specular on bounce 3+?
+		const float3 w = vertex > 2 ? lerp(shade.irradiance, shade.specular_color, refl_prob) : shade.irradiance;
+		weight *= w;
 	}
 
 	return total_radiance;
