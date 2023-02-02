@@ -9,15 +9,17 @@ struct Shade
 {
 	float3 diffuse_radiance;
 	float3 specular_radiance;
+	float3 specular_reflectance;
+	float3 diffuse_reflectance;
 	float attenuation;
 };
 
 struct ShadeRayResult
 {
-	float3 radiance;
-	float3 irradiance;
-	float3 specular_color;
 	Surface surface;
+	Shade shade;
+	Material mtrl;
+	float3 radiance;
 };
 
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
@@ -181,44 +183,51 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 {
 	RtInstanceData data = g_instance_data_buffer[instance_id];
 
+	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
+
 	Material mtrl;
-	mtrl.albedo = to_linear_from_srgb(textureAlbedo);
-	mtrl.albedo_tint = to_linear_from_srgb(data.diffuse.rgb);
-	mtrl.specular = to_linear_from_srgb(data.specular.rgb);
+	mtrl.base_color = to_linear_from_srgb(textureAlbedo) * baseColorTint;
+	mtrl.emissive = 0.0;
 	mtrl.roughness = data.roughness.x;
+	mtrl.metalness = 0.0;
 	return mtrl;
 }
 
-float3 evalMaterial(Material mtrl, Shade shade)
+Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 {
-	float3 outIrradiance = 0.0;
-
-	outIrradiance = mtrl.albedo * mtrl.albedo_tint;
-
-	return outIrradiance;
-}
-
-Shade shadeSurface(Surface surface)
-{
-	Shade shade;
-
 	Light light;
 	light.dir = g_constants.sunDirection;
 	light.color = float3(1.0.xxx) * g_constants.sunIntensity;
 
-	float3 h = normalize(light.dir + surface.view);
-
 	float NoL = dot(surface.norm, light.dir);
-	light.n_dot_l = saturate(NoL);
-	light.l_dot_h = saturate(dot(light.dir, h));
-	light.n_dot_h = saturate(dot(surface.norm, h));
 
-	const float diffuse = diffuse_brdf_burley(surface, light);
-	const float3 specular = specular_brdf_ggx(surface, light); //TODO: specular is broken
+	Brdf brdf;
+	brdf.V = V;
+	brdf.L = light.dir;
+	brdf.N = surface.norm;
+	brdf.H = normalize(brdf.L + brdf.V);
+	brdf.n_dot_l = saturate(NoL);
+	brdf.l_dot_h = saturate(dot(brdf.L, brdf.H));
+	brdf.n_dot_h = saturate(dot(brdf.N, brdf.H));
+	brdf.n_dot_v = dot(brdf.N, brdf.V);
+	brdf.roughness = mtrl.roughness;
+	brdf.alpha = pow2(brdf.roughness);
+	brdf.alpha2 = pow2(brdf.alpha);
+	brdf.diffuse_reflectance = diffuse_reflectance(mtrl.base_color, mtrl.metalness);
+	brdf.specular_f0 = specular_f0(mtrl.base_color, mtrl.metalness);
 
-	const float3 light_intensity = light.n_dot_l * light.color;
+	const float3 spec_f90 = specular_f90(brdf.specular_f0);
+	brdf.F = f_schlick(brdf.specular_f0, spec_f90, brdf.l_dot_h);
 
-	shade.diffuse_radiance = light_intensity * diffuse;
+	const float diffuse = diffuse_brdf_burley(brdf);
+	const float3 specular = specular_brdf_ggx(brdf); //TODO: specular is broken
+
+	const float3 light_intensity = brdf.n_dot_l * light.color;
+
+	Shade shade;
+	shade.diffuse_reflectance = brdf.diffuse_reflectance;
+	shade.specular_reflectance = brdf.F;
+	shade.diffuse_radiance = light_intensity * diffuse * shade.diffuse_reflectance;
 	shade.specular_radiance = light_intensity * specular;
 	shade.attenuation = NoL;
 
@@ -253,13 +262,11 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	Surface surface;
 	surface.pos = get_ray_hitpoint(ray, hit);
 	surface.norm = normal;
-	surface.view = normalize(ray.Origin - surface.pos);
-	surface.n_dot_v = dot(surface.norm, surface.view);
-	surface.roughness = mtrl.roughness;
-	surface.reflectance = mtrl.specular.rgb;
+
+	const float3 to_view = normalize(ray.Origin - surface.pos);
 
 	// do lighting
-	Shade shade = shadeSurface(surface);
+	Shade shade = shadeSurface(surface, mtrl, to_view);
 
 	float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
 
@@ -279,17 +286,17 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 
 	ShadeRayResult result;
 	result.radiance = radiance;
-	result.irradiance = evalMaterial(mtrl, shade);
+	result.shade = shade;
 	result.surface = surface;
-	result.specular_color = mtrl.specular.rgb;
+	result.mtrl = mtrl;
 
 	return result;
 }
 
 float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 {
-	float3 total_radiance = primaryShade.radiance * primaryShade.irradiance;
-	float3 weight = primaryShade.irradiance;
+	float3 total_radiance = primaryShade.radiance;
+	float3 throughput = primaryShade.shade.diffuse_reflectance;
 
 	float bounce_boost = 1.0;
 
@@ -301,20 +308,21 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		// even though not all paths take this, it does help perf
 		if (vertex > 1)
 		{
-			const float kill = get_luminance(weight);
+			const float kill = get_luminance(throughput);
 			if (pcg2d_rng(rng).x > kill)
 				break;
 
-			// weight by the pdf of the decision
-			weight *= rcp(kill);
+			// throughput by the pdf of the decision
+			throughput *= rcp(kill);
 		}		
 
 		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.norm);
 
 		// randomly choose to do a reflection ray based on inverse roughness %
-		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.surface.roughness)) ? 1.0f : 0.0f;
+		// TODO: better probability function
+		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.mtrl.roughness)) ? 1.0f : 0.0f;
 		float3 refl_dir = reflect(ray.Direction, shade.surface.norm);
-		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.surface.roughness)));
+		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.mtrl.roughness)));
 
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
 		ray.Direction = lerp(diffuse_dir, refl_dir, refl_prob);
@@ -323,25 +331,26 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
-			total_radiance += weight * float3(0.1, 0.1, 0.25) * 1.0;
+			total_radiance += throughput * float3(0.1, 0.1, 0.25) * 1.0;
 			break;
 		}			
 
-		shade = shade_ray(ray, hit, rng);		
+		shade = shade_ray(ray, hit, rng);
+		total_radiance += throughput * shade.mtrl.emissive;
 
 		float3 orig_raydir = ray.Direction;
 
 		bounce_boost += g_constants.bounceBoost * vertex;
 		shade.radiance *= bounce_boost;
 
-		total_radiance += weight * shade.irradiance * shade.radiance;
+		total_radiance += throughput * shade.radiance;
 
 		// weighting by specular is causing bounces 3+ to lose albedo contribution
-		//weight *= lerp(shade.irradiance, shade.specular_color, refl_prob);
-
-		// hack only weight by specular on bounce 3+?
-		const float3 w = vertex > 2 ? lerp(shade.irradiance, shade.specular_color, refl_prob) : shade.irradiance;
-		weight *= w;
+		// this is still broken with better brdf setup
+		// maybe this needs a better diffuse vs specular selection?
+		// maybe I'm doing this in the wrong place? this should be for the next ray?
+		//throughput *= lerp(shade.shade.diffuse_reflectance, shade.shade.specular_reflectance, refl_prob);
+		throughput *= shade.shade.diffuse_reflectance;
 	}
 
 	return total_radiance;

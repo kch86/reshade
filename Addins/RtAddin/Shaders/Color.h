@@ -1,6 +1,5 @@
 #ifndef COLOR_HLSL
 #define COLOR_HLSL
-#define COLOR_HLSL
 
 float3 to_srgb_from_linear(float3 x)
 {
@@ -17,4 +16,4 @@ float get_luminance(float3 c)
 	return dot(float3(0.2126, 0.7152, 0.0722), c);
 }
 
-#endif //
+#endif //COLOR_HLSL
