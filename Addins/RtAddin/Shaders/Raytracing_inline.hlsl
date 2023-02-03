@@ -27,6 +27,7 @@ StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, spac
 StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
+RWTexture2D<float> g_hitHistory : register(u1);
 
 cbuffer constants : register(b0)
 {
@@ -185,8 +186,13 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
+	float3 combined_base = to_linear_from_srgb(textureAlbedo) * baseColorTint;
+
+	// some textures have zero color as their color which is not physically accurate
+	//combined_base = max(0.05, combined_base);
+
 	Material mtrl;
-	mtrl.base_color = to_linear_from_srgb(textureAlbedo) * baseColorTint;
+	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;
 	mtrl.roughness = data.roughness.x;
 	mtrl.metalness = 0.0;
@@ -405,14 +411,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			mv = hitpos - prev_hitpos;
 		}		
 
+		const float prevHitT = g_hitHistory[tid.xy];
+
+		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;
+		const bool motionInvalidate = dot(mv, mv) > 0.1;
+		const bool reset = g_constants.frameIndex == 0 || motionInvalidate || hitInvalidate;
+
 		float4 prevRadiance = g_rtOutput[tid.xy];
-
-		const bool reset = g_constants.frameIndex == 0 || dot(mv, mv) > 0.1;
-
 		float weight = reset ? 1.0f : 1.0f / (1.0f + (1.0f / prevRadiance.a));
 		radiance = lerp(prevRadiance.rgb, radiance, weight);
 
 		g_rtOutput[tid.xy] = float4(radiance, weight);
+		g_hitHistory[tid.xy] = hit.hitT;
 	}
 	else
 	{

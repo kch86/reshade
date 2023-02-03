@@ -191,6 +191,8 @@ namespace
 
 	scopedresource s_output;
 	scopedresourceview s_output_uav, s_output_srv;
+	scopedresource s_history;
+	scopedresourceview s_history_uav;
 	uint32_t s_width = 0, s_height = 0;
 
 	pipeline s_currentInputLayout;
@@ -380,7 +382,7 @@ static void init_pipeline()
 		pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants)/sizeof(int), .visibility = shader_stage::compute}),
 		};
 
@@ -1462,38 +1464,85 @@ XMFLOAT3 getSunDirection(float azimuth, float elevation)
 	return XMFLOAT3(sinTheta * cosPhi, cosTheta * cosPhi, sinPhi);
 }
 
-static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
+bool create_trace_resources(uint32_t width, uint32_t height, resource_desc src_desc)
 {
 	if (s_width != width || s_height != height)
 	{
-		s_output.free();
-		s_output_srv.free();
-		s_output_uav.free();
+		// rt output
+		{
+			s_output.free();
+			s_output_srv.free();
+			s_output_uav.free();
 
-		resource_desc desc = src_desc;
-		desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
-		desc.heap = memory_heap::gpu_only;
-		desc.texture.format = format::r16g16b16a16_float;
+			resource_desc desc = src_desc;
+			desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
+			desc.heap = memory_heap::gpu_only;
+			desc.texture.format = format::r16g16b16a16_float;
 
-		resource res;
-		s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
-		s_output = scopedresource(s_d3d12device, res);
+			resource res;
+			s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
+			s_output = scopedresource(s_d3d12device, res);
 
-		resource_view_desc view_desc(desc.texture.format);
+			resource_view_desc view_desc(desc.texture.format);
 
-		resource_view srv, uav;
-		s_d3d12device->create_resource_view(res, resource_usage::unordered_access, view_desc, &uav);
-		s_d3d12device->create_resource_view(res, resource_usage::shader_resource, view_desc, &srv);
+			resource_view srv, uav;
+			s_d3d12device->create_resource_view(res, resource_usage::unordered_access, view_desc, &uav);
+			s_d3d12device->create_resource_view(res, resource_usage::shader_resource, view_desc, &srv);
 
-		s_output_srv = scopedresourceview(s_d3d12device, srv);
-		s_output_uav = scopedresourceview(s_d3d12device, uav);
+			s_output_srv = scopedresourceview(s_d3d12device, srv);
+			s_output_uav = scopedresourceview(s_d3d12device, uav);
+		}
+
+		// history
+		{
+			s_history.free();
+			s_history_uav.free();
+
+			resource_desc desc = src_desc;
+			desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
+			desc.heap = memory_heap::gpu_only;
+			desc.texture.format = format::r16_float;
+
+			resource res;
+			s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);
+			s_history = scopedresource(s_d3d12device, res);
+
+			resource_view_desc view_desc(desc.texture.format);
+
+			resource_view uav;
+			s_d3d12device->create_resource_view(res, resource_usage::unordered_access, view_desc, &uav);
+
+			s_history_uav = scopedresourceview(s_d3d12device, uav);
+		}
 
 		s_width = width;
 		s_height = height;
+
+		return true;
 	}
-	else
+
+	return false;
+}
+
+static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
+{
+	// if new resources weren't created (false), then barrier
+	if (!create_trace_resources(width, height, src_desc))
 	{
-		s_d3d12cmdlist->barrier(s_output.handle(), resource_usage::shader_resource, resource_usage::unordered_access);
+		resource resources[] = {
+			s_output.handle(),
+			s_history.handle()
+		};
+		resource_usage before[] = {
+			resource_usage::shader_resource,
+			resource_usage::unordered_access
+		};
+		resource_usage after[] = {
+			resource_usage::unordered_access,
+			resource_usage::unordered_access
+		};
+		const uint32_t count = ARRAYSIZE(resources);
+		s_d3d12cmdlist->barrier(count, resources, before, after);
 	}
 
 	resource_view tlas_srv;
@@ -1532,6 +1581,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		get_srv(s_instance_data_srv),
 	};
 
+	resource_view uavs[] = {
+		s_output_uav.handle(),
+		s_history_uav.handle(),
+	};
+
 	//update descriptors
 	descriptor_set_update updates[] = {
 		{
@@ -1545,9 +1599,9 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 			.descriptors = srvs, // bind tlas srv
 		},
 		{
-			.count = 1,
+			.count = ARRAYSIZE(uavs),
 			.type = descriptor_type::unordered_access_view,
-			.descriptors = &s_output_uav, // bind output uav
+			.descriptors = uavs, // bind output uav
 		}
 	};
 
