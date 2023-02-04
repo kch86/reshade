@@ -216,8 +216,9 @@ namespace
 	float s_ui_bounce_boost = 1.0;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
-	int s_ui_pathtrace_path_count = 2;
-	int s_ui_pathtrace_iter_count = 3;
+	int s_ui_pathtrace_path_count = 4;
+	int s_ui_pathtrace_iter_count = 2;
+	int s_ui_brdf_prob_option = 0;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -1076,7 +1077,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					return default_value;
 				};
 
-				const float default_roughness = 0.1f;
+				const float default_roughness = 0.8f;
 				auto get_roughness = [=](XMVECTOR spec_power) {
 					float s = XMVectorGetX(spec_power);
 					if (s == 0.0f)
@@ -1578,6 +1579,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.sunIntensity = s_ui_sun_intensity;
 	cb.pathCount = s_ui_pathtrace_path_count;
 	cb.iterCount = s_ui_pathtrace_iter_count;
+	cb.specProb = s_ui_brdf_prob_option;
 	cb.frameIndex = s_frame_id;
 	cb.bounceBoost = s_ui_bounce_boost;
 
@@ -1784,6 +1786,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 1, 10);
 	ImGui::SliderInt("Pathtrace iter count: ", &s_ui_pathtrace_iter_count, 1, 10);
 	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
+	ImGui::InputInt("Brdf probability", &s_ui_brdf_prob_option, 1, 1);
 
 	if (path_count != s_ui_pathtrace_path_count || use_game_camera != s_ui_use_game_camera)
 	{

@@ -58,5 +58,15 @@ RayHit trace_ray_occlusion(RaytracingAccelerationStructure tlas, RayDesc ray)
 	return hit;
 }
 
+float3 get_ray_hitpoint(RayDesc ray, RayHit hit)
+{
+	return ray.Origin + ray.Direction * hit.hitT;
+}
+
+float3 get_ray_origin_offset(RayDesc ray, float3 pos, float3 normal)
+{
+	return pos + normal * length(pos - ray.Origin) * 0.00001;
+}
+
 
 #endif // RAYTRACING_HLSL

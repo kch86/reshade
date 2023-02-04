@@ -211,6 +211,11 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 	return mtrl;
 }
 
+float3 get_ray_origin_offset(Surface surface, RayDesc ray)
+{
+	return get_ray_origin_offset(ray, surface.pos, surface.geom_normal);
+}
+
 Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 {
 	Light light;
@@ -250,16 +255,6 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	shade.attenuation = NoL;
 
 	return shade;
-}
-
-float3 get_ray_hitpoint(RayDesc ray, RayHit hit)
-{
-	return ray.Origin + ray.Direction * hit.hitT;
-}
-
-float3 get_ray_origin_offset(Surface surface, RayDesc ray)
-{
-	return surface.pos + surface.geom_normal * length(surface.pos - ray.Origin) * 0.00001;
 }
 
 ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
@@ -326,28 +321,56 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
-		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
+		const float3 V = -ray.Direction;
 
 		// randomly choose to do a reflection ray based on inverse roughness %
 		// TODO: better probability function
-		const float brdf_prob = clamp(1.0 - shade.mtrl.roughness, 0.1, 0.9);
-
-		float3 ray_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
-		if (pcg2d_rng(rng).x < brdf_prob)
+		float3 ray_dir = get_diffuse_ray(pcg2d_rng(rng), shade.surface.geom_normal);
+		float brdf_prob = 0.0;
+		if (g_constants.specProb == 0)
 		{
-			//specular ray
-			throughput *= rcp(brdf_prob);
-			throughput *= shade.shade.specular_reflectance;
+			brdf_prob = estimate_specular_probability_simple(shade.mtrl);
 
-			float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
-			ray_dir = normalize(lerp(refl_dir, ray_dir, pow2(shade.mtrl.roughness)));
+			if (pcg2d_rng(rng).x < brdf_prob)
+			{
+				//specular ray
+				throughput *= rcp(brdf_prob);
+
+				SpecularRay spec_ray = get_specular_ray_simple(ray.Direction,
+															   shade.surface.shading_normal,
+															   ray_dir,
+															   shade.mtrl.roughness,
+															   shade.shade.specular_reflectance);
+				throughput *= spec_ray.weight;
+				ray_dir = spec_ray.dir;
+			}
+			else
+			{
+				//diffuse ray
+				throughput *= rcp(1.0 - brdf_prob);
+				throughput *= shade.shade.diffuse_reflectance;
+			}
 		}
 		else
 		{
-			//diffuse ray
-			throughput *= rcp(1.0 - brdf_prob);
-			throughput *= shade.shade.diffuse_reflectance;
-		}
+			brdf_prob = estimate_specular_probability_ross(shade.mtrl, shade.surface.shading_normal, V);
+
+			if (pcg2d_rng(rng).x < brdf_prob)
+			{
+				//specular ray
+				throughput *= rcp(brdf_prob);
+
+				SpecularRay spec_ray = get_specular_ray_vndf_ggx(pcg2d_rng(rng), shade.mtrl, shade.surface.shading_normal, V);
+				throughput *= spec_ray.weight;
+				ray_dir = spec_ray.dir;
+			}
+			else
+			{
+				//diffuse ray
+				throughput *= rcp(1.0 - brdf_prob);
+				throughput *= shade.shade.diffuse_reflectance; //weight by NoL and F?
+			}
+		}		
 
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
 		ray.Direction = ray_dir;
@@ -373,7 +396,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			if (pcg2d_rng(rng).x > kill)
 				break;
 
-			// throughput by the pdf of the decision
+			// mul throughput by the pdf of the decision
 			throughput *= rcp(kill);
 		}
 	}
@@ -408,7 +431,6 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			// throughput by the pdf of the decision
 			throughput *= rcp(kill);
 		}
-
 
 		// randomly choose to do a reflection ray based on inverse roughness %
 		// TODO: better probability function
