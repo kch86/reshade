@@ -1076,11 +1076,21 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					return default_value;
 				};
 
+				const float default_roughness = 0.1f;
+				auto get_roughness = [=](XMVECTOR spec_power) {
+					float s = XMVectorGetX(spec_power);
+					if (s == 0.0f)
+						s = default_roughness;
+					float roughness = sqrtf(2.0f / (s + 2.0f));
+					roughness = powf(roughness, 5.0);
+					return roughness;
+				};
+
 				s_current_material = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					//TODO most of the specular color values are bogus pre-pbr values
 					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
-					.roughness = 0.08f,
+					.roughness = get_roughness(get_elem(offset->second.specular_power_offset, XMVectorReplicate(default_roughness))),
 				};
 			}
 			else
@@ -1312,7 +1322,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	Material mtrl = s_current_material;
 	if (reflection_view_bound)
 	{
-		mtrl.roughness = 0.1f;
+		mtrl.roughness = 0.15f;
 	}
 
 	bvh_manager::DrawDesc draw_desc = {
@@ -1806,9 +1816,11 @@ static void do_shutdown()
 {
 	s_tlas.free();
 	s_output.free();
+	s_history.free();
 
 	s_output_uav.free();
 	s_output_srv.free();
+	s_history_uav.free();
 
 	s_bvh_manager.destroy();
 
@@ -1821,6 +1833,7 @@ static void do_shutdown()
 	s_empty_buffer.free();
 	s_empty_srv.free();
 
+	s_dynamic_resources.clear();
 	s_shadow_resources.clear();
 
 	// all resource frees must happen before this as they will add to the deferred delete list
