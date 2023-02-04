@@ -57,6 +57,7 @@ struct delayFreedHandle
 		if (_handle.handle)
 		{
 			deferDestroyHandle(_device, _handle);
+			_handle.handle = 0;
 		}
 	}
 
