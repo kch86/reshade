@@ -341,7 +341,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		// randomly choose to do a reflection ray based on inverse roughness %
 		// TODO: better probability function
 		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.mtrl.roughness)) ? 1.0f : 0.0f;
-		float3 refl_dir = reflect(ray.Direction, shade.surface.geom_normal);
+		float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
 		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.mtrl.roughness)));
 
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);

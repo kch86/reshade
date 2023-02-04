@@ -55,7 +55,7 @@ struct Brdf
 // Converts a Blinn-Phong specular power to a Beckmann roughness parameter
 float spec_power_to_roughness(float s)
 {
-	return sqrt(2.0f / (s + 2.0f));
+	return sqrt(2.0 / (s + 2.0));
 }
 
 float pow2(float x)
