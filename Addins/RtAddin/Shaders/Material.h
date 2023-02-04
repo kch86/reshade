@@ -7,7 +7,8 @@
 struct Surface
 {
 	float3 pos;
-	float3 norm;
+	float3 geom_normal;
+	float3 shading_normal;
 };
 
 struct Material

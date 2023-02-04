@@ -100,7 +100,26 @@ uint3 fetchIndices(uint instance_id, uint primitive_id)
 	return indices;
 }
 
-float3 fetchNormal(uint instance_id, uint3 indices, float2 baries, float3x3 transform)
+float3 fetchGeometryNormal(uint instance_id, uint3 indices, float3x3 transform)
+{
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
+
+	float3 n;
+
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
+
+	uint stride = att.vb.stride;
+	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
+	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
+	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+
+	n = normalize(cross((v1 - v0), (v2 - v0)));
+
+	n = mul(transform, n);
+	return normalize(n);
+}
+
+float3 fetchShadingNormal(uint instance_id, uint3 indices, float2 baries, float3x3 transform, float3 geomNormal)
 {
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
@@ -109,14 +128,7 @@ float3 fetchNormal(uint instance_id, uint3 indices, float2 baries, float3x3 tran
 	// if there isn't a valid normal stream, fallback to triangle normal
 	if (att.norm.id == 0x7FFFFFFF)
 	{
-		ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
-
-		uint stride = att.vb.stride;
-		float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
-		float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
-		float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
-
-		n = normalize(cross((v1 - v0), (v2 - v0)));
+		n = geomNormal;
 	}
 	else
 	{
@@ -129,11 +141,11 @@ float3 fetchNormal(uint instance_id, uint3 indices, float2 baries, float3x3 tran
 		float3 n2 = asfloat(vb.Load3(indices.z * stride + att.norm.offset));
 
 		n = n0 * (1.0 - baries.y - baries.x) + n1 * baries.x + n2 * baries.y;
+		n = mul(transform, n);
 		n = normalize(n);
 	}
 
-	n = mul(transform, n);
-	return normalize(n);
+	return n;
 }
 
 float2 fetchUvs(uint instance_id, uint3 indices, float2 baries)
@@ -205,12 +217,12 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	light.dir = g_constants.sunDirection;
 	light.color = float3(1.0.xxx) * g_constants.sunIntensity;
 
-	float NoL = dot(surface.norm, light.dir);
+	float NoL = dot(surface.shading_normal, light.dir);
 
 	Brdf brdf;
 	brdf.V = V;
 	brdf.L = light.dir;
-	brdf.N = surface.norm;
+	brdf.N = surface.shading_normal;
 	brdf.H = normalize(brdf.L + brdf.V);
 	brdf.n_dot_l = saturate(NoL);
 	brdf.l_dot_h = saturate(dot(brdf.L, brdf.H));
@@ -247,7 +259,7 @@ float3 get_ray_hitpoint(RayDesc ray, RayHit hit)
 
 float3 get_ray_origin_offset(Surface surface, RayDesc ray)
 {
-	return surface.pos + surface.norm * length(surface.pos - ray.Origin) * 0.00001;
+	return surface.pos + surface.geom_normal * length(surface.pos - ray.Origin) * 0.00001;
 }
 
 ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
@@ -261,13 +273,15 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 	const float2 uvs = fetchUvs(instanceId, indices, baries);
 	const float4 texcolor = fetchTexture(instanceId, uvs);
-	const float3 normal = fetchNormal(instanceId, indices, baries, transform);
+	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
+	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
 	const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
 
 	// setup our surface properties
 	Surface surface;
 	surface.pos = get_ray_hitpoint(ray, hit);
-	surface.norm = normal;
+	surface.geom_normal = geomNormal;
+	surface.shading_normal = shadingNormal;
 
 	const float3 to_view = normalize(ray.Origin - surface.pos);
 
@@ -322,12 +336,12 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			throughput *= rcp(kill);
 		}		
 
-		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.norm);
+		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
 
 		// randomly choose to do a reflection ray based on inverse roughness %
 		// TODO: better probability function
 		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.mtrl.roughness)) ? 1.0f : 0.0f;
-		float3 refl_dir = reflect(ray.Direction, shade.surface.norm);
+		float3 refl_dir = reflect(ray.Direction, shade.surface.geom_normal);
 		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.mtrl.roughness)));
 
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
@@ -440,7 +454,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			if (g_constants.showNormal)
 			{
 				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-				value.rgb = fetchNormal(instanceId, indices, baries, transform);
+				const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
+				value.rgb = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
 				value.rgb = value.rgb * 0.5 + 0.5;
 			}
 			else if (g_constants.showUvs)
