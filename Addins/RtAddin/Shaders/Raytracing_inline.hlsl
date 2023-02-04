@@ -238,7 +238,7 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	brdf.F = f_schlick(brdf.specular_f0, spec_f90, brdf.l_dot_h);
 
 	const float diffuse = diffuse_brdf_burley(brdf);
-	const float3 specular = specular_brdf_ggx(brdf); //TODO: specular is broken
+	const float3 specular = specular_brdf_ggx(brdf);
 
 	const float3 light_intensity = brdf.n_dot_l * light.color;
 
@@ -313,10 +313,12 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	return result;
 }
 
+#define EXTRACT_PRIMARY 1
 float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 {
-	float3 total_radiance = primaryShade.radiance;
-	float3 throughput = primaryShade.shade.diffuse_reflectance;
+#if EXTRACT_PRIMARY
+	float3 total_radiance = primaryShade.radiance + primaryShade.mtrl.emissive;
+	float3 throughput = 1.0;
 
 	float bounce_boost = 1.0;
 
@@ -324,28 +326,31 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
-		// russian roulette. if expected lum is low, randomly kill
-		// even though not all paths take this, it does help perf
-		if (vertex > 1)
-		{
-			const float kill = get_luminance(throughput);
-			if (pcg2d_rng(rng).x > kill)
-				break;
-
-			// throughput by the pdf of the decision
-			throughput *= rcp(kill);
-		}		
-
 		const float3 diffuse_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
 
 		// randomly choose to do a reflection ray based on inverse roughness %
 		// TODO: better probability function
-		const float refl_prob = (pcg2d_rng(rng).x < (1.0 - shade.mtrl.roughness)) ? 1.0f : 0.0f;
-		float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
-		refl_dir = normalize(lerp(refl_dir, diffuse_dir, pow2(shade.mtrl.roughness)));
+		const float brdf_prob = clamp(1.0 - shade.mtrl.roughness, 0.1, 0.9);
+
+		float3 ray_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
+		if (pcg2d_rng(rng).x < brdf_prob)
+		{
+			//specular ray
+			throughput *= rcp(brdf_prob);
+			throughput *= shade.shade.specular_reflectance;
+
+			float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
+			ray_dir = normalize(lerp(refl_dir, ray_dir, pow2(shade.mtrl.roughness)));
+		}
+		else
+		{
+			//diffuse ray
+			throughput *= rcp(1.0 - brdf_prob);
+			throughput *= shade.shade.diffuse_reflectance;
+		}
 
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
-		ray.Direction = lerp(diffuse_dir, refl_dir, refl_prob);
+		ray.Direction = ray_dir;
 
 		RayHit hit = trace_ray_closest(g_rtScene, ray);
 		if (hit.hitT < 0.0)
@@ -358,20 +363,78 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		shade = shade_ray(ray, hit, rng);
 		total_radiance += throughput * shade.mtrl.emissive;
 
-		float3 orig_raydir = ray.Direction;
+		bounce_boost += g_constants.bounceBoost * vertex;
+		total_radiance += throughput * shade.radiance * bounce_boost;
+
+		// russian roulette. if expected lum is low, randomly kill
+		// even though not all paths take this, it does help perf
+		{
+			const float kill = get_luminance(throughput);
+			if (pcg2d_rng(rng).x > kill)
+				break;
+
+			// throughput by the pdf of the decision
+			throughput *= rcp(kill);
+		}
+	}
+#else
+	float3 total_radiance = 0.0;
+	float3 throughput = 1.0;
+
+	float bounce_boost = 1.0;
+
+	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
+	{
+		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		if (hit.hitT < 0.0)
+		{
+			//TODO: sample a skybox
+			total_radiance += throughput * float3(0.1, 0.1, 0.25) * 1.0;
+			break;
+		}
+
+		ShadeRayResult shade = shade_ray(ray, hit, rng);
+		total_radiance += throughput * shade.mtrl.emissive;
 
 		bounce_boost += g_constants.bounceBoost * vertex;
-		shade.radiance *= bounce_boost;
+		total_radiance += throughput * shade.radiance * bounce_boost;
 
-		total_radiance += throughput * shade.radiance;
+		if (vertex > 1)
+		{
+			const float kill = get_luminance(throughput);
+			if (pcg2d_rng(rng).x > kill)
+				break;
 
-		// weighting by specular is causing bounces 3+ to lose albedo contribution
-		// this is still broken with better brdf setup
-		// maybe this needs a better diffuse vs specular selection?
-		// maybe I'm doing this in the wrong place? this should be for the next ray?
-		//throughput *= lerp(shade.shade.diffuse_reflectance, shade.shade.specular_reflectance, refl_prob);
-		throughput *= shade.shade.diffuse_reflectance;
+			// throughput by the pdf of the decision
+			throughput *= rcp(kill);
+		}
+
+
+		// randomly choose to do a reflection ray based on inverse roughness %
+		// TODO: better probability function
+		const float brdf_prob = clamp(1.0 - shade.mtrl.roughness, 0.1, 0.9);
+
+		float3 ray_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
+		if (pcg2d_rng(rng).x < brdf_prob)
+		{
+			//specular ray
+			throughput *= rcp(brdf_prob);
+			throughput *= shade.shade.specular_reflectance;
+
+			float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
+			ray_dir = normalize(lerp(refl_dir, ray_dir, pow2(shade.mtrl.roughness)));
+		}
+		else
+		{
+			//diffuse ray
+			throughput *= rcp(1.0 - brdf_prob);
+			throughput *= shade.shade.diffuse_reflectance;
+		}
+
+		ray.Origin = get_ray_origin_offset(shade.surface, ray);
+		ray.Direction = ray_dir;
 	}
+#endif
 
 	return total_radiance;
 }
@@ -412,7 +475,6 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		{
 			ShadeRayResult shade = shade_ray(ray, hit, seed);
 
-			[loop]
 			for (int i = 0; i < g_constants.iterCount; i++)
 			{
 				radiance += path_trace(ray, shade, seed);
@@ -423,7 +485,11 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			const float3 hitpos = get_ray_hitpoint(ray, hit);
 			const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
 			mv = hitpos - prev_hitpos;
-		}		
+		}
+		else
+		{
+			//sample sky?
+		}
 
 		const float prevHitT = g_hitHistory[tid.xy];
 
