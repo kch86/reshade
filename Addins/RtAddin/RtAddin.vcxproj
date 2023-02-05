@@ -168,7 +168,7 @@
     <ClInclude Include="hash.h" />
     <ClInclude Include="raytracing.h" />
     <ClInclude Include="Shaders\Color.h" />
-    <ClInclude Include="Shaders\Common.h" />
+    <ClInclude Include="Shaders\Math.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />
     <ClInclude Include="Shaders\Material.h" />
     <ClInclude Include="Shaders\RayTracingHlslCompat.h" />

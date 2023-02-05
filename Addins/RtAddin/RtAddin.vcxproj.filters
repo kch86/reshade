@@ -83,7 +83,7 @@
     <ClInclude Include="Shaders\Sampling.h">
       <Filter>Shaders</Filter>
     </ClInclude>
-    <ClInclude Include="Shaders\Common.h">
+    <ClInclude Include="Shaders\Math.h">
       <Filter>Shaders</Filter>
     </ClInclude>
   </ItemGroup>
