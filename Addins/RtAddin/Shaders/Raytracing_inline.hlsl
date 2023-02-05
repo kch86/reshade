@@ -323,43 +323,18 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	{
 		const float3 V = -ray.Direction;
 
-		// randomly choose to do a reflection ray based on inverse roughness %
-		// TODO: better probability function
-		float3 ray_dir = get_diffuse_ray(pcg2d_rng(rng), shade.surface.geom_normal);
-		float brdf_prob = 0.0;
-		if (g_constants.specProb == 0)
+		// do multiple importance sampling
+		// choose spec or diffuse ray based on estimated specular strength
+		float3 ray_dir = 0.0;
 		{
-			brdf_prob = estimate_specular_probability_simple(shade.mtrl);
+			float brdf_prob = estimate_specular_probability_ross(shade.mtrl, shade.surface.shading_normal, V);
 
 			if (pcg2d_rng(rng).x < brdf_prob)
 			{
 				//specular ray
 				throughput *= rcp(brdf_prob);
 
-				SpecularRay spec_ray = get_specular_ray_simple(ray.Direction,
-															   shade.surface.shading_normal,
-															   ray_dir,
-															   shade.mtrl.roughness,
-															   shade.shade.specular_reflectance);
-				throughput *= spec_ray.weight;
-				ray_dir = spec_ray.dir;
-			}
-			else
-			{
-				//diffuse ray
-				throughput *= rcp(1.0 - brdf_prob);
-				throughput *= shade.shade.diffuse_reflectance;
-			}
-		}
-		else
-		{
-			brdf_prob = estimate_specular_probability_ross(shade.mtrl, shade.surface.shading_normal, V);
-
-			if (pcg2d_rng(rng).x < brdf_prob)
-			{
-				//specular ray
-				throughput *= rcp(brdf_prob);
-
+				// do anisotropic ray generation
 				SpecularRay spec_ray = get_specular_ray_vndf_ggx(pcg2d_rng(rng), shade.mtrl, shade.surface.shading_normal, V);
 				throughput *= spec_ray.weight;
 				ray_dir = spec_ray.dir;
@@ -368,7 +343,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			{
 				//diffuse ray
 				throughput *= rcp(1.0 - brdf_prob);
-				throughput *= shade.shade.diffuse_reflectance; //weight by NoL and F?
+				throughput *= shade.shade.diffuse_reflectance; //weight by NoL and 1-F?
+				ray_dir = get_diffuse_ray(pcg2d_rng(rng), shade.surface.geom_normal);
 			}
 		}		
 

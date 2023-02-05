@@ -18,33 +18,6 @@ float2 pcg2d_rng(inout uint2 seed)
 	return float2(seed) * 2.32830643654e-10;
 }
 
-float3x3 create_basis(in float3 N)
-{
-	float3 U, V, W;
-
-#if 0
-	W = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
-	U = normalize(cross(W, N));
-	V = cross(N, U);
-	W = N;
-#else
-	W = N;
-	U = cross(float3(0.0f, 0.0f, 1.0f), W);
-
-	// N already pointing down z-axis
-	if (abs(dot(U, U)) < 1e-3f)
-	{
-		U = cross(W, float3(0.0f, 1.0f, 0.0f));
-	}
-
-	U = normalize(U);
-	V = normalize(cross(U, W));
-	//W = normalize( cross( U, V ) );
-#endif
-
-	return float3x3(U, V, W);
-}
-
 float3 sample_sphere(float2 u)
 {
 	float z = 2.0 * u[1] - 1.0;

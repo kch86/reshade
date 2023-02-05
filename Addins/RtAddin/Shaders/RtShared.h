@@ -73,8 +73,7 @@ struct RtConstants
 	float bounceBoost;
 
 	uint showMotionVec;
-	uint specProb;
-	uint2 pad;
+	uint3 pad;
 };
 
 #endif

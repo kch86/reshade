@@ -88,19 +88,20 @@ float3 specular_f90(float3 f0)
 	return saturate(get_luminance(f0) / 0.02).xxx;
 }
 
-float f_schlick(float F0, float F90, float VoNH)
+// VoX == VoN || VoH
+float f_schlick(float F0, float F90, float VoX)
 {
-	return lerp(F0, F90, pow5(1.0 - VoNH));
+	return lerp(F0, F90, pow5(1.0 - VoX));
 }
 
-float3 f_schlick(float3 F0, float3 F90, float VoNH)
+float3 f_schlick(float3 F0, float3 F90, float VoX)
 {
-	return lerp(F0, F90, pow5(1.0 - VoNH));
+	return lerp(F0, F90, pow5(1.0 - VoX));
 }
 
-float3 f_schlick(float3 F0, float VoNH)
+float3 f_schlick(float3 F0, float VoX)
 {
-	return  F0 + (1.0 - F0) * pow5(VoNH);
+	return  F0 + (1.0 - F0) * pow5(1.0 - saturate(VoX));
 }
 
 float d_ggx(Brdf brdf)
@@ -110,9 +111,19 @@ float d_ggx(Brdf brdf)
 }
 
 // Smith ggx specular geometric visibility function
+// NoX == NoV || NoL
 float g_smith_ggx(float alpha, float NoX)
 {
 	return 2.0f / (1.0f + sqrt(alpha * alpha * (1.0f - NoX * NoX) / (NoX * NoX) + 1.0f));
+}
+
+float g_smith(float roughness, float NoX)
+{
+	float m = roughness * roughness;
+	float m2 = m * m;
+	float a = NoX + sqrt_sat((NoX - m2 * NoX) * NoX + m2);
+
+	return 2.0 * NoX * rcp_safe(a);
 }
 
 float g_smith_ggx(Brdf brdf)
@@ -214,15 +225,15 @@ SpecularRay get_specular_ray_vndf_ggx(
 	float3 normal, float3 V,
 	float trimFactor = 1.0)
 {
-	const float EPS = 1e-7;
+	float3x3 basis = create_basis2(normal);
+	float3 Vlocal = RotateVector(basis, V);
 
-	float4 qRotationToZ = getRotationToZAxis(normal);
-	float3 Vlocal = rotatePoint(qRotationToZ, V);
+	const float EPS = 1e-7;
 
 	// TODO: instead of using 2 roughness values introduce "anisotropy" parameter
 	// https://blog.selfshadow.com/publications/s2013-shading-course/rad/s2013_pbs_rad_notes.pdf (page 3)
 
-	float m = mtrl.roughness * mtrl.roughness;
+	float2 m = mtrl.roughness * mtrl.roughness;
 
 	// Section 3.2: transforming the view direction to the hemisphere configuration
 	float3 Vh = normalize(float3(m * Vlocal.xy, Vlocal.z));
@@ -234,15 +245,15 @@ SpecularRay get_specular_ray_vndf_ggx(
 
 	// Section 4.2: parameterization of the projected area
 	// trimFactor: 1 - full lobe, 0 - true mirror
-	float r = sqrt(rnd.x * trimFactor);
-	float phi = rnd.y * (2.0 * M_PI);
+	float r = sqrt_sat(rnd.x * trimFactor);
+	float phi = rnd.y * M_2PI;
 	float t1 = r * cos(phi);
 	float t2 = r * sin(phi);
 	float s = 0.5 * (1.0 + Vh.z);
-	t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+	t2 = (1.0 - s) * sqrt_sat(1.0 - t1 * t1) + s * t2;
 
 	// Section 4.3: reprojection onto hemisphere
-	float3 Nh = t1 * T1 + t2 * T2 + sqrt(1.0 - t1 * t1 - t2 * t2) * Vh;
+	float3 Nh = t1 * T1 + t2 * T2 + sqrt_sat(1.0 - t1 * t1 - t2 * t2) * Vh;
 
 	// Section 3.4: transforming the normal back to the ellipsoid configuration
 	float3 Ne = normalize(float3(m * Nh.xy, max(Nh.z, EPS)));
@@ -255,10 +266,10 @@ SpecularRay get_specular_ray_vndf_ggx(
 
 	const float3 rf0 = specular_f0(mtrl.base_color, mtrl.metalness);
 	const float3 f = f_schlick(rf0, VoH);
-	const float3 g = g_smith_ggx(m, NoL);
+	const float3 g = g_smith(mtrl.roughness, NoL);
 
 	SpecularRay ray;
-	ray.dir = normalize(rotatePoint(invertRotation(qRotationToZ), local_ray));
+	ray.dir = RotateVectorInverse(basis, local_ray);
 	ray.weight = f * g;
 
 	return ray;

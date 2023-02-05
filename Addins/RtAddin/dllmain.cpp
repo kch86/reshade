@@ -102,6 +102,11 @@ namespace
 	struct TextureBindings
 	{
 		resource slots[4];
+		void clear()
+		{
+			for (auto &res : slots)
+				res.handle = 0;
+		}
 	};
 
 	// wrapper for updatable buffers
@@ -218,7 +223,6 @@ namespace
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 4;
 	int s_ui_pathtrace_iter_count = 2;
-	int s_ui_brdf_prob_option = 0;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt_full = false;
 	bool s_ui_show_rt_half = false;
@@ -1080,9 +1084,11 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				const float default_roughness = 0.8f;
 				auto get_roughness = [=](XMVECTOR spec_power) {
 					float s = XMVectorGetX(spec_power);
-					if (s == 0.0f)
-						s = default_roughness;
 					float roughness = sqrtf(2.0f / (s + 2.0f));
+
+					// TODO: this helps with the car paint, but hurts the tires
+					// I probably need a per-mtrl override, where mtrl is vs/ps/texture bindings combo
+					// analyze the spec min, range, and power. maybe this will be enough info to modify roughness accordingly
 					roughness = powf(roughness, 5.0);
 					return roughness;
 				};
@@ -1194,12 +1200,13 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	return false;
 }
-;
+
 static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_draw_count++;
+		s_currentTextureBindings.clear();
 	});
 
 	if (filter_command())
@@ -1359,10 +1366,7 @@ static void on_present(effect_runtime *runtime)
 	s_null_vs_ps_has_been_bound = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
-	s_currentTextureBindings.slots[0] = { 0 };
-	s_currentTextureBindings.slots[1] = { 0 };
-	s_currentTextureBindings.slots[2] = { 0 };
-	s_currentTextureBindings.slots[3] = { 0 };
+	s_currentTextureBindings.clear();
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
@@ -1579,7 +1583,6 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.sunIntensity = s_ui_sun_intensity;
 	cb.pathCount = s_ui_pathtrace_path_count;
 	cb.iterCount = s_ui_pathtrace_iter_count;
-	cb.specProb = s_ui_brdf_prob_option;
 	cb.frameIndex = s_frame_id;
 	cb.bounceBoost = s_ui_bounce_boost;
 
@@ -1786,7 +1789,6 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 1, 10);
 	ImGui::SliderInt("Pathtrace iter count: ", &s_ui_pathtrace_iter_count, 1, 10);
 	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
-	ImGui::InputInt("Brdf probability", &s_ui_brdf_prob_option, 1, 1);
 
 	if (path_count != s_ui_pathtrace_path_count || use_game_camera != s_ui_use_game_camera)
 	{
