@@ -1,8 +1,8 @@
 #ifndef MATERIAL_HLSL
 #define MATERIAL_HLSL
 
-#include "Common.h"
 #include "Color.h"
+#include "Math.h"
 #include "Sampling.h"
 
 struct Surface

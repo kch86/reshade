@@ -2,7 +2,7 @@
 #define SAMPLING_HLSL
 #define SAMPLING_HLSL
 
-#include "Common.h"
+#include "Math.h"
 
 float2 pcg2d_rng(inout uint2 seed)
 {
