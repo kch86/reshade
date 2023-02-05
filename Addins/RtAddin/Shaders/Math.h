@@ -35,7 +35,7 @@ float3x3 create_basis(in float3 N)
 	return float3x3(U, V, W);
 }
 
-float3x3 create_basis2(float3 N)
+float3x3 create_basis_fast(float3 N)
 {
 	float sz = sign(N.z);
 	float a = 1.0 / (sz + N.z);

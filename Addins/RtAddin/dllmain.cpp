@@ -214,11 +214,12 @@ namespace
 	command_list *s_d3d12cmdlist = nullptr;
 	command_queue *s_d3d12cmdqueue = nullptr;
 
-	float s_ui_fov = 60.0;
-	float s_ui_sun_azimuth = 0.0;
-	float s_ui_sun_elevation = 0.0;
-	float s_ui_sun_intensity = 2.0;
-	float s_ui_bounce_boost = 1.0;
+	float s_ui_fov = 60.0f;
+	float s_ui_sun_azimuth = 0.0f;
+	float s_ui_sun_elevation = 0.0f;
+	float s_ui_sun_intensity = 2.0f;
+	float s_ui_sun_radius = 0.1f;
+	float s_ui_bounce_boost = 1.0f;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 4;
@@ -1581,6 +1582,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showShaded = s_ui_show_shaded;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
+	cb.sunRadius = s_ui_sun_radius;
 	cb.pathCount = s_ui_pathtrace_path_count;
 	cb.iterCount = s_ui_pathtrace_iter_count;
 	cb.frameIndex = s_frame_id;
@@ -1784,6 +1786,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);
 	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, -90.0f, 90.0f);
 	ImGui::InputFloat("Sun Intensity: ", &s_ui_sun_intensity, 0.1f, 0.5f);
+	ImGui::InputFloat("Sun Radius: ", &s_ui_sun_radius, 0.05f, 0.5f);
 
 	int path_count = s_ui_pathtrace_path_count;
 	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 1, 10);

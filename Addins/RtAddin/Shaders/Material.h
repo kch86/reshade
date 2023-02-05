@@ -225,7 +225,7 @@ SpecularRay get_specular_ray_vndf_ggx(
 	float3 normal, float3 V,
 	float trimFactor = 1.0)
 {
-	float3x3 basis = create_basis2(normal);
+	float3x3 basis = create_basis_fast(normal);
 	float3 Vlocal = RotateVector(basis, V);
 
 	const float EPS = 1e-7;

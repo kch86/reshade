@@ -288,8 +288,12 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	// launch shadow ray
 	if(shade.attenuation > 0.0)
 	{
+		float3x3 basis = create_basis_fast(g_constants.sunDirection); // TODO: move to CB
+		const float2 xy = pcg2d_rng(rng) * g_constants.sunRadius;
+		float3 sunDirection = normalize(basis[0] * xy.x + basis[1] * xy.y + basis[2]);
+
+		ray.Direction = normalize(sunDirection);
 		ray.Origin = get_ray_origin_offset(surface, ray);
-		ray.Direction = normalize(g_constants.sunDirection);
 
 		hit = trace_ray_occlusion(g_rtScene, ray);
 
