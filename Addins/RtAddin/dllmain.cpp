@@ -174,6 +174,7 @@ namespace
 		int diffuse_offset;
 		int specular_offset;
 		int specular_power_offset;
+		int env_power_offset;
 	};
 
 	std::shared_mutex s_mutex;
@@ -322,7 +323,8 @@ static void init_vs_mappings()
 				{
 					.diffuse_offset = 18,
 					.specular_offset = 20,
-					.specular_power_offset = 22
+					.specular_power_offset = 22,
+					.env_power_offset = 23
 				}
 			},
 			{
@@ -330,7 +332,8 @@ static void init_vs_mappings()
 				{
 					.diffuse_offset = 82,
 					.specular_offset = -1,
-					.specular_power_offset = -1
+					.specular_power_offset = -1,
+					.env_power_offset = -1,
 				}
 			}
 		};
@@ -1074,7 +1077,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				XMVECTOR *vectors = (XMVECTOR *)values;
 
 				auto get_elem = [=](int offset, XMVECTOR default_value) {
-					if (offset > 0)
+					if (offset >= 0 && offset < (int)count)
 					{
 						return vectors[offset];
 					}
@@ -1094,11 +1097,26 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					return roughness;
 				};
 
+				// interpreting env power as roughness seems to work well
+				// there's a bug somewhere with either 0.0 or 1.0 roughness
+				// clamp to [.1, .9]
+				auto get_roughness_envpower = [=](XMVECTOR spec_power) {
+					float s = 1.0f - XMVectorGetX(spec_power);
+					if (s < 0.1f)
+						s = 0.1f;
+					if (s > 0.9f)
+						s = 0.9f;
+
+					float roughness = powf(s, 2.0f);
+					return roughness;
+				};
+
 				s_current_material = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					//TODO most of the specular color values are bogus pre-pbr values
 					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
-					.roughness = get_roughness(get_elem(offset->second.specular_power_offset, XMVectorReplicate(default_roughness))),
+					//.roughness = get_roughness(get_elem(offset->second.specular_power_offset, XMVectorReplicate(default_roughness))),
+					.roughness = get_roughness_envpower(get_elem(offset->second.env_power_offset, XMVectorReplicate(.1f))),
 				};
 			}
 			else

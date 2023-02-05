@@ -48,3 +48,15 @@ todo:
 //   SpecularRange c21      1
 //   SpecularPower c22      1
 //   EnvmapPower   c23      1
+
+// red car paint, no decals
+spec min	{ 1.1025, 1.0458, 0.9135, 0 },
+spec range	{ -0.6825, -0.6636, -0.6874, 0 },
+spec pow	{ 3.85, 0, 0, 0 },
+env pow		{ 0.8, 0, 0, 0 },
+
+// tires
+spec min	{ 0.248, 0.248, 0.2604, 0 },
+spec range	{ 0.014, 0.014, 0.0016, 0 },
+spec pow	{ 6.4174, 0, 0, 0 },
+env pow		{ 0.072, 0, 0, 0 },
