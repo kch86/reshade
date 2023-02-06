@@ -192,13 +192,15 @@ float4 fetchTexture(uint instance_id, float2 uv)
 	return texcolor;
 }
 
-Material fetchMaterial(uint instance_id, float3 textureAlbedo)
+Material fetchMaterial(uint instance_id, float2 uv)
 {
 	RtInstanceData data = g_instance_data_buffer[instance_id];
 
+	float4 textureAlbedo = fetchTexture(instance_id, uv);
+
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
-	float3 combined_base = to_linear_from_srgb(textureAlbedo) * baseColorTint;
+	float3 combined_base = to_linear_from_srgb(textureAlbedo.rgb) * baseColorTint;
 
 	// some textures have zero color as their color which is not physically accurate
 	//combined_base = max(0.05, combined_base);
@@ -270,10 +272,9 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	// fetch data
 	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 	const float2 uvs = fetchUvs(instanceId, indices, baries);
-	const float4 texcolor = fetchTexture(instanceId, uvs);
 	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
 	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
-	const Material mtrl = fetchMaterial(instanceId, texcolor.rgb);
+	const Material mtrl = fetchMaterial(instanceId, uvs);
 
 	// setup our surface properties
 	Surface surface;
