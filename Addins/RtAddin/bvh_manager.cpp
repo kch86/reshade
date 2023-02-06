@@ -251,6 +251,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			if (geostate.needs_rebuild || (geostate.dynamic && geostate.last_visible != m_frame_id))
 				continue;
 
+			const BlasBuildDesc &blas_desc = m_geometry[i];
+
 			rt_instance_desc instance{};
 			instance.acceleration_structure = { .buffer = m_bvhs[i].handle() };
 			instance.instance_mask = 0xff;
@@ -305,6 +307,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				rt_instance_data.specular = instanceData.mtrl.specular;
 				rt_instance_data.roughness = instanceData.mtrl.roughness;
 				rt_instance_data.toWorldPrevT = toPrevWorldTransform;
+				rt_instance_data.flags = blas_desc.opaque ? 1 : 0;
 				instance_data.push_back(rt_instance_data);
 			}
 		}

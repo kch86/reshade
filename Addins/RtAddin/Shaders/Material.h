@@ -18,6 +18,7 @@ struct Material
 	float metalness;
 	float3 emissive;
 	float roughness;
+	bool opaque;
 };
 
 struct Light
@@ -102,6 +103,21 @@ float3 f_schlick(float3 F0, float3 F90, float VoX)
 float3 f_schlick(float3 F0, float VoX)
 {
 	return  F0 + (1.0 - F0) * pow5(1.0 - saturate(VoX));
+}
+
+// http://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission.html
+	   // eta - relative index of refraction "from" / "to"
+float f_dialectric(float eta, float VoN)
+{
+	float saSq = eta * eta * (1.0 - VoN * VoN);
+
+	// Cosine of angle between negative normal and transmitted direction ( 0 for total internal reflection )
+	float ca = sqrt_sat(1.0 - saSq);
+
+	float Rs = (eta * VoN - ca) * rcp_safe(eta * VoN + ca);
+	float Rp = (eta * ca - VoN) * rcp_safe(eta * ca + VoN);
+
+	return 0.5 * (Rs * Rs + Rp * Rp);
 }
 
 float d_ggx(Brdf brdf)

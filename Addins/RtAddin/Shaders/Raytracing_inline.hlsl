@@ -4,8 +4,8 @@
 #include "Sampling.h"
 
 struct RayHit;
-void onTranslucentHit(RayHit hit, out bool acceptHit);
-#define ON_TRANSLUCENT_HIT onTranslucentHit 
+void onTransparentHit(RayHit hit, out bool acceptHit);
+#define ON_TRANPARENT_HIT onTransparentHit 
 #include "Raytracing.h"
 
 
@@ -213,11 +213,31 @@ Material fetchMaterial(uint instance_id, float2 uv)
 	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;
 	mtrl.metalness = 0.0;
+	mtrl.opaque = instance_is_opaque(data);
 
 	// there's a bug somewhere with either 0.0 or 1.0 roughness
 	// clamp to [.1, .9]
 	mtrl.roughness = clamp(data.roughness.x, 0.05, 0.95);
 	return mtrl;
+}
+
+void fetchMaterialAndSurface(RayDesc ray, RayHit hit, out Material mtrl, out Surface surface)
+{
+	const uint instanceId = hit.instanceId;
+	const uint primitiveIndex = hit.primitiveId;
+	const float2 baries = hit.barycentrics;
+	const float3x3 transform = (float3x3)hit.transform;
+
+	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+	const float2 uvs = fetchUvs(instanceId, indices, baries);
+	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
+	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
+
+	mtrl = fetchMaterial(instanceId, uvs);
+
+	surface.pos = get_ray_hitpoint(ray, hit);
+	surface.geom_normal = geomNormal;
+	surface.shading_normal = shadingNormal;
 }
 
 float3 get_ray_origin_offset(Surface surface, RayDesc ray)
@@ -266,26 +286,8 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	return shade;
 }
 
-ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface, inout uint2 rng)
 {
-	const uint instanceId = hit.instanceId;
-	const uint primitiveIndex = hit.primitiveId;
-	const float2 baries = hit.barycentrics;
-	const float3x3 transform = (float3x3)hit.transform;
-
-	// fetch data
-	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-	const float2 uvs = fetchUvs(instanceId, indices, baries);
-	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
-	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
-	const Material mtrl = fetchMaterial(instanceId, uvs);
-
-	// setup our surface properties
-	Surface surface;
-	surface.pos = get_ray_hitpoint(ray, hit);
-	surface.geom_normal = geomNormal;
-	surface.shading_normal = shadingNormal;
-
 	const float3 to_view = normalize(ray.Origin - surface.pos);
 
 	// do lighting
@@ -318,6 +320,16 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	result.mtrl = mtrl;
 
 	return result;
+}
+
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
+{
+	// fetch data
+	Material mtrl;
+	Surface surface;
+	fetchMaterialAndSurface(ray, hit, mtrl, surface);
+
+	return shade_ray(ray, hit, mtrl, surface, rng);
 }
 
 #define SAMPLE_SPEUCULAR_GGX 1
@@ -456,7 +468,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	return total_radiance;
 }
 
-void onTranslucentHit(RayHit hit, out bool acceptHit)
+void onTransparentHit(RayHit hit, out bool acceptHit)
 {
 	RtInstanceData data = g_instance_data_buffer[hit.instanceId];
 	float opacity = data.diffuse.a;
@@ -467,6 +479,83 @@ void onTranslucentHit(RayHit hit, out bool acceptHit)
 	{
 		acceptHit = true;
 	}
+}
+
+float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout uint2 rng)
+{
+	float3 total_radiance = 0.0;
+	//float3 throughput = 1.0;
+	float3 transmittance = 1.0;
+	float bounce_boost = 1.0;
+
+	const float ior_air = 1.00029;
+	const float ior_glass = 1.55;
+	const float eta = ior_air / ior_glass;
+	const float glass_thickness = 0.003;
+
+	ShadeRayResult shade = primaryShade;
+
+	const uint total_pathcount = g_constants.pathCount + additional_bounces;
+	for (uint vertex = 0; vertex < total_pathcount; vertex++)
+	{
+		const float3 V = -ray.Direction;
+		float NoV = abs(dot(shade.surface.shading_normal, V));
+		float F = f_dialectric(eta, NoV);
+
+		if (vertex == 0)
+			transmittance *= is_reflection ? F : 1.0 - F;
+		else
+			is_reflection = pcg2d_rng(rng).x < F;
+
+		ray.Origin = get_ray_origin_offset(shade.surface, ray);
+		ray.Direction = reflect(-V, shade.surface.shading_normal);
+
+		if (!is_reflection)
+		{
+			// Glass is single sided in our scenes. If glass is not single sided, then better assume that primary ray is "air-glass",
+			// the next bounce becomes "glass-air", the next switches to "air-glass" again, etc. ( if glass surface is hit, of course )
+			ray.Direction = refract(-V, shade.surface.shading_normal, eta);
+
+			float cosa = abs(dot(ray.Direction, shade.surface.shading_normal));
+			float d = glass_thickness / max(cosa, 0.05);
+			ray.Origin += ray.Direction * d; // TODO: since there is no RT, new origin can go under surface if a thin glass stands on it. It can lead to wrong shadows.
+
+			ray.Direction = refract(ray.Direction, shade.surface.shading_normal, 1.0 / eta);
+
+			transmittance *= 0.5; //TODO: replace with mtrl color
+		}
+
+		// TODO: use instance masking instead
+		
+		// ignore transparent, else all
+		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? 1 : 3;
+		RayHit hit = trace_ray_closest_any(g_rtScene, ray, instance_mask);
+		if (hit.hitT < 0.0)
+		{
+			break;
+		}
+		/*RayHit hit;
+		if (vertex == total_pathcount - 1 && !is_reflection)
+		{
+			hit = trace_ray_closest_opaque(g_rtScene, ray);
+		}
+		else
+		{
+			hit = trace_ray_closest_all(g_rtScene, ray);
+		}*/
+
+		fetchMaterialAndSurface(ray, hit, shade.mtrl, shade.surface);
+
+		if (shade.mtrl.opaque)
+		{
+			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
+
+			total_radiance += transmittance * (shade_local.radiance + shade_local.mtrl.emissive);
+			break;
+		}
+	}
+
+	return total_radiance;
 }
 
 [numthreads(8, 8, 1)]
@@ -520,6 +609,35 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		else
 		{
 			//sample sky?
+		}
+
+		//trace transparent
+		{
+			RayHit primaryHit = hit;
+			if (primaryHit.hitT < 0.0)
+			{
+				primaryHit.hitT = 1000.0;
+			}
+
+			RayDesc trans_ray = ray;
+			trans_ray.TMax = primaryHit.hitT;
+
+			//RayHit trans_hit = trace_ray_closest_transparent(g_rtScene, trans_ray);
+			RayHit trans_hit = trace_ray_closest_any(g_rtScene, trans_ray, 2); //transparent only
+			//RayHit trans_hit = trace_ray_closest_all(g_rtScene, trans_ray);
+			//RayHit trans_hit = trace_ray_closest_opaque(g_rtScene, trans_ray);
+			if (trans_hit.hitT >= 0.0)
+			{
+				ShadeRayResult shade = (ShadeRayResult)0;
+				fetchMaterialAndSurface(trans_ray, trans_hit, shade.mtrl, shade.surface);
+
+				float3 transparent = 0.0;
+				transparent += trace_transparent(trans_ray, shade, true, 1, seed);
+				transparent += trace_transparent(trans_ray, shade, false, 1, seed);
+
+				radiance += transparent;
+				hit = trans_hit;
+			}			
 		}
 
 		const float prevHitT = g_hitHistory[tid.xy];

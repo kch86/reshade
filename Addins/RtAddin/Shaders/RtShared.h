@@ -51,7 +51,13 @@ struct RtInstanceData
 	float4 specular;
 	row_major float3x4 toWorldPrevT;
 	float roughness;
+	uint flags;
 };
+
+inline bool instance_is_opaque(RtInstanceData instance)
+{
+	return instance.flags == 1;
+}
 
 struct RtConstants
 {

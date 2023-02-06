@@ -34,6 +34,9 @@ todo:
 - 3rd bounces seem too dark from shadowed surfaces. maybe a bug here...
 -- missing the albedo color as well....
 - only do 3+ bounces if you've hit a mirror surface
+- city background is broken with glass support addition
+-- it's actual "transparency", same as the smoke so I need a solution for both of these things
+-- the city background should just be emissive
 
 
 
