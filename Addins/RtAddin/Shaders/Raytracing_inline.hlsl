@@ -315,6 +315,58 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	return result;
 }
 
+#define SAMPLE_SPEUCULAR_GGX 1
+float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, inout float3 throughput, inout uint2 rng)
+{
+	// do multiple importance sampling
+	// choose spec or diffuse ray based on estimated specular strength
+
+	float3 ray_dir = 0.0;
+#if SAMPLE_SPEUCULAR_GGX
+	const float brdf_prob = estimate_specular_probability_ross(mtrl, surface.shading_normal, V);
+
+	if (pcg2d_rng(rng).x < brdf_prob)
+	{
+		//specular ray
+		throughput *= rcp(brdf_prob);
+
+		// do anisotropic ray generation
+		SpecularRay spec_ray = get_specular_ray_vndf_ggx(pcg2d_rng(rng), mtrl, surface.shading_normal, V);
+		throughput *= spec_ray.weight;
+		ray_dir = spec_ray.dir;
+	}
+	else
+	{
+		//diffuse ray
+		throughput *= rcp(1.0 - brdf_prob);
+		throughput *= shade.diffuse_reflectance; //weight by NoL and 1-F?
+		ray_dir = get_diffuse_ray(pcg2d_rng(rng), surface.geom_normal);
+	}
+#else
+	const float brdf_prob = estimate_specular_probability_simple(mtrl);
+
+	ray_dir = get_diffuse_ray(pcg2d_rng(rng), surface.geom_normal);
+	if (pcg2d_rng(rng).x < brdf_prob)
+	{
+		//specular ray
+		throughput *= rcp(brdf_prob);
+
+		// do anisotropic ray generation
+		SpecularRay spec_ray = get_specular_ray_simple(V, surface.shading_normal, ray_dir, mtrl.roughness, shade.specular_reflectance);
+		throughput *= spec_ray.weight;
+		ray_dir = spec_ray.dir;
+	}
+	else
+	{
+		//diffuse ray
+		throughput *= rcp(1.0 - brdf_prob);
+		throughput *= shade.diffuse_reflectance; //weight by NoL and 1-F?
+	}
+#endif
+
+	return ray_dir;
+}
+
 #define EXTRACT_PRIMARY 1
 float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 {
@@ -330,33 +382,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	{
 		const float3 V = -ray.Direction;
 
-		// do multiple importance sampling
-		// choose spec or diffuse ray based on estimated specular strength
-		float3 ray_dir = 0.0;
-		{
-			float brdf_prob = estimate_specular_probability_ross(shade.mtrl, shade.surface.shading_normal, V);
-
-			if (pcg2d_rng(rng).x < brdf_prob)
-			{
-				//specular ray
-				throughput *= rcp(brdf_prob);
-
-				// do anisotropic ray generation
-				SpecularRay spec_ray = get_specular_ray_vndf_ggx(pcg2d_rng(rng), shade.mtrl, shade.surface.shading_normal, V);
-				throughput *= spec_ray.weight;
-				ray_dir = spec_ray.dir;
-			}
-			else
-			{
-				//diffuse ray
-				throughput *= rcp(1.0 - brdf_prob);
-				throughput *= shade.shade.diffuse_reflectance; //weight by NoL and 1-F?
-				ray_dir = get_diffuse_ray(pcg2d_rng(rng), shade.surface.geom_normal);
-			}
-		}		
-
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
-		ray.Direction = ray_dir;
+		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 
 		RayHit hit = trace_ray_closest(g_rtScene, ray);
 		if (hit.hitT < 0.0)
@@ -415,29 +442,9 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			throughput *= rcp(kill);
 		}
 
-		// randomly choose to do a reflection ray based on inverse roughness %
-		// TODO: better probability function
-		const float brdf_prob = clamp(1.0 - shade.mtrl.roughness, 0.1, 0.9);
-
-		float3 ray_dir = sample_hemisphere_cosine_fast(pcg2d_rng(rng), shade.surface.geom_normal);
-		if (pcg2d_rng(rng).x < brdf_prob)
-		{
-			//specular ray
-			throughput *= rcp(brdf_prob);
-			throughput *= shade.shade.specular_reflectance;
-
-			float3 refl_dir = reflect(ray.Direction, shade.surface.shading_normal);
-			ray_dir = normalize(lerp(refl_dir, ray_dir, pow2(shade.mtrl.roughness)));
-		}
-		else
-		{
-			//diffuse ray
-			throughput *= rcp(1.0 - brdf_prob);
-			throughput *= shade.shade.diffuse_reflectance;
-		}
-
+		const float3 V = -ray.Direction;
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
-		ray.Direction = ray_dir;
+		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 	}
 #endif
 

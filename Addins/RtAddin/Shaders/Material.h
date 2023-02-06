@@ -195,7 +195,7 @@ struct SpecularRay
 
 SpecularRay get_specular_ray_simple(float3 V, float3 normal, float3 diffuse_ray, float roughness, float3 spec_refl)
 {
-	float3 refl_dir = reflect(V, normal);
+	float3 refl_dir = reflect(-V, normal);
 
 	SpecularRay ray;
 	ray.dir = normalize(lerp(refl_dir, diffuse_ray, pow2(roughness)));
