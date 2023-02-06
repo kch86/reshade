@@ -787,9 +787,9 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 	{
 		resource_desc new_desc = resource_desc(desc.buffer.size, memory_heap::cpu_to_gpu, desc.usage);
 		resource d3d12res;
-		s_d3d12device->create_resource(
+		ThrowIfFailed(s_d3d12device->create_resource(
 			new_desc,
-			nullptr, resource_usage::cpu_access, &d3d12res);
+			nullptr, resource_usage::cpu_access, &d3d12res));
 
 		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc);
 	}
@@ -1753,6 +1753,14 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	if (s_tlas.handle() == 0)
 	{
 		return false;
+	}
+
+	// don't do the trace/blit if we're not displaying
+	if ((s_ui_show_rt_full || s_ui_show_rt_half) == false)
+	{
+		// if we skip "rendering", we still need to flush the d3d12 command list
+		s_d3d12cmdqueue->flush_immediate_command_list();
+		return true;
 	}
 
 	updateCamera(runtime);
