@@ -206,8 +206,11 @@ Material fetchMaterial(uint instance_id, float3 textureAlbedo)
 	Material mtrl;
 	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;
-	mtrl.roughness = data.roughness.x;
 	mtrl.metalness = 0.0;
+
+	// there's a bug somewhere with either 0.0 or 1.0 roughness
+	// clamp to [.1, .9]
+	mtrl.roughness = clamp(data.roughness.x, 0.05, 0.95);
 	return mtrl;
 }
 

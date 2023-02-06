@@ -1102,10 +1102,10 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				// clamp to [.1, .9]
 				auto get_roughness_envpower = [=](XMVECTOR spec_power) {
 					float s = 1.0f - XMVectorGetX(spec_power);
-					if (s < 0.1f)
-						s = 0.1f;
-					if (s > 0.9f)
-						s = 0.9f;
+					if (s < 0.0f)
+						s = 0.0f;
+					if (s > 1.0f)
+						s = 1.0f;
 
 					float roughness = powf(s, 2.0f);
 					return roughness;
