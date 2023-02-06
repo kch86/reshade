@@ -60,3 +60,19 @@ spec min	{ 0.248, 0.248, 0.2604, 0 },
 spec range	{ 0.014, 0.014, 0.0016, 0 },
 spec pow	{ 6.4174, 0, 0, 0 },
 env pow		{ 0.072, 0, 0, 0 },
+
+// glass
+diff min	{ 0.037515, 0.13725, 0.343125, 0.5 },
+diff range	{ 0.055285, -0.04445, -0.250325, 0.5 },
+spec min	{ 0.5, 0.5, 0.55, 0 },
+spec range	{ 0, 0, -0.05, 0 },
+spec pow	{ 5.8993, 0, 0, 0 },
+env pow		{ 1, 0, 0, 0 },
+
+// window decal
+diff min 	{ 1, 1, 1, 1 },
+diff range	{ 0, 0, 0, 0 },
+spec min	{ 0, 0, 0, 0 },
+spec range	{ 0.195, 0.195, 0.195, 0 },
+spec pow	{ 1.3915, 0, 0, 0 },
+env pow		{ 2, 0, 0, 0 },

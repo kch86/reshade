@@ -93,6 +93,8 @@ struct BlasBuildDesc
 		uint32_t count;
 		reshade::api::format fmt;
 	} ib;
+
+	bool opaque = true;
 };
 
 struct TlasInstance

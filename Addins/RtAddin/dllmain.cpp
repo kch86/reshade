@@ -250,6 +250,7 @@ namespace
 	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 
 	Material s_current_material;
+	bool s_transparency_enabled = false;
 
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
@@ -738,6 +739,20 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 	else if (type == pipeline_stage::pixel_shader)
 	{
 		s_current_ps_pipeline = pipeline;
+	}
+}
+static void on_bind_pipeline_states(command_list *, uint32_t count, const dynamic_state *states, const uint32_t *values)
+{
+	if (filter_command())
+		return;
+
+	for (uint32_t i = 0; i < count; ++i)
+	{
+		if (states[i] == dynamic_state::blend_enable)
+		{
+			s_transparency_enabled = values[i];
+			break;
+		}
 	}
 }
 
@@ -1254,6 +1269,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.count = index_count,
 			.fmt = s_currentIB.fmt
 		},
+		.opaque = !s_transparency_enabled,
 	};
 
 	const bool has_uvs = s_currentVB.uv.res.handle != 0;
@@ -1361,7 +1377,8 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.attachments = attachments,
 		.material = mtrl,
 		.dynamic = dynamic_resource,
-		.is_static = s_staticgeo_vs_pipeline_is_bound
+		.is_static = s_staticgeo_vs_pipeline_is_bound,
+		.is_transparent = s_transparency_enabled,
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -1383,6 +1400,7 @@ static void on_present(effect_runtime *runtime)
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_got_viewproj = false;
 	s_null_vs_ps_has_been_bound = false;
+	s_transparency_enabled = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
 	s_currentTextureBindings.clear();
@@ -1905,6 +1923,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::draw>(on_draw);
 		reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
 		reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+		reshade::register_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
 		reshade::register_event<reshade::addon_event::bind_index_buffer>(on_bind_index_buffer);
 		reshade::register_event<reshade::addon_event::bind_vertex_buffers>(on_bind_vertex_buffers);
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets_and_depth_stencil);
