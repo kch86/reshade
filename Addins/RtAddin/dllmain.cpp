@@ -1378,7 +1378,6 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.material = mtrl,
 		.dynamic = dynamic_resource,
 		.is_static = s_staticgeo_vs_pipeline_is_bound,
-		.is_transparent = s_transparency_enabled,
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);

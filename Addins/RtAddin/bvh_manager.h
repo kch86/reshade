@@ -42,7 +42,6 @@ public:
 		Material material = {};
 		bool dynamic = false;
 		bool is_static = false;
-		bool is_transparent = false;
 	};
 public:
 	bvh_manager() = default;

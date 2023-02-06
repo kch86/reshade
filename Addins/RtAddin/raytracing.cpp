@@ -272,7 +272,11 @@ scopedresource buildBlas(device* device9,
 	};
 	geomDesc.triangle_geo_descs.index_count = desc.ib.count;
 	geomDesc.triangle_geo_descs.index_format = desc.ib.fmt;
-	geomDesc.flags = desc.opaque ? rt_geometry_flags::opaque : rt_geometry_flags::none;
+	geomDesc.flags = rt_geometry_flags::no_duplicate_anyhit_invocation;
+	if (desc.opaque)
+	{
+		geomDesc.flags |= rt_geometry_flags::opaque;
+	}
 
 	// Get the size requirements for the scratch and AS buffers
 	rt_build_acceleration_structure_inputs inputs = {};

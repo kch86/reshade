@@ -1081,6 +1081,7 @@ namespace reshade::api
 		opaque = 0x1,
 		no_duplicate_anyhit_invocation = 0x2
 	};
+	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(rt_geometry_flags);
 
 	struct rt_geometry_desc
 	{

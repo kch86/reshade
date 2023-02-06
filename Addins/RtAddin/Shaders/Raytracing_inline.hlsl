@@ -1,8 +1,12 @@
 #include "RtShared.h"
-#include "Raytracing.h"
 #include "Color.h"
 #include "Material.h"
 #include "Sampling.h"
+
+struct RayHit;
+void onTranslucentHit(RayHit hit, out bool acceptHit);
+#define ON_TRANSLUCENT_HIT onTranslucentHit 
+#include "Raytracing.h"
 
 
 struct Shade
@@ -386,13 +390,13 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		ray.Origin = get_ray_origin_offset(shade.surface, ray);
 		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 
-		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
 			total_radiance += throughput * float3(0.1, 0.1, 0.25) * 1.0;
 			break;
-		}			
+		}
 
 		shade = shade_ray(ray, hit, rng);
 		total_radiance += throughput * shade.mtrl.emissive;
@@ -419,7 +423,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
 	{
-		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
@@ -452,6 +456,19 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	return total_radiance;
 }
 
+void onTranslucentHit(RayHit hit, out bool acceptHit)
+{
+	RtInstanceData data = g_instance_data_buffer[hit.instanceId];
+	float opacity = data.diffuse.a;
+
+	//const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
+
+	if (opacity > 0.25)
+	{
+		acceptHit = true;
+	}
+}
+
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
@@ -481,7 +498,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		float3 radiance = 0.0;
 
-		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		// send a primary ray, ignoring all transparent geo
+		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
 
 		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
@@ -519,7 +537,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	}
 	else
 	{
-		RayHit hit = trace_ray_closest(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
 
 		float4 value = float4(0.0, 0.0, 0.0, 1.0);
 
