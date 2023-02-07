@@ -202,7 +202,7 @@
       <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">g_p%(Filename)</VariableName>
       <HeaderFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\%(Filename).hlsl.h</HeaderFileOutput>
     </FxCompile>
-    <FxCompile Include="Shaders\Raytracing_inline.hlsl">
+    <CustomBuild Include="Shaders\Raytracing_inline.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">6.6</ShaderModel>
       <VariableName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">g_p%(Filename)</VariableName>
@@ -214,7 +214,12 @@
       <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</TreatWarningAsError>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</DisableOptimizations>
       <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</EnableDebuggingInformation>
-    </FxCompile>
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">dxc -E ray_gen -Vn g_p%(Filename) -WX -T cs_6_6 -HV 2021 -Fh $(ProjectDir)CompiledShaders\%(Filename).hlsl.h $(ProjectDir)Shaders\%(Filename).hlsl</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling: dxc -E ray_gen -Vn g_p%(Filename) -WX -T cs_6_6 -HV 2021 -Fh $(ProjectDir)CompiledShaders\%(Filename).hlsl.h %(Filename).hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\%(Filename).hlsl.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="Config\Reshade.ini">
