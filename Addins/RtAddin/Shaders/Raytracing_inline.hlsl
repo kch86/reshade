@@ -205,6 +205,7 @@ Material fetchMaterial(uint instance_id, float2 uv)
 	//combined_base = max(0.05, combined_base);
 
 	Material mtrl;
+	mtrl.tint = baseColorTint;
 	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;
 	mtrl.metalness = 0.0;
@@ -281,7 +282,7 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	return shade;
 }
 
-ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface, inout uint2 rng)
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface, inout uint2 rng, bool shadow = true)
 {
 	const float3 to_view = normalize(ray.Origin - surface.pos);
 
@@ -291,7 +292,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 	float3 radiance = shade.diffuse_radiance + shade.specular_radiance;
 
 	// launch shadow ray
-	if(shade.attenuation > 0.0)
+	if(shade.attenuation > 0.0 && shadow)
 	{
 		float3x3 basis = create_basis_fast(g_constants.sunDirection); // TODO: move to CB
 		const float2 xy = pcg2d_rng(rng) * g_constants.sunRadius;
@@ -484,7 +485,6 @@ struct Visitor
 float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout uint2 rng)
 {
 	float3 total_radiance = 0.0;
-	//float3 throughput = 1.0;
 	float3 transmittance = 1.0;
 	float bounce_boost = 1.0;
 
@@ -492,6 +492,7 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 	const float ior_glass = 1.55;
 	const float eta = ior_air / ior_glass;
 	const float glass_thickness = 0.003;
+	const float3 glass_tint = saturate(primaryShade.mtrl.tint * 2.0);
 
 	ShadeRayResult shade = primaryShade;
 
@@ -513,17 +514,18 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		if (!is_reflection)
 		{
-			// Glass is single sided in our scenes. If glass is not single sided, then better assume that primary ray is "air-glass",
-			// the next bounce becomes "glass-air", the next switches to "air-glass" again, etc. ( if glass surface is hit, of course )
+			// glas is a single, double sided surface
 			ray.Direction = refract(-V, shade.surface.shading_normal, eta);
 
 			float cosa = abs(dot(ray.Direction, shade.surface.shading_normal));
 			float d = glass_thickness / max(cosa, 0.05);
-			ray.Origin += ray.Direction * d; // TODO: since there is no RT, new origin can go under surface if a thin glass stands on it. It can lead to wrong shadows.
+
+			// for glass close to a surface, this could go under the beneath surface
+			ray.Origin += ray.Direction * d;
 
 			ray.Direction = refract(ray.Direction, shade.surface.shading_normal, 1.0 / eta);
 
-			transmittance *= 0.5; //TODO: replace with mtrl color
+			transmittance *= glass_tint;
 		}
 		
 		// ignore transparent, else all
@@ -539,9 +541,14 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		if (shade.mtrl.opaque)
 		{
-			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
+			// this shadow ray needs to ignore backfacing
+			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng, false);
 
-			total_radiance += transmittance * (shade_local.radiance + shade_local.mtrl.emissive);
+			// need better ambient estimate....
+			const float3 ambient = 0.5 * shade.mtrl.base_color;
+			float3 L = shade_local.radiance + shade_local.mtrl.emissive + ambient;
+
+			total_radiance += transmittance * L;
 			break;
 		}
 	}
@@ -625,7 +632,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				float3 transparent = 0.0;
 
 				shade = shade_ray(trans_ray, trans_hit, shade.mtrl, shade.surface, seed);
-				//transparent += shade.radiance;
+				transparent += shade.radiance;
 				transparent += trace_transparent(trans_ray, shade, true, 2, seed);
 				transparent += trace_transparent(trans_ray, shade, false, 2, seed);
 

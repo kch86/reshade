@@ -14,6 +14,7 @@ struct Surface
 
 struct Material
 {
+	float3 tint;
 	float3 base_color;
 	float metalness;
 	float3 emissive;
