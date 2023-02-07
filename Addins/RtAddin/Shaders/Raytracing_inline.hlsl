@@ -2,12 +2,7 @@
 #include "Color.h"
 #include "Material.h"
 #include "Sampling.h"
-
-struct RayHit;
-void onTransparentHit(RayHit hit, out bool acceptHit);
-#define ON_TRANPARENT_HIT onTransparentHit 
 #include "Raytracing.h"
-
 
 struct Shade
 {
@@ -240,7 +235,7 @@ void fetchMaterialAndSurface(RayDesc ray, RayHit hit, out Material mtrl, out Sur
 	surface.shading_normal = shadingNormal;
 }
 
-float3 get_ray_origin_offset(Surface surface, RayDesc ray)
+float3 get_ray_origin_offset(RayDesc ray, Surface surface)
 {
 	return get_ray_origin_offset(ray, surface.pos, surface.geom_normal);
 }
@@ -303,7 +298,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 		float3 sunDirection = normalize(basis[0] * xy.x + basis[1] * xy.y + basis[2]);
 
 		ray.Direction = normalize(sunDirection);
-		ray.Origin = get_ray_origin_offset(surface, ray);
+		ray.Origin = get_ray_origin_offset(ray, surface);
 
 		hit = trace_ray_occlusion(g_rtScene, ray);
 
@@ -399,7 +394,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	{
 		const float3 V = -ray.Direction;
 
-		ray.Origin = get_ray_origin_offset(shade.surface, ray);
+		ray.Origin = get_ray_origin_offset(ray, shade.surface);
 		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 
 		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
@@ -460,25 +455,12 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		}
 
 		const float3 V = -ray.Direction;
-		ray.Origin = get_ray_origin_offset(shade.surface, ray);
+		ray.Origin = get_ray_origin_offset(ray, shade.surface);
 		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 	}
 #endif
 
 	return total_radiance;
-}
-
-void onTransparentHit(RayHit hit, out bool acceptHit)
-{
-	RtInstanceData data = g_instance_data_buffer[hit.instanceId];
-	float opacity = data.diffuse.a;
-
-	//const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
-
-	if (opacity > 0.25)
-	{
-		acceptHit = true;
-	}
 }
 
 struct Visitor
@@ -525,7 +507,8 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		else
 			is_reflection = pcg2d_rng(rng).x < F;
 
-		ray.Origin = get_ray_origin_offset(shade.surface, ray);
+		float3 N = is_reflection ? shade.surface.shading_normal : -shade.surface.shading_normal;
+		ray.Origin = get_ray_origin_offset(ray, shade.surface.pos, N);
 		ray.Direction = reflect(-V, shade.surface.shading_normal);
 
 		if (!is_reflection)
@@ -542,8 +525,6 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 			transmittance *= 0.5; //TODO: replace with mtrl color
 		}
-
-		// TODO: use instance masking instead
 		
 		// ignore transparent, else all
 		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? 1 : 3;
@@ -553,15 +534,6 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		{
 			break;
 		}
-		/*RayHit hit;
-		if (vertex == total_pathcount - 1 && !is_reflection)
-		{
-			hit = trace_ray_closest_opaque(g_rtScene, ray);
-		}
-		else
-		{
-			hit = trace_ray_closest_all(g_rtScene, ray);
-		}*/
 
 		fetchMaterialAndSurface(ray, hit, shade.mtrl, shade.surface);
 
@@ -643,9 +615,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			RayDesc trans_ray = ray;
 			trans_ray.TMax = primaryHit.hitT;
 
-			// work around bug in amd driver crash
-			//RayHit trans_hit = trace_ray_closest_opaque_mask(g_rtScene, trans_ray, 2); //transparent only
-			//RayHit trans_hit = trace_ray_closest_any(g_rtScene, trans_ray, 2); //transparent only
+			// trace transparent only
 			RayHit trans_hit = trace_ray_closest_any_t<Visitor>(g_rtScene, trans_ray, 2);
 			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
 			{
@@ -655,9 +625,22 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				float3 transparent = 0.0;
 
 				shade = shade_ray(trans_ray, trans_hit, shade.mtrl, shade.surface, seed);
-				transparent += shade.radiance;
-				transparent += trace_transparent(trans_ray, shade, true, 1, seed);
-				transparent += trace_transparent(trans_ray, shade, false, 1, seed);
+				//transparent += shade.radiance;
+				transparent += trace_transparent(trans_ray, shade, true, 2, seed);
+				transparent += trace_transparent(trans_ray, shade, false, 2, seed);
+
+				/*if (any(transparent) >= 5.0)
+					transparent = 1.0;
+				else if (any(transparent) >= 4.0)
+					transparent = float3(1, 0, 0);
+				else if (any(transparent) >= 3.0)
+					transparent = float3(1, 0, 1);
+				else if (any(transparent) >= 2.0)
+					transparent = float3(0, 0, 1);
+				else if (any(transparent) >= 1.0)
+					transparent = float3(0, 1, 0);
+				else
+					transparent = float3(1, 1, 0);*/
 
 				// replace the radiance with our radiance
 				radiance = transparent;

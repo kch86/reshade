@@ -106,7 +106,7 @@ float3 f_schlick(float3 F0, float VoX)
 }
 
 // http://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission.html
-	   // eta - relative index of refraction "from" / "to"
+// eta - relative index of refraction "from" / "to"
 float f_dialectric(float eta, float VoN)
 {
 	float saSq = eta * eta * (1.0 - VoN * VoN);
