@@ -16,7 +16,30 @@ RayHit trace_ray_closest_opaque(RaytracingAccelerationStructure tlas, RayDesc ra
 
 	const uint ray_flags = 0;
 	const uint ray_instance_mask = 0xffffffff;
-	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
+	query.TraceRayInline(tlas, ray_flags, /*ray_instance_mask*/1, ray);
+	query.Proceed();
+
+	RayHit hit;
+	hit.hitT = -1.0;
+
+	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+	{
+		hit.hitT = query.CommittedRayT();
+		hit.instanceId = query.CommittedInstanceID();
+		hit.primitiveId = query.CommittedPrimitiveIndex();
+		hit.barycentrics = query.CommittedTriangleBarycentrics();
+		hit.transform = query.CommittedObjectToWorld3x4();
+	}
+
+	return hit;
+}
+
+RayHit trace_ray_closest_opaque_mask(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
+{
+	RayQuery<RAY_FLAG_FORCE_OPAQUE /*| RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES*/> query;
+
+	const uint ray_flags = 0;
+	query.TraceRayInline(tlas, ray_flags, 2, ray);
 	query.Proceed();
 
 	RayHit hit;
@@ -125,9 +148,9 @@ RayHit trace_ray_closest_all(RaytracingAccelerationStructure tlas, RayDesc ray)
 RayHit trace_ray_closest_any(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
 {
 	RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
+	//RayQuery<RAY_FLAG_NONE> query;
 
 	const uint ray_flags = 0;
-	//const uint ray_instance_mask = 0xffffffff;
 	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
 	
 	while (query.Proceed())

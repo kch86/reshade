@@ -233,6 +233,7 @@ namespace
 	bool s_ui_show_texture = false;
 	bool s_ui_show_shaded = true;
 	bool s_ui_show_motion_vectors = false;
+	bool s_ui_transparent_enable = true;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
 	bool s_ui_render_before_ui = true;
@@ -1615,6 +1616,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.showTexture = s_ui_show_texture;
 	cb.showMotionVec = s_ui_show_motion_vectors;
 	cb.showShaded = s_ui_show_shaded;
+	cb.transparentEnable = s_ui_transparent_enable;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
 	cb.sunRadius = s_ui_sun_radius;
@@ -1825,6 +1827,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show texture", &s_ui_show_texture);
 	ImGui::Checkbox("Show motion vec", &s_ui_show_motion_vectors);
 	ImGui::Checkbox("Show shaded", &s_ui_show_shaded);
+	ImGui::Checkbox("Enable Transparent", &s_ui_transparent_enable);
 
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);
 	ImGui::SliderFloat("Sun Elevation: ", &s_ui_sun_elevation, -90.0f, 90.0f);

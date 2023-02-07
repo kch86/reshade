@@ -612,6 +612,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 
 		//trace transparent
+#if 1
+		if(g_constants.transparentEnable)
 		{
 			RayHit primaryHit = hit;
 			if (primaryHit.hitT < 0.0)
@@ -622,23 +624,27 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			RayDesc trans_ray = ray;
 			trans_ray.TMax = primaryHit.hitT;
 
-			//RayHit trans_hit = trace_ray_closest_transparent(g_rtScene, trans_ray);
-			RayHit trans_hit = trace_ray_closest_any(g_rtScene, trans_ray, 2); //transparent only
-			//RayHit trans_hit = trace_ray_closest_all(g_rtScene, trans_ray);
-			//RayHit trans_hit = trace_ray_closest_opaque(g_rtScene, trans_ray);
-			if (trans_hit.hitT >= 0.0)
+			// work around bug in amd driver crash
+			RayHit trans_hit = trace_ray_closest_opaque_mask(g_rtScene, trans_ray, 2); //transparent only
+			//RayHit trans_hit = trace_ray_closest_any(g_rtScene, trans_ray, 2); //transparent only
+			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
 			{
 				ShadeRayResult shade = (ShadeRayResult)0;
 				fetchMaterialAndSurface(trans_ray, trans_hit, shade.mtrl, shade.surface);
 
 				float3 transparent = 0.0;
+
+				shade = shade_ray(trans_ray, trans_hit, shade.mtrl, shade.surface, seed);
+				transparent += shade.radiance;
 				transparent += trace_transparent(trans_ray, shade, true, 1, seed);
 				transparent += trace_transparent(trans_ray, shade, false, 1, seed);
 
-				radiance += transparent;
+				// replace the radiance with our radiance
+				radiance = transparent;
 				hit = trans_hit;
 			}			
 		}
+#endif
 
 		const float prevHitT = g_hitHistory[tid.xy];
 

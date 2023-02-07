@@ -80,7 +80,8 @@ struct RtConstants
 
 	uint showMotionVec;
 	float sunRadius;
-	uint2 pad;
+	uint transparentEnable;
+	uint pad;
 };
 
 #endif
