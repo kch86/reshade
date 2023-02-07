@@ -481,6 +481,24 @@ void onTransparentHit(RayHit hit, out bool acceptHit)
 	}
 }
 
+struct Visitor
+{
+	static bool visit(RayHit hit)
+	{
+		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
+		float opacity = data.diffuse.a;
+
+		//const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
+
+		if (opacity > 0.25)
+		{
+			return true;
+		}
+
+		return false;
+	}
+};
+
 float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout uint2 rng)
 {
 	float3 total_radiance = 0.0;
@@ -529,7 +547,8 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		
 		// ignore transparent, else all
 		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? 1 : 3;
-		RayHit hit = trace_ray_closest_any(g_rtScene, ray, instance_mask);
+
+		RayHit hit = trace_ray_closest_any_t<Visitor>(g_rtScene, ray, instance_mask);
 		if (hit.hitT < 0.0)
 		{
 			break;
@@ -625,8 +644,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			trans_ray.TMax = primaryHit.hitT;
 
 			// work around bug in amd driver crash
-			RayHit trans_hit = trace_ray_closest_opaque_mask(g_rtScene, trans_ray, 2); //transparent only
+			//RayHit trans_hit = trace_ray_closest_opaque_mask(g_rtScene, trans_ray, 2); //transparent only
 			//RayHit trans_hit = trace_ray_closest_any(g_rtScene, trans_ray, 2); //transparent only
+			RayHit trans_hit = trace_ray_closest_any_t<Visitor>(g_rtScene, trans_ray, 2);
 			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
 			{
 				ShadeRayResult shade = (ShadeRayResult)0;
