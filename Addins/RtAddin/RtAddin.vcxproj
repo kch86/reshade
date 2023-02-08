@@ -216,7 +216,7 @@
       <EnableDebuggingInformation Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</EnableDebuggingInformation>
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">dxc -E ray_gen -Vn g_p%(Filename) -WX -T cs_6_6 -HV 2021 -Fh $(ProjectDir)CompiledShaders\%(Filename).hlsl.h $(ProjectDir)Shaders\%(Filename).hlsl</Command>
-      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling: dxc -E ray_gen -Vn g_p%(Filename) -WX -T cs_6_6 -HV 2021 -Fh $(ProjectDir)CompiledShaders\%(Filename).hlsl.h %(Filename).hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling %(Filename).hlsl: dxc -E ray_gen -Vn g_p%(Filename) -WX -T cs_6_6 -HV 2021 -Fh $(ProjectDir)CompiledShaders\%(Filename).hlsl.h %(Filename).hlsl</Message>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\%(Filename).hlsl.h</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)Shaders\*.h;%(AdditionalInputs)</AdditionalInputs>
