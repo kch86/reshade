@@ -1,7 +1,6 @@
 #include "ReShade.fxh"
 
-uniform bool g_showRtResultFull <ui_tooltip = "Show Rt Result Fullscreen";> = false;
-uniform bool g_showRtResultHalf <ui_tooltip = "Show Rt Result Halfscreen";> = false;
+uniform bool g_showRtResult <ui_tooltip = "Show Rt Result";> = false;
 
 texture texColorBuffer : COLOR;
 
@@ -48,11 +47,7 @@ void RtBlit(float4 pos : SV_Position, float2 texcoord : TEXCOORD0, out float4 co
 	
 	const float4 modifier = tex2D(samplerRtTexture, texcoord);
 
-	if (g_showRtResultFull)
-	{
-		color = modifier;
-	}
-	else if (pos.x >= (BUFFER_WIDTH/2) && g_showRtResultHalf)
+	if (g_showRtResult)
 	{
 		color = modifier;
 	}

@@ -225,14 +225,9 @@ namespace
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 4;
 	int s_ui_pathtrace_iter_count = 2;
+	int s_ui_show_debug = 0;
 	bool s_ui_use_game_camera = true;
-	bool s_ui_show_rt_full = false;
-	bool s_ui_show_rt_half = false;
-	bool s_ui_show_normals = false;
-	bool s_ui_show_uvs = false;
-	bool s_ui_show_texture = false;
-	bool s_ui_show_shaded = true;
-	bool s_ui_show_motion_vectors = false;
+	bool s_ui_show_rt = false;
 	bool s_ui_transparent_enable = true;
 	bool s_ui_enable = true;
 	bool s_ui_pause = false;
@@ -1611,11 +1606,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
 	cb.viewPos = getViewPos();
-	cb.showNormal = s_ui_show_normals;
-	cb.showUvs = s_ui_show_uvs;
-	cb.showTexture = s_ui_show_texture;
-	cb.showMotionVec = s_ui_show_motion_vectors;
-	cb.showShaded = s_ui_show_shaded;
+	cb.debugView = (DebugViewEnum)s_ui_show_debug;
 	cb.transparentEnable = s_ui_transparent_enable;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
@@ -1751,11 +1742,8 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	if (pass_index != 0)
 	{
 		//update the pass uniforms 1st before returning
-		auto full = runtime->find_uniform_variable("Simple.fx", "g_showRtResultFull");
-		auto half = runtime->find_uniform_variable("Simple.fx", "g_showRtResultHalf");
-
-		runtime->set_uniform_value_bool(full, &s_ui_show_rt_full, 1);
-		runtime->set_uniform_value_bool(half, &s_ui_show_rt_half, 1);
+		auto full = runtime->find_uniform_variable("Simple.fx", "g_showRtResult");
+		runtime->set_uniform_value_bool(full, &s_ui_show_rt, 1);
 		return false;
 	}
 
@@ -1775,7 +1763,7 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	}
 
 	// don't do the trace/blit if we're not displaying
-	if ((s_ui_show_rt_full || s_ui_show_rt_half) == false)
+	if ((s_ui_show_rt) == false)
 	{
 		// if we skip "rendering", we still need to flush the d3d12 command list
 		s_d3d12cmdqueue->flush_immediate_command_list();
@@ -1815,18 +1803,40 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	bool use_game_camera = s_ui_use_game_camera;
 	ImGui::Checkbox("UseGameCamera", &s_ui_use_game_camera);
-	ImGui::Checkbox("Show Rt result fullscreen", &s_ui_show_rt_full);
-	ImGui::Checkbox("Show Rt result halfscreen", &s_ui_show_rt_half);
+	ImGui::Checkbox("Show Rt result", &s_ui_show_rt);
 	ImGui::Checkbox("Render Before UI", &s_ui_render_before_ui);
 
 	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
 
-	ImGui::Checkbox("Show normals", &s_ui_show_normals);
-	ImGui::Checkbox("Show uvs", &s_ui_show_uvs);
-	ImGui::Checkbox("Show texture", &s_ui_show_texture);
-	ImGui::Checkbox("Show motion vec", &s_ui_show_motion_vectors);
-	ImGui::Checkbox("Show shaded", &s_ui_show_shaded);
+	// debug view combo box
+	const char *debug_views[] = {
+		"none", "instanceid", "normals", "uvs", "texture", "motion",
+	};
+	static_assert(ARRAYSIZE(debug_views) == DebugView_Count);
+
+	static const char *selected_debug = debug_views[0];
+	if (ImGui::BeginCombo("Draw Debug", selected_debug))
+	{
+		for (int n = 0; n < ARRAYSIZE(debug_views); n++)
+		{
+			CONST bool is_selected = (selected_debug == debug_views[n]); // You can store your selection however you want, outside or inside your objects
+			if (ImGui::Selectable(debug_views[n], is_selected))
+			{
+				selected_debug = debug_views[n];
+				s_ui_show_debug = n;
+			}
+				
+			if (is_selected)
+			{
+				ImGui::SetItemDefaultFocus();   // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
+				s_ui_show_debug = n;
+			}
+				
+		}
+		ImGui::EndCombo();
+	}
+
 	ImGui::Checkbox("Enable Transparent", &s_ui_transparent_enable);
 
 	ImGui::SliderFloat("Sun Azimuth: ", &s_ui_sun_azimuth, 0.0f, 360.0f);

@@ -589,7 +589,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 
-	if (g_constants.showShaded)
+	if (g_constants.debugView == DebugView_None)
 	{
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		float3 radiance = 0.0;
@@ -691,19 +691,23 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			const float2 baries = hit.barycentrics;
 			const float3x3 transform = (float3x3)hit.transform;
 
-			if (g_constants.showNormal)
+			if (g_constants.debugView == DebugView_InstanceId)
+			{
+				value.rgb = instanceIdToColor(instanceId);
+			}
+			else if (g_constants.debugView == DebugView_Normals)
 			{
 				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 				const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
 				value.rgb = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
 				value.rgb = value.rgb * 0.5 + 0.5;
 			}
-			else if (g_constants.showUvs)
+			else if (g_constants.debugView == DebugView_Uvs)
 			{
 				float2 uvs = fetchUvs(instanceId, primitiveIndex, baries);
 				value.rgb = float3(uvs, 0.0);
 			}
-			else if (g_constants.showTexture)
+			else if (g_constants.debugView == DebugView_Texture)
 			{
 				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
 				float2 uvs = fetchUvs(instanceId, indices, baries);
@@ -711,7 +715,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				float4 texcolor = fetchTexture(instanceId, uvs);
 				value.rgb = texcolor.rgb;
 			}
-			else if (g_constants.showMotionVec)
+			else if (g_constants.debugView == DebugView_Motion)
 			{
 				const RtInstanceData data = g_instance_data_buffer[instanceId];
 
@@ -721,9 +725,9 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				value.rgb = abs(mv) / 2.0;
 			}
-			else
+			else 
 			{
-				value.rgb = instanceIdToColor(instanceId);
+				value.rgb = 0;
 			}
 		}
 

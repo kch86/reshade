@@ -28,6 +28,16 @@ using uint3 = Uint3;
 
 #endif
 
+enum DebugViewEnum : uint
+{
+	DebugView_None=0,
+	DebugView_InstanceId,
+	DebugView_Normals,
+	DebugView_Uvs,
+	DebugView_Texture,
+	DebugView_Motion,
+	DebugView_Count,
+};
 struct RtInstanceAttachElem
 {
 	uint id;
@@ -65,20 +75,15 @@ struct RtConstants
 
 	float4 viewPos;
 
-	uint showNormal;
-	uint showUvs;
-	uint showTexture;
-	uint showShaded;
+	DebugViewEnum debugView;
+	uint pathCount;
+	uint iterCount;
+	uint frameIndex;
 
 	float3 sunDirection;
 	float sunIntensity;
 
-	uint pathCount;
-	uint iterCount;
-	uint frameIndex;
 	float bounceBoost;
-
-	uint showMotionVec;
 	float sunRadius;
 	uint transparentEnable;
 	uint pad;
