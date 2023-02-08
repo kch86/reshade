@@ -232,8 +232,11 @@ void fetchMaterialAndSurface(RayDesc ray, RayHit hit, out Material mtrl, out Sur
 	mtrl = fetchMaterial(instanceId, uvs);
 
 	surface.pos = get_ray_hitpoint(ray, hit);
-	surface.geom_normal = geomNormal;
-	surface.shading_normal = shadingNormal;
+
+	// using committedTriangleFrontFace is causing weird compilation issues on amd, calculate backface here
+	const bool backface = dot(ray.Direction, geomNormal) < 0.0;
+	surface.geom_normal = backface ? geomNormal : -geomNormal;
+	surface.shading_normal = backface ? shadingNormal : -shadingNormal;
 }
 
 float3 get_ray_origin_offset(RayDesc ray, Surface surface)
