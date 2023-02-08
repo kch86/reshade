@@ -255,7 +255,6 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 
 			rt_instance_desc instance{};
 			instance.acceleration_structure = { .buffer = m_bvhs[i].handle() };
-			//instance.instance_mask = 0xff;
 			instance.instance_mask = blas_desc.opaque ? 1 : 2;
 			instance.flags = rt_instance_flags::none;
 
