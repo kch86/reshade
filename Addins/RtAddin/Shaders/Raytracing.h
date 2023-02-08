@@ -16,7 +16,7 @@ RayHit trace_ray_closest_opaque(RaytracingAccelerationStructure tlas, RayDesc ra
 
 	const uint ray_flags = 0;
 	const uint ray_instance_mask = 0xffffffff;
-	query.TraceRayInline(tlas, ray_flags, /*ray_instance_mask*/1, ray);
+	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
 	query.Proceed();
 
 	RayHit hit;
@@ -36,7 +36,7 @@ RayHit trace_ray_closest_opaque(RaytracingAccelerationStructure tlas, RayDesc ra
 
 RayHit trace_ray_closest_opaque_mask(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
 {
-	RayQuery<RAY_FLAG_FORCE_OPAQUE /*| RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES*/> query;
+	RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
 
 	const uint ray_flags = 0;
 	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
@@ -58,10 +58,9 @@ RayHit trace_ray_closest_opaque_mask(RaytracingAccelerationStructure tlas, RayDe
 }
 
 template<typename T>
-RayHit trace_ray_closest_any_t(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
+RayHit trace_ray_closest_transparent(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
 {
-	RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
-	//RayQuery<RAY_FLAG_NONE> query;
+	RayQuery<RAY_FLAG_CULL_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
 
 	const uint ray_flags = 0;
 	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
@@ -75,7 +74,45 @@ RayHit trace_ray_closest_any_t(RaytracingAccelerationStructure tlas, RayDesc ray
 		hit.barycentrics = query.CandidateTriangleBarycentrics();
 		hit.transform = query.CandidateObjectToWorld3x4();
 
-		if(T::visit(hit))
+		if (T::visit(ray, hit))
+		{
+			query.CommitNonOpaqueTriangleHit();
+		}
+	}
+
+	RayHit hit = (RayHit)0;
+	hit.hitT = -1.0;
+
+	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+	{
+		hit.hitT = query.CommittedRayT();
+		hit.instanceId = query.CommittedInstanceID();
+		hit.primitiveId = query.CommittedPrimitiveIndex();
+		hit.barycentrics = query.CommittedTriangleBarycentrics();
+		hit.transform = query.CommittedObjectToWorld3x4();
+	}
+
+	return hit;
+}
+
+template<typename T>
+RayHit trace_ray_closest_any(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
+{
+	RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
+
+	const uint ray_flags = 0;
+	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
+
+	while (query.Proceed())
+	{
+		RayHit hit;
+		hit.hitT = query.CandidateTriangleRayT();
+		hit.instanceId = query.CandidateInstanceID();
+		hit.primitiveId = query.CandidatePrimitiveIndex();
+		hit.barycentrics = query.CandidateTriangleBarycentrics();
+		hit.transform = query.CandidateObjectToWorld3x4();
+
+		if (T::visit(ray, hit))
 		{
 			query.CommitNonOpaqueTriangleHit();
 		}

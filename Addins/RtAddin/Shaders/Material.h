@@ -16,9 +16,10 @@ struct Material
 {
 	float3 tint;
 	float3 base_color;
-	float metalness;
 	float3 emissive;
+	float metalness;
 	float roughness;
+	float opacity;
 	bool opaque;
 };
 
@@ -175,6 +176,23 @@ float3 enironment_term_ross(float3 f0, float NoV, float linearRoughness)
 	float bias = f;
 
 	return saturate(f0 * scale + bias);
+}
+
+float3 ambient_brdf(Material mtrl, float3 N, float3 V, bool approximate = false)
+{
+	float3 albedo = diffuse_reflectance(mtrl.base_color, mtrl.metalness);
+	float3 f0 = specular_f0(mtrl.base_color, mtrl.metalness);
+
+	float3 Fenv = f0;
+	if (!approximate)
+	{
+		float NoV = abs(dot(N, V));
+		Fenv = enironment_term_ross(f0, NoV, mtrl.roughness);
+	}
+
+	float3 ambBRDF = albedo * (1.0 - Fenv) + Fenv;
+
+	return ambBRDF;
 }
 
 float estimate_specular_probability_ross(Material mtrl, float3 normal, float3 V)

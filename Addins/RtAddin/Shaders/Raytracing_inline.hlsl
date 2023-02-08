@@ -209,6 +209,7 @@ Material fetchMaterial(uint instance_id, float2 uv)
 	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;
 	mtrl.metalness = 0.0;
+	mtrl.opacity = data.diffuse.a * textureAlbedo.a;
 	mtrl.opaque = instance_is_opaque(data);
 
 	// there's a bug somewhere with either 0.0 or 1.0 roughness
@@ -469,14 +470,18 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 struct Visitor
 {
-	static bool visit(RayHit hit)
+	static bool visit(RayDesc ray, RayHit hit)
 	{
 		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
-		float opacity = data.diffuse.a;
 
-		//const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
+		Material mtrl;
+		Surface surface;
+		fetchMaterialAndSurface(ray, hit, mtrl, surface);
+		surface = (Surface)0; //we won't use this so hint to the compiler to discard
 
-		if (opacity > 0.25)
+		const float opacity = mtrl.opacity;
+
+		if (opacity > 0.0)
 		{
 			return true;
 		}
@@ -495,7 +500,7 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 	const float ior_glass = 1.55;
 	const float eta = ior_air / ior_glass;
 	const float glass_thickness = 0.003;
-	const float3 glass_tint = saturate(primaryShade.mtrl.tint * 2.0);
+	const float3 glass_tint = saturate(primaryShade.mtrl.tint * 2.0 + 0.2);
 
 	ShadeRayResult shade = primaryShade;
 
@@ -531,10 +536,12 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 			transmittance *= glass_tint;
 		}
 		
-		// ignore transparent, else all
+		// decide which geo to look at
+		// if we're on the last path vertex, just try get the ray to escape, only look at transparents
+		// else include both transparents and opaque
 		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? 1 : 3;
 
-		RayHit hit = trace_ray_closest_any_t<Visitor>(g_rtScene, ray, instance_mask);
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, instance_mask);
 		if (hit.hitT < 0.0)
 		{
 			break;
@@ -544,11 +551,10 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		if (shade.mtrl.opaque)
 		{
-			// this shadow ray needs to ignore backfacing
-			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng, false);
+			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
 
 			// need better ambient estimate....
-			const float3 ambient = 0.5 * shade.mtrl.base_color;
+			const float3 ambient = 0.5 * shade.mtrl.base_color * ambient_brdf(shade.mtrl, shade.surface.shading_normal, V);
 			float3 L = shade_local.radiance + shade_local.mtrl.emissive + ambient;
 
 			total_radiance += transmittance * L;
@@ -626,7 +632,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			trans_ray.TMax = primaryHit.hitT;
 
 			// trace transparent only
-			RayHit trans_hit = trace_ray_closest_any_t<Visitor>(g_rtScene, trans_ray, 2);
+			RayHit trans_hit = trace_ray_closest_transparent<Visitor>(g_rtScene, trans_ray, 2);
 			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
 			{
 				ShadeRayResult shade = (ShadeRayResult)0;
