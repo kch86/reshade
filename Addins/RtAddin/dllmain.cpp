@@ -10,6 +10,9 @@
 #include <unordered_set>
 #include <vector>
 #include <span>
+#include <fstream>
+#include <iostream>
+#include <sstream> //std::stringstream
 
 // dx12
 #include <d3d12.h>
@@ -381,31 +384,70 @@ static void on_init_swapchain(swapchain *swapchain)
 	}
 }
 
+static void load_rt_pipeline()
+{
+#if 1
+	const char *file_name = "Shaders/Raytracing_inline.cso";
+	std::ifstream t(file_name, std::ios::binary);
+
+	t.seekg(0, std::ios::end);
+	size_t size = (size_t)t.tellg();
+	t.seekg(0);
+
+	std::vector<char> buffer(size, 0);
+	t.read(buffer.data(), size);
+
+	shader_desc shader_desc = {
+			.code = buffer.data(),
+			.code_size = buffer.size(),
+	};
+	pipeline_subobject objects[] = {
+		{
+			.type = pipeline_subobject_type::compute_shader,
+			.count = 1,
+			.data = &shader_desc,
+		}
+	};
+#else
+	shader_desc shader_desc = {
+			.code = g_pRaytracing_inline,
+			.code_size = ARRAYSIZE(g_pRaytracing_inline)
+	};
+	pipeline_subobject objects[] = {
+		{
+			.type = pipeline_subobject_type::compute_shader,
+			.count = 1,
+			.data = &shader_desc,
+		}
+	};
+#endif
+
+	pipeline_layout_param params[] = {
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
+			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants) / sizeof(int), .visibility = shader_stage::compute}),
+	};
+
+	pipeline_layout _layout;
+	pipeline _pipeline;
+	ThrowIfFailed(s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &_layout));
+	ThrowIfFailed(s_d3d12device->create_pipeline(_layout, ARRAYSIZE(objects), objects, &_pipeline));
+
+	if (s_pipeline_layout.handle)
+	{
+		s_d3d12device->destroy_pipeline_layout(s_pipeline_layout);
+		s_d3d12device->destroy_pipeline(s_pipeline);
+	}
+
+	s_pipeline_layout = _layout;
+	s_pipeline = _pipeline;
+}
 static void init_pipeline()
 {
 	// init rt pipeline
 	{
-		pipeline_layout_param params[] = {
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
-			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants)/sizeof(int), .visibility = shader_stage::compute}),
-		};
-
-		shader_desc shader_desc = {
-			.code = g_pRaytracing_inline,
-			.code_size = ARRAYSIZE(g_pRaytracing_inline)
-		};
-		pipeline_subobject objects[] = {
-			{
-				.type = pipeline_subobject_type::compute_shader,
-				.count = 1,
-				.data = &shader_desc,
-			}
-		};
-
-		ThrowIfFailed(s_d3d12device->create_pipeline_layout(ARRAYSIZE(params), params, &s_pipeline_layout));
-		ThrowIfFailed(s_d3d12device->create_pipeline(s_pipeline_layout, ARRAYSIZE(objects), objects, &s_pipeline));
+		load_rt_pipeline();
 	}
 
 	// init blit pipeline
@@ -1404,6 +1446,10 @@ static void on_present(effect_runtime *runtime)
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
 	{
 		s_bvh_manager.destroy();
+	}
+	else if (runtime->is_key_pressed(VK_F11))
+	{
+		load_rt_pipeline();
 	}
 
 	s_frame_id++;
