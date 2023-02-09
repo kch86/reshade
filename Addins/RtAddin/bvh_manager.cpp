@@ -9,6 +9,16 @@
 using namespace reshade::api;
 using namespace DirectX;
 
+uint32_t get_instance_mask(const BlasBuildDesc &desc)
+{
+	if (desc.transparent)
+		return InstanceMask_transparent;
+	else if (desc.alphatest)
+		return InstanceMask_alphatest;
+
+	return InstanceMask_opaque;
+}
+
 void bvh_manager::update()
 {
 	m_per_frame_instance_counts.clear();
@@ -255,7 +265,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 
 			rt_instance_desc instance{};
 			instance.acceleration_structure = { .buffer = m_bvhs[i].handle() };
-			instance.instance_mask = blas_desc.opaque ? 1 : 2;
+			instance.instance_mask = get_instance_mask(blas_desc);
 			instance.flags = rt_instance_flags::none;
 
 			Attachment attachment;
@@ -307,7 +317,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				rt_instance_data.specular = instanceData.mtrl.specular;
 				rt_instance_data.roughness = instanceData.mtrl.roughness;
 				rt_instance_data.toWorldPrevT = toPrevWorldTransform;
-				rt_instance_data.flags = blas_desc.opaque ? 1 : 0;
+				rt_instance_data.flags = (instance.instance_mask & InstanceMask_opaque_alphatest) != 0 ? 1 : 0;
 				instance_data.push_back(rt_instance_data);
 			}
 		}

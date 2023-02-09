@@ -273,7 +273,9 @@ scopedresource buildBlas(device* device9,
 	geomDesc.triangle_geo_descs.index_count = desc.ib.count;
 	geomDesc.triangle_geo_descs.index_format = desc.ib.fmt;
 	geomDesc.flags = rt_geometry_flags::no_duplicate_anyhit_invocation;
-	if (desc.opaque)
+
+	const bool opaque = !(desc.transparent || desc.alphatest);
+	if (opaque)
 	{
 		geomDesc.flags |= rt_geometry_flags::opaque;
 	}

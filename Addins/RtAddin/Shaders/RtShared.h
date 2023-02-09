@@ -38,6 +38,16 @@ enum DebugViewEnum : uint
 	DebugView_Motion,
 	DebugView_Count,
 };
+
+enum InstanceMask : uint
+{
+	InstanceMask_opaque = 1 << 0,
+	InstanceMask_transparent = 1 << 1,
+	InstanceMask_alphatest = 1 << 2,
+
+	InstanceMask_opaque_alphatest = (InstanceMask_opaque | InstanceMask_alphatest),
+	InstanceMask_all = (InstanceMask_opaque | InstanceMask_transparent | InstanceMask_alphatest),
+};
 struct RtInstanceAttachElem
 {
 	uint id;

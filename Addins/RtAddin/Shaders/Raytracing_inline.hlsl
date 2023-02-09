@@ -245,6 +245,28 @@ float3 get_ray_origin_offset(RayDesc ray, Surface surface)
 	return get_ray_origin_offset(ray, surface.pos, surface.geom_normal);
 }
 
+struct Visitor
+{
+	static bool visit(RayDesc ray, RayHit hit)
+	{
+		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
+
+		Material mtrl;
+		Surface surface;
+		fetchMaterialAndSurface(ray, hit, mtrl, surface);
+		surface = (Surface)0; //we won't use this so hint to the compiler to discard
+
+		const float opacity = mtrl.opacity;
+
+		if (opacity > 0.0)
+		{
+			return true;
+		}
+
+		return false;
+	}
+};
+
 Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 {
 	Light light;
@@ -305,7 +327,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 		ray.Direction = normalize(sunDirection);
 		ray.Origin = get_ray_origin_offset(ray, surface);
 
-		hit = trace_ray_occlusion(g_rtScene, ray);
+		hit = trace_ray_occlusion_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
 
 		if (hit.hitT >= 0.0)
 		{
@@ -402,7 +424,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		ray.Origin = get_ray_origin_offset(ray, shade.surface);
 		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 
-		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
+
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
@@ -435,7 +458,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	for (uint vertex = 0; vertex < g_constants.pathCount; vertex++)
 	{
-		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
@@ -467,28 +490,6 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	return total_radiance;
 }
-
-struct Visitor
-{
-	static bool visit(RayDesc ray, RayHit hit)
-	{
-		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
-
-		Material mtrl;
-		Surface surface;
-		fetchMaterialAndSurface(ray, hit, mtrl, surface);
-		surface = (Surface)0; //we won't use this so hint to the compiler to discard
-
-		const float opacity = mtrl.opacity;
-
-		if (opacity > 0.0)
-		{
-			return true;
-		}
-
-		return false;
-	}
-};
 
 float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout uint2 rng)
 {
@@ -539,9 +540,10 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		// decide which geo to look at
 		// if we're on the last path vertex, just try get the ray to escape, only look at transparents
 		// else include both transparents and opaque
-		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? 1 : 3;
+		const uint instance_mask = vertex == total_pathcount - 1 && !is_reflection ? InstanceMask_transparent : InstanceMask_all;
 
 		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, instance_mask);
+
 		if (hit.hitT < 0.0)
 		{
 			break;
@@ -594,8 +596,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		float3 radiance = 0.0;
 
-		// send a primary ray, ignoring all transparent geo
-		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
+		// send a primary ray, ignoring transparent geo, but include alpha-tested geo
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
 
 		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
@@ -631,8 +633,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			RayDesc trans_ray = ray;
 			trans_ray.TMax = primaryHit.hitT;
 
-			// trace transparent only
-			RayHit trans_hit = trace_ray_closest_transparent<Visitor>(g_rtScene, trans_ray, 2);
+			// trace transparent only, exclude alpha-test
+			RayHit trans_hit = trace_ray_closest_transparent<Visitor>(g_rtScene, trans_ray, InstanceMask_transparent);
 			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
 			{
 				ShadeRayResult shade = (ShadeRayResult)0;
@@ -644,19 +646,6 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				transparent += shade.radiance;
 				transparent += trace_transparent(trans_ray, shade, true, 2, seed);
 				transparent += trace_transparent(trans_ray, shade, false, 2, seed);
-
-				/*if (any(transparent) >= 5.0)
-					transparent = 1.0;
-				else if (any(transparent) >= 4.0)
-					transparent = float3(1, 0, 0);
-				else if (any(transparent) >= 3.0)
-					transparent = float3(1, 0, 1);
-				else if (any(transparent) >= 2.0)
-					transparent = float3(0, 0, 1);
-				else if (any(transparent) >= 1.0)
-					transparent = float3(0, 1, 0);
-				else
-					transparent = float3(1, 1, 0);*/
 
 				// replace the radiance with our radiance
 				radiance = transparent;
@@ -680,7 +669,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	}
 	else
 	{
-		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
 
 		float4 value = float4(0.0, 0.0, 0.0, 1.0);
 

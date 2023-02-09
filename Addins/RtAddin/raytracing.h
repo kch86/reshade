@@ -94,7 +94,8 @@ struct BlasBuildDesc
 		reshade::api::format fmt;
 	} ib;
 
-	bool opaque = true;
+	bool transparent = false;
+	bool alphatest = false;
 };
 
 struct TlasInstance

@@ -250,6 +250,7 @@ namespace
 
 	Material s_current_material;
 	bool s_transparency_enabled = false;
+	bool s_alphatest_enabled = false;
 
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
@@ -791,6 +792,11 @@ static void on_bind_pipeline_states(command_list *, uint32_t count, const dynami
 			s_transparency_enabled = values[i];
 			break;
 		}
+		else if (states[i] == dynamic_state::alpha_test_enable)
+		{
+			s_alphatest_enabled = values[i];
+			break;
+		}
 	}
 }
 
@@ -1307,7 +1313,8 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.count = index_count,
 			.fmt = s_currentIB.fmt
 		},
-		.opaque = !s_transparency_enabled,
+		.transparent = s_transparency_enabled,
+		.alphatest = s_alphatest_enabled,
 	};
 
 	const bool has_uvs = s_currentVB.uv.res.handle != 0;
@@ -1438,6 +1445,7 @@ static void on_present(effect_runtime *runtime)
 	s_got_viewproj = false;
 	s_null_vs_ps_has_been_bound = false;
 	s_transparency_enabled = false;
+	s_alphatest_enabled = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
 	s_currentTextureBindings.clear();
