@@ -96,6 +96,12 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PostBuildEvent>
+      <Command>%DTOOLS%\DTCommandLine.exe -m -l "D" --ro -p "C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\SPEED2.zip"  || set errorlevel=0</Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+      <Message>Mounting speed2: %DTOOLS%\DTCommandLine.exe -m -l "D" --ro -p "C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\SPEED2.zip"</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
