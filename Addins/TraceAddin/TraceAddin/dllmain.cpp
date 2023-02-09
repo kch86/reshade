@@ -878,11 +878,12 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 	if (!do_capture())
 		return;
 
-#ifndef NDEBUG
-	{	const std::shared_lock<std::shared_mutex> lock(s_mutex);
-
 	resource res;
 	resource_desc desc;
+	bool have_desc = false;
+
+#ifndef NDEBUG
+	{	const std::shared_lock<std::shared_mutex> lock(s_mutex);
 
 	switch (update.type)
 	{
@@ -902,6 +903,7 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 			{
 				res = cmd_list->get_device()->get_resource_from_view(view);
 				desc = cmd_list->get_device()->get_resource_desc(res);
+				have_desc = true;
 			}
 		}			
 		break;
@@ -921,7 +923,14 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 #endif
 
 	std::stringstream s;
-	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index << ", { " << to_string(update.type) << ", " << update.binding << ", " << update.count << " })";
+	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index
+		<< ", {\n\t" << to_string(update.type)
+		<< "\n\thandle: " << (void*)res.handle
+		<< "\n\twidth: " << desc.texture.width
+		<< "\n\theight: " << desc.texture.height
+		<< "\n\tarray: " << desc.texture.depth_or_layers
+		<< "\n\tbinding, count: " << update.binding << ", " << update.count
+		<< " })";
 
 	reshade::log_message(3, s.str().c_str());
 }
