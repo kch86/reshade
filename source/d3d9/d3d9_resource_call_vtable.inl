@@ -55,4 +55,7 @@ static inline R call_vtable(T *object, Args... args)
 #undef IDirect3DIndexBuffer9_Unlock
 #define IDirect3DIndexBuffer9_Unlock call_vtable<12, HRESULT, IDirect3DIndexBuffer9>
 
+#undef IDirect3DResource9_SetPrivateData
+#define IDirect3DResource9_SetPrivateData call_vtable<4, HRESULT, IDirect3DResource9, REFGUID, CONST void *, DWORD, DWORD>
+
 #endif

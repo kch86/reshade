@@ -93,4 +93,8 @@ HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_SetPrivateData(IDirect3DVertexB
 HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Lock(IDirect3DIndexBuffer9 *pIndexBuffer, UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags);
 HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Unlock(IDirect3DIndexBuffer9 *pIndexBuffer);
 
+
+#undef IDirect3DResource9_SetPrivateData
+HRESULT STDMETHODCALLTYPE IDirect3DResource9_SetPrivateData(IDirect3DResource9 *pResource, REFGUID refguid, CONST void *pData, DWORD SizeOfData, DWORD Flags);
+
 #endif

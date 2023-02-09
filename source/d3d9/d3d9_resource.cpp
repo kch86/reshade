@@ -466,4 +466,27 @@ HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Unlock(IDirect3DIndexBuffer9 *pI
 	return reshade::hooks::call(IDirect3DIndexBuffer9_Unlock, vtable_from_instance(pIndexBuffer) + 12)(pIndexBuffer);
 }
 
+HRESULT __stdcall IDirect3DResource9_SetPrivateData(IDirect3DResource9 *pResource, REFGUID refguid, const void *pData, DWORD SizeOfData, DWORD Flags)
+{
+	static GUID filter[] = {
+		{4043337370, 7249, 19188, {172, 239, 54, 5, 210, 212, 200, 238} },
+		{3606990736, 29111, 18236, {190, 131, 234, 33, 9, 122, 163, 235} },
+	};
+	bool filter_guid = false;
+	for (auto &guid : filter)
+	{
+		if (guid == refguid)
+		{
+			filter_guid = true;
+			break;
+		}
+	}
+
+	if (!filter_guid)
+	{
+		printf("help");
+	}
+	return reshade::hooks::call(IDirect3DResource9_SetPrivateData, vtable_from_instance(pResource) + 4)(pResource, refguid, pData, SizeOfData, Flags);
+}
+
 #endif

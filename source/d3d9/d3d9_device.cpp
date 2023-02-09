@@ -842,8 +842,12 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 		//LOG_INFO() << "VERTEX CREATE: " << std::hex << to_handle(resource).handle << ", usage: " << std::hex << Usage << ", fvf: " << std::hex << FVF << ", pool: " << Pool;
 
 #  if !RESHADE_ADDON_LITE
-		//reshade::hooks::install("IDirect3DVertexBuffer9::SetPrivateData", vtable_from_instance(resource), 4, reinterpret_cast<reshade::hook::address>(&IDirect3DVertexBuffer9_SetPrivateData));
+		#if 0
+			reshade::hooks::install("IDirect3DVertexBuffer9::SetPrivateData", vtable_from_instance(resource), 4, reinterpret_cast<reshade::hook::address>(&IDirect3DVertexBuffer9_SetPrivateData));
 
+			IDirect3DResource9 *base_res = (IDirect3DResource9 *)resource;
+			reshade::hooks::install("IDirect3DResource9::SetPrivateData", vtable_from_instance(base_res), 4, reinterpret_cast<reshade::hook::address>(&IDirect3DResource9_SetPrivateData));
+		#endif
 		const auto device_proxy = this;
 		resource->SetPrivateData(__uuidof(device_proxy), &device_proxy, sizeof(device_proxy), 0);
 
@@ -860,9 +864,6 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 			reshade::invoke_addon_event<reshade::addon_event::destroy_resource>(this, to_handle(resource));
 			InterlockedDecrement(&_resource_ref);
 		});
-
-		// register hook after we've set our own private data on the original
-		//reshade::hooks::install("IDirect3DVertexBuffer9::SetPrivateData", vtable_from_instance(resource), 4, reinterpret_cast<reshade::hook::address>(&IDirect3DVertexBuffer9_SetPrivateData));
 #endif
 	}
 	else
