@@ -47,6 +47,9 @@ static inline R call_vtable(T *object, Args... args)
 #undef IDirect3DVertexBuffer9_Unlock
 #define IDirect3DVertexBuffer9_Unlock call_vtable<12, HRESULT, IDirect3DVertexBuffer9>
 
+#undef IDirect3DVertexBuffer9_SetPrivateData
+#define IDirect3DVertexBuffer9_SetPrivateData call_vtable<4, HRESULT, IDirect3DVertexBuffer9, REFGUID, CONST void *, DWORD, DWORD>
+
 #undef IDirect3DIndexBuffer9_Lock
 #define IDirect3DIndexBuffer9_Lock call_vtable<11, HRESULT, IDirect3DIndexBuffer9, UINT, UINT, void **, DWORD>
 #undef IDirect3DIndexBuffer9_Unlock

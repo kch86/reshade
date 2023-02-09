@@ -81,9 +81,11 @@ HRESULT STDMETHODCALLTYPE IDirect3DCubeTexture9_UnlockRect(IDirect3DCubeTexture9
 
 #undef IDirect3DVertexBuffer9_Lock
 #undef IDirect3DVertexBuffer9_Unlock
+#undef IDirect3DVertexBuffer9_SetPrivateData
 
 HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Lock(IDirect3DVertexBuffer9 *pVertexBuffer, UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags);
 HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Unlock(IDirect3DVertexBuffer9 *pVertexBuffer);
+HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_SetPrivateData(IDirect3DVertexBuffer9 *pVertexBuffer, REFGUID refguid, CONST void *pData, DWORD SizeOfData, DWORD Flags);
 
 #undef IDirect3DIndexBuffer9_Lock
 #undef IDirect3DIndexBuffer9_Unlock

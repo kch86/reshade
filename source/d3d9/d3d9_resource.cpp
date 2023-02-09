@@ -412,6 +412,29 @@ HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Unlock(IDirect3DVertexBuffer9 *
 	return reshade::hooks::call(IDirect3DVertexBuffer9_Unlock, vtable_from_instance(pVertexBuffer) + 12)(pVertexBuffer);
 }
 
+HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_SetPrivateData(IDirect3DVertexBuffer9 *pVertexBuffer, REFGUID refguid, const void *pData, DWORD SizeOfData, DWORD Flags)
+{
+	static GUID filter[] = {
+		{4043337370, 7249, 19188, {172, 239, 54, 5, 210, 212, 200, 238} },
+		{3606990736, 29111, 18236, {190, 131, 234, 33, 9, 122, 163, 235} },
+	};
+	bool filter_guid = false;
+	for (auto &guid : filter)
+	{
+		if (guid == refguid)
+		{
+			filter_guid = true;
+			break;
+		}
+	}
+
+	if (!filter_guid)
+	{
+		printf("help");
+	}
+	return reshade::hooks::call(IDirect3DVertexBuffer9_SetPrivateData, vtable_from_instance(pVertexBuffer) + 4)(pVertexBuffer, refguid, pData, SizeOfData, Flags);
+}
+
 HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Lock(IDirect3DIndexBuffer9 *pIndexBuffer, UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags)
 {
 	const HRESULT hr = reshade::hooks::call(IDirect3DIndexBuffer9_Lock, vtable_from_instance(pIndexBuffer) + 11)(pIndexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
