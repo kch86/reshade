@@ -37,6 +37,8 @@ todo:
 - city background is broken with glass support addition
 -- it's actual "transparency", same as the smoke so I need a solution for both of these things
 -- the city background should just be emissive
+- alpha-test support is expensive...
+-- is there a better way here?
 
 
 

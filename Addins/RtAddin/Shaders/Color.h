@@ -18,4 +18,14 @@ float get_luminance(float3 c)
 	return dot(float3(0.2126, 0.7152, 0.0722), c);
 }
 
+float3 bgra_unorm_to_float(uint bgra)
+{
+	//float r = ((bgra >> 24) & 0xff) / 255.0;
+	float r = ((bgra >> 16) & 0xff) / 255.0;
+	float g = ((bgra >> 8) & 0xff) / 255.0;
+	float b = ((bgra >> 0) & 0xff) / 255.0;
+
+	return float3(r, g, b);
+}
+
 #endif //COLOR_HLSL

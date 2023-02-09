@@ -191,11 +191,50 @@ float4 fetchTexture(uint instance_id, float2 uv)
 	return texcolor;
 }
 
-Material fetchMaterial(uint instance_id, float2 uv)
+float3 fetchVertexColor(uint instance_id, uint3 indices, float2 baries)
+{
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
+
+	if (att.col.id == 0x7FFFFFFF)
+	{
+		return 0.0.xxx;
+	}
+
+	// since vb streams are interleaved, this needs to be a byte address buffer
+	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.col.id)];
+
+	float3 c = 0.0;
+
+	uint stride = att.col.stride;
+	if (att.col.format == 87)
+	{
+		float3 c0 = bgra_unorm_to_float(vb.Load(indices.x * stride + att.col.offset));
+		float3 c1 = bgra_unorm_to_float(vb.Load(indices.y * stride + att.col.offset));
+		float3 c2 = bgra_unorm_to_float(vb.Load(indices.z * stride + att.col.offset));
+
+		c = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
+	}
+	else
+	{
+		float3 c0 = asfloat(vb.Load3(indices.x * stride + att.col.offset));
+		float3 c1 = asfloat(vb.Load3(indices.y * stride + att.col.offset));
+		float3 c2 = asfloat(vb.Load3(indices.z * stride + att.col.offset));
+
+		c = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
+	}
+	
+	return c;
+}
+
+Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries)
 {
 	RtInstanceData data = g_instance_data_buffer[instance_id];
 
 	float4 textureAlbedo = fetchTexture(instance_id, uv);
+
+	// not sure what to do with this yet
+	// they seem to use this for baked gi
+	//float3 emissive = fetchVertexColor(instance_id, indices, baries);
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
@@ -207,7 +246,7 @@ Material fetchMaterial(uint instance_id, float2 uv)
 	Material mtrl;
 	mtrl.tint = baseColorTint;
 	mtrl.base_color = combined_base;
-	mtrl.emissive = 0.0;
+	mtrl.emissive = 0.0;// emissive;
 	mtrl.metalness = 0.0;
 	mtrl.opacity = data.diffuse.a * textureAlbedo.a;
 	mtrl.opaque = instance_is_opaque(data);
@@ -230,7 +269,7 @@ void fetchMaterialAndSurface(RayDesc ray, RayHit hit, out Material mtrl, out Sur
 	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
 	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
 
-	mtrl = fetchMaterial(instanceId, uvs);
+	mtrl = fetchMaterial(instanceId, uvs, indices, baries);
 
 	surface.pos = get_ray_hitpoint(ray, hit);
 
@@ -693,7 +732,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			}
 			else if (g_constants.debugView == DebugView_Uvs)
 			{
-				float2 uvs = fetchUvs(instanceId, primitiveIndex, baries);
+				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+				float2 uvs = fetchUvs(instanceId, indices, baries);
 				value.rgb = float3(uvs, 0.0);
 			}
 			else if (g_constants.debugView == DebugView_Texture)
@@ -703,6 +743,12 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				float4 texcolor = fetchTexture(instanceId, uvs);
 				value.rgb = texcolor.rgb;
+			}
+			else if (g_constants.debugView == DebugView_Color)
+			{
+				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+
+				value.rgb = fetchVertexColor(instanceId, indices, baries);
 			}
 			else if (g_constants.debugView == DebugView_Motion)
 			{

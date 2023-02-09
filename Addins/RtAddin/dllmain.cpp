@@ -72,6 +72,7 @@ namespace
 
 		stream pos;
 		stream normal;
+		stream color;
 		stream uv;
 	};
 
@@ -90,6 +91,7 @@ namespace
 
 		stream pos;
 		stream normal;
+		stream color;
 		stream uv;
 	};
 
@@ -397,6 +399,7 @@ static void load_rt_pipeline()
 
 	std::vector<char> buffer(size, 0);
 	t.read(buffer.data(), size);
+	t.close();
 
 	shader_desc shader_desc = {
 			.code = buffer.data(),
@@ -686,6 +689,43 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 
 					reshade::log_message(3, s.str().c_str());
 				}
+				else if (strstr(elem.semantic, "COLOR") != nullptr)
+				{
+					info.color.format = elem.format;
+					info.color.offset = elem.offset;
+					info.color.index = elem.buffer_binding;
+					info.color.stride = elem.stride;
+
+					std::stringstream s;
+
+					s << "vertex_buffer_stream_color(" << handle.handle << ", ";
+
+					if (info.color.format == format::r32g32b32a32_float)
+					{
+						s << "float32x4";
+					}
+					else if (info.color.format == format::r32g32b32_float)
+					{
+						s << "float32x3";
+					}
+					else if (info.color.format == format::r16g16b16a16_float)
+					{
+						s << "float16x4";
+					}
+					else if (info.color.format == format::b8g8r8a8_unorm)
+					{
+						s << "float8x4";
+					}
+					else
+					{
+						s << "unkown";
+						assert(false);
+					}
+					s << ", " << elemIdx;
+					s << ")";
+
+					reshade::log_message(3, s.str().c_str());
+				}
 			}
 
 			if (info.pos.format != format::unknown)
@@ -711,6 +751,10 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 				if (info.normal.format != format::unknown)
 				{
 					info.normal.stride = strides[info.normal.index];
+				}
+				if (info.color.format != format::unknown)
+				{
+					info.color.stride = strides[info.color.index];
 				}
 
 				const std::unique_lock<std::shared_mutex> lock(s_mutex);
@@ -1042,6 +1086,10 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	{
 		s_currentVB.normal = {};
 	}
+	if (streamInfo.color.format == format::unknown)
+	{
+		s_currentVB.color = {};
+	}
 
 	if (first <= streamInfo.pos.index && count > (streamInfo.pos.index - first))
 	{
@@ -1078,6 +1126,18 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 
 		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.normal.res);
 		s_currentVB.normal.size_bytes = desc.buffer.size;
+	}
+	if (streamInfo.color.format != format::unknown && first <= streamInfo.color.index && count > (streamInfo.color.index - first))
+	{
+		s_currentVB.color.res = buffers[streamInfo.color.index];
+		s_currentVB.color.offset = (uint32_t)offsets[streamInfo.color.index];
+		s_currentVB.color.elem_offset = streamInfo.color.offset;
+		s_currentVB.color.count = 0;
+		s_currentVB.color.stride = strides[streamInfo.color.index];
+		s_currentVB.color.fmt = streamInfo.color.format;
+
+		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.color.res);
+		s_currentVB.color.size_bytes = desc.buffer.size;
 	}
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
@@ -1319,6 +1379,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 
 	const bool has_uvs = s_currentVB.uv.res.handle != 0;
 	const bool has_normal = s_currentVB.normal.res.handle != 0;
+	const bool has_color = s_currentVB.color.res.handle != 0;
 	uint32_t texslot = 0;
 	uint64_t texhandle = 0;
 
@@ -1404,6 +1465,18 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			.res = has_uvs && texhandle > 0 ? s_shadow_resources[texhandle].handle() : resource{0},
 			.type = resource_type::texture_2d,
 			.fmt = format::unknown,
+		},
+		// vert color
+		{
+			// normal may not always be available
+			.res = has_color ? s_shadow_resources[s_currentVB.color.res.handle].handle() : resource{0},
+			.type = resource_type::buffer,
+			.offset = has_color ? (s_currentVB.color.offset + (vertex_offset * s_currentVB.color.stride)) / s_currentVB.color.stride : 0,
+			.elem_offset = s_currentVB.color.elem_offset,
+			.count = vertex_count,
+			.stride = s_currentVB.color.stride,
+			.fmt = s_currentVB.color.fmt,
+			.view_as_raw = true,
 		},
 	};
 
@@ -1865,7 +1938,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 
 	// debug view combo box
 	const char *debug_views[] = {
-		"none", "instanceid", "normals", "uvs", "texture", "motion",
+		"none", "instanceid", "normals", "uvs", "texture", "color", "motion",
 	};
 	static_assert(ARRAYSIZE(debug_views) == DebugView_Count);
 
