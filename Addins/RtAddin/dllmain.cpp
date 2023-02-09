@@ -180,6 +180,7 @@ namespace
 		int specular_offset;
 		int specular_power_offset;
 		int env_power_offset;
+		int min_spec_offset;
 	};
 
 	std::shared_mutex s_mutex;
@@ -327,7 +328,8 @@ static void init_vs_mappings()
 					.diffuse_offset = 18,
 					.specular_offset = 20,
 					.specular_power_offset = 22,
-					.env_power_offset = 23
+					.env_power_offset = 23,
+					.min_spec_offset = 20,
 				}
 			},
 			{
@@ -337,6 +339,7 @@ static void init_vs_mappings()
 					.specular_offset = -1,
 					.specular_power_offset = -1,
 					.env_power_offset = -1,
+					.min_spec_offset = -1,
 				}
 			}
 		};
@@ -1217,6 +1220,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				};
 
 				// interpreting env power as roughness seems to work well
+				// envpower is smoother 
 				// there's a bug somewhere with either 0.0 or 1.0 roughness
 				// clamp to [.1, .9]
 				auto get_roughness_envpower = [=](XMVECTOR spec_power) {
@@ -1230,12 +1234,38 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					return roughness;
 				};
 
+				auto get_elem_f = [=](int offset, float default_value) {
+					if (offset >= 0 && offset < (int)count)
+					{
+						return XMVectorGetX(vectors[offset]);
+					}
+
+					return default_value;
+				};
+
+				// this seems to work well on the car
+				// doesn't quite match every setup but looks ok most of the time
+				auto get_roughness2 = [=](float spec_power, float spec_min, float env_power) {
+					float s = spec_power;
+					//float e = max(0.4f, env_power);
+					float e = max(0.0f, min(1.0f, 1.0f - env_power));
+					float m = spec_min == 0.0f ? 1.0f : spec_min;
+					s = (s*m) / e;
+					float roughness = sqrtf(2.0f / (s + 2.0f));
+
+					roughness = powf(roughness, 2.0);
+					return roughness;
+				};
+
 				s_current_material = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					//TODO most of the specular color values are bogus pre-pbr values
 					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
 					//.roughness = get_roughness(get_elem(offset->second.specular_power_offset, XMVectorReplicate(default_roughness))),
-					.roughness = get_roughness_envpower(get_elem(offset->second.env_power_offset, XMVectorReplicate(.1f))),
+					//.roughness = get_roughness_envpower(get_elem(offset->second.env_power_offset, XMVectorReplicate(.1f))),
+					.roughness = get_roughness2(get_elem_f(offset->second.specular_power_offset, .8f),
+												get_elem_f(offset->second.min_spec_offset, .5f),
+												get_elem_f(offset->second.env_power_offset, .8f)),
 				};
 			}
 			else

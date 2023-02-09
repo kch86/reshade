@@ -39,6 +39,11 @@ todo:
 -- the city background should just be emissive
 - alpha-test support is expensive...
 -- is there a better way here?
+- car paint:
+-- no alphatest/transparency
+-- has cubemap
+-- specific shader (not unique)
+- there's puddles on the ground. where is this coming from? ground alpha?
 
 
 
@@ -81,3 +86,11 @@ spec min	{ 0, 0, 0, 0 },
 spec range	{ 0.195, 0.195, 0.195, 0 },
 spec pow	{ 1.3915, 0, 0, 0 },
 env pow		{ 2, 0, 0, 0 },
+
+// blue car paint
+{ 0.662, 0.65538, 0.67193, 0.993 },
+{ 0.41, 0.41662, 0.251062, -0.828 },
+{ 1, 1.015, 1.038, 0 },
+{ -0.3652, -0.406, -0.4584, 0 },
+{ 5.72, 0, 0, 0 },
+{ 0.262, 0, 0, 0 },
