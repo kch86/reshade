@@ -84,10 +84,8 @@ float3 instanceIdToColor(uint id)
 	return IntToColor(id);
 }
 
-uint3 fetchIndices(uint instance_id, uint primitive_id)
+uint3 fetchIndices(RtInstanceAttachments att, uint primitive_id)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	// we declare the buffer with the right format so it will decode 16 and 32-bit indices
 	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
 
@@ -99,18 +97,16 @@ uint3 fetchIndices(uint instance_id, uint primitive_id)
 	return indices;
 }
 
-float3 fetchGeometryNormal(uint instance_id, uint3 indices, float3x3 transform)
+float3 fetchGeometryNormal(RtInstanceAttachments att, uint3 indices, float3x3 transform)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	float3 n;
 
 	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.vb.id)];
 
 	uint stride = att.vb.stride;
-	float3 v0 = asfloat(vb.Load3(indices.x * stride + att.vb.offset));
-	float3 v1 = asfloat(vb.Load3(indices.y * stride + att.vb.offset));
-	float3 v2 = asfloat(vb.Load3(indices.z * stride + att.vb.offset));
+	float3 v0 = vb.Load<float3>(indices.x * stride + att.vb.offset);
+	float3 v1 = vb.Load<float3>(indices.y * stride + att.vb.offset);
+	float3 v2 = vb.Load<float3>(indices.z * stride + att.vb.offset);
 
 	n = normalize(cross((v1 - v0), (v2 - v0)));
 
@@ -118,10 +114,8 @@ float3 fetchGeometryNormal(uint instance_id, uint3 indices, float3x3 transform)
 	return normalize(n);
 }
 
-float3 fetchShadingNormal(uint instance_id, uint3 indices, float2 baries, float3x3 transform, float3 geomNormal)
+float3 fetchShadingNormal(RtInstanceAttachments att, uint3 indices, float2 baries, float3x3 transform, float3 geomNormal)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	float3 n;
 
 	// if there isn't a valid normal stream, fallback to triangle normal
@@ -135,9 +129,9 @@ float3 fetchShadingNormal(uint instance_id, uint3 indices, float2 baries, float3
 		ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.norm.id)];
 
 		uint stride = att.norm.stride;
-		float3 n0 = asfloat(vb.Load3(indices.x * stride + att.norm.offset));
-		float3 n1 = asfloat(vb.Load3(indices.y * stride + att.norm.offset));
-		float3 n2 = asfloat(vb.Load3(indices.z * stride + att.norm.offset));
+		float3 n0 = vb.Load<float3>(indices.x * stride + att.norm.offset);
+		float3 n1 = vb.Load<float3>(indices.y * stride + att.norm.offset);
+		float3 n2 = vb.Load<float3>(indices.z * stride + att.norm.offset);
 
 		n = n0 * (1.0 - baries.y - baries.x) + n1 * baries.x + n2 * baries.y;
 		n = mul(transform, n);
@@ -147,10 +141,8 @@ float3 fetchShadingNormal(uint instance_id, uint3 indices, float2 baries, float3
 	return n;
 }
 
-float2 fetchUvs(uint instance_id, uint3 indices, float2 baries)
+float2 fetchUvs(RtInstanceAttachments att, uint3 indices, float2 baries)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	if (att.uv.id == 0x7FFFFFFF)
 	{
 		return 1.0.xx;
@@ -160,9 +152,9 @@ float2 fetchUvs(uint instance_id, uint3 indices, float2 baries)
 	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.uv.id)];
 
 	uint stride = att.uv.stride;
-	float2 u0 = asfloat(vb.Load2(indices.x * stride + att.uv.offset));
-	float2 u1 = asfloat(vb.Load2(indices.y * stride + att.uv.offset));
-	float2 u2 = asfloat(vb.Load2(indices.z * stride + att.uv.offset));
+	float2 u0 = vb.Load<float2>(indices.x * stride + att.uv.offset);
+	float2 u1 = vb.Load<float2>(indices.y * stride + att.uv.offset);
+	float2 u2 = vb.Load<float2>(indices.z * stride + att.uv.offset);
 
 	float2 uv = u0 * (1.0 - baries.y - baries.x) + u1 * baries.x + u2 * baries.y;
 	uv = frac(uv);
@@ -170,10 +162,8 @@ float2 fetchUvs(uint instance_id, uint3 indices, float2 baries)
 	return uv;
 }
 
-float4 fetchTexture(uint instance_id, float2 uv)
+float4 fetchTexture(RtInstanceAttachments att, float2 uv)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	if (att.tex0.id == 0x7FFFFFFF)
 	{
 		return 1.0.xxxx;
@@ -191,10 +181,8 @@ float4 fetchTexture(uint instance_id, float2 uv)
 	return texcolor;
 }
 
-float3 fetchVertexColor(uint instance_id, uint3 indices, float2 baries)
+float3 fetchVertexColor(RtInstanceAttachments att, uint3 indices, float2 baries)
 {
-	RtInstanceAttachments att = g_attachments_buffer[instance_id];
-
 	if (att.col.id == 0x7FFFFFFF)
 	{
 		return 0.0.xxx;
@@ -216,9 +204,9 @@ float3 fetchVertexColor(uint instance_id, uint3 indices, float2 baries)
 	}
 	else
 	{
-		float3 c0 = asfloat(vb.Load3(indices.x * stride + att.col.offset));
-		float3 c1 = asfloat(vb.Load3(indices.y * stride + att.col.offset));
-		float3 c2 = asfloat(vb.Load3(indices.z * stride + att.col.offset));
+		float3 c0 = vb.Load<float3>(indices.x * stride + att.col.offset);
+		float3 c1 = vb.Load<float3>(indices.y * stride + att.col.offset);
+		float3 c2 = vb.Load<float3>(indices.z * stride + att.col.offset);
 
 		c = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
 	}
@@ -229,8 +217,9 @@ float3 fetchVertexColor(uint instance_id, uint3 indices, float2 baries)
 Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries)
 {
 	RtInstanceData data = g_instance_data_buffer[instance_id];
+	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
-	float4 textureAlbedo = fetchTexture(instance_id, uv);
+	float4 textureAlbedo = fetchTexture(att, uv);
 
 	// not sure what to do with this yet
 	// they seem to use this for baked gi
@@ -264,10 +253,11 @@ void fetchMaterialAndSurface(RayDesc ray, RayHit hit, out Material mtrl, out Sur
 	const float2 baries = hit.barycentrics;
 	const float3x3 transform = (float3x3)hit.transform;
 
-	const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-	const float2 uvs = fetchUvs(instanceId, indices, baries);
-	const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
-	const float3 shadingNormal = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
+	RtInstanceAttachments att = g_attachments_buffer[instanceId];
+	const uint3 indices = fetchIndices(att, primitiveIndex);
+	const float2 uvs = fetchUvs(att, indices, baries);
+	const float3 geomNormal = fetchGeometryNormal(att, indices, transform);
+	const float3 shadingNormal = fetchShadingNormal(att, indices, baries, transform, geomNormal);
 
 	mtrl = fetchMaterial(instanceId, uvs, indices, baries);
 
@@ -718,6 +708,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			const uint primitiveIndex = hit.primitiveId;
 			const float2 baries = hit.barycentrics;
 			const float3x3 transform = (float3x3)hit.transform;
+			RtInstanceAttachments att = g_attachments_buffer[instanceId];
 
 			if (g_constants.debugView == DebugView_InstanceId)
 			{
@@ -725,30 +716,30 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			}
 			else if (g_constants.debugView == DebugView_Normals)
 			{
-				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-				const float3 geomNormal = fetchGeometryNormal(instanceId, indices, transform);
-				value.rgb = fetchShadingNormal(instanceId, indices, baries, transform, geomNormal);
+				const uint3 indices = fetchIndices(att, primitiveIndex);
+				const float3 geomNormal = fetchGeometryNormal(att, indices, transform);
+				value.rgb = fetchShadingNormal(att, indices, baries, transform, geomNormal);
 				value.rgb = value.rgb * 0.5 + 0.5;
 			}
 			else if (g_constants.debugView == DebugView_Uvs)
 			{
-				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-				float2 uvs = fetchUvs(instanceId, indices, baries);
+				const uint3 indices = fetchIndices(att, primitiveIndex);
+				float2 uvs = fetchUvs(att, indices, baries);
 				value.rgb = float3(uvs, 0.0);
 			}
 			else if (g_constants.debugView == DebugView_Texture)
 			{
-				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
-				float2 uvs = fetchUvs(instanceId, indices, baries);
+				const uint3 indices = fetchIndices(att, primitiveIndex);
+				float2 uvs = fetchUvs(att, indices, baries);
 
-				float4 texcolor = fetchTexture(instanceId, uvs);
+				float4 texcolor = fetchTexture(att, uvs);
 				value.rgb = texcolor.rgb;
 			}
 			else if (g_constants.debugView == DebugView_Color)
 			{
-				const uint3 indices = fetchIndices(instanceId, primitiveIndex);
+				const uint3 indices = fetchIndices(att, primitiveIndex);
 
-				value.rgb = fetchVertexColor(instanceId, indices, baries);
+				value.rgb = fetchVertexColor(att, indices, baries);
 			}
 			else if (g_constants.debugView == DebugView_Motion)
 			{
