@@ -45,6 +45,8 @@ todo:
 -- specific shader (not unique)
 - there's puddles on the ground. where is this coming from? ground alpha?
 - headlights need some custom material
+- add instance color data debug mode
+- add channel filtering for debug mode
 
 
 
