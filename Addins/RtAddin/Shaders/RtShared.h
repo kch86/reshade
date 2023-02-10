@@ -63,8 +63,8 @@ struct RtInstanceAttachments
 	RtInstanceAttachElem vb;
 	RtInstanceAttachElem uv;
 	RtInstanceAttachElem norm;
-	RtInstanceAttachElem tex0;
 	RtInstanceAttachElem col;
+	RtInstanceAttachElem tex0;
 };
 
 struct RtInstanceData

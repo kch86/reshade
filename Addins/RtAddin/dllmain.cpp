@@ -83,25 +83,16 @@ namespace
 			resource res = {};
 			uint32_t offset = 0;
 			uint32_t elem_offset = 0;
-			uint32_t count = 0;
 			uint32_t stride = 0;
 			uint64_t size_bytes = 0;
 			format fmt = format::unknown;
 		};
 
+		stream index;
 		stream pos;
 		stream normal;
 		stream color;
 		stream uv;
-	};
-
-	struct IndexData
-	{
-		resource ib = {};
-		uint32_t offset = 0;
-		uint32_t stride = 0;
-		uint64_t size_bytes = 0;
-		format fmt = format::unknown;
 	};
 
 	struct TextureBindings
@@ -208,8 +199,7 @@ namespace
 	uint32_t s_width = 0, s_height = 0;
 
 	pipeline s_currentInputLayout;
-	IndexData s_currentIB;
-	StreamData s_currentVB;
+	StreamData s_currentStreamData;
 	resource_view s_current_rtv = { 0 };
 	resource s_reflection_resource = { 0 };
 	TextureBindings s_currentTextureBindings;
@@ -291,6 +281,50 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 	resource_view current_dsv = { 0 };
 	uint32_t current_render_pass_index = 0;
 };
+
+bvh_manager::AttachmentDesc get_attach_desc(const StreamData::stream &stream, uint32_t count, uint32_t offset, bool is_raw)
+{
+	const uint64_t handle = stream.res.handle == 0 ? 0 : s_shadow_resources[stream.res.handle].handle().handle;
+	return
+	{
+		.res = handle,
+		.type = resource_type::buffer,
+		.offset = handle == 0 ? 0 : (stream.offset + (offset * stream.stride)) / stream.stride,
+		.elem_offset = stream.elem_offset,
+		.count = count,
+		.stride = stream.stride,
+		.fmt = stream.fmt,
+		.view_as_raw = is_raw,
+	};
+}
+
+StreamData::stream get_stream_data(
+	command_list *cmd_list,
+	const StreamInfo::stream &info,
+	const resource *buffers,
+	const uint64_t *offsets,
+	const uint32_t *strides,
+	uint32_t first,
+	uint32_t count)
+{
+	if (info.format == format::unknown || !(first <= info.index && count > (info.index - first)))
+	{
+		return {};
+	}
+
+	resource res = buffers[info.index];
+	resource_desc desc = cmd_list->get_device()->get_resource_desc(res);
+	return
+	{
+		.res = res,
+		.offset = (uint32_t)offsets[info.index],
+		.elem_offset = info.offset,
+		.stride = strides[info.index],
+		.size_bytes = desc.buffer.size,
+		.fmt = info.format,
+	};
+	
+}
 
 static void init_vs_mappings()
 {
@@ -1067,13 +1101,14 @@ static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64
 	if (filter_command())
 		return;
 
-	s_currentIB.ib = buffer;
-	s_currentIB.offset = (uint32_t)offset;
-	s_currentIB.stride = index_size;
-	s_currentIB.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
+	s_currentStreamData.index.res = buffer;
+	s_currentStreamData.index.offset = (uint32_t)offset;
+	s_currentStreamData.index.elem_offset = 0;
+	s_currentStreamData.index.stride = index_size;
+	s_currentStreamData.index.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
 
 	resource_desc desc = cmd_list->get_device()->get_resource_desc(buffer);
-	s_currentIB.size_bytes = desc.buffer.size;
+	s_currentStreamData.index.size_bytes = desc.buffer.size;
 }
 static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
@@ -1081,67 +1116,11 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 		return;
 
 	const StreamInfo &streamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
-	if (streamInfo.uv.format == format::unknown)
-	{
-		s_currentVB.uv = {};
-	}
-	if (streamInfo.normal.format == format::unknown)
-	{
-		s_currentVB.normal = {};
-	}
-	if (streamInfo.color.format == format::unknown)
-	{
-		s_currentVB.color = {};
-	}
 
-	if (first <= streamInfo.pos.index && count > (streamInfo.pos.index - first))
-	{
-		s_currentVB.pos.res = buffers[streamInfo.pos.index];
-		s_currentVB.pos.offset = (uint32_t)offsets[streamInfo.pos.index];
-		s_currentVB.pos.elem_offset = streamInfo.pos.offset;
-		s_currentVB.pos.count = 0;
-		s_currentVB.pos.stride = strides[streamInfo.pos.index];
-		s_currentVB.pos.fmt = streamInfo.pos.format;
-
-		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.pos.res);
-		s_currentVB.pos.size_bytes = desc.buffer.size;
-	}
-	if (streamInfo.uv.format != format::unknown && first <= streamInfo.uv.index && count > (streamInfo.uv.index - first))
-	{
-		s_currentVB.uv.res = buffers[streamInfo.uv.index];
-		s_currentVB.uv.offset = (uint32_t)offsets[streamInfo.uv.index];
-		s_currentVB.uv.elem_offset = streamInfo.uv.offset;
-		s_currentVB.uv.count = 0;
-		s_currentVB.uv.stride = strides[streamInfo.uv.index];
-		s_currentVB.uv.fmt = streamInfo.uv.format;
-
-		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.uv.res);
-		s_currentVB.uv.size_bytes = desc.buffer.size;
-	}
-	if (streamInfo.normal.format != format::unknown && first <= streamInfo.normal.index && count > (streamInfo.normal.index - first))
-	{
-		s_currentVB.normal.res = buffers[streamInfo.normal.index];
-		s_currentVB.normal.offset = (uint32_t)offsets[streamInfo.normal.index];
-		s_currentVB.normal.elem_offset = streamInfo.normal.offset;
-		s_currentVB.normal.count = 0;
-		s_currentVB.normal.stride = strides[streamInfo.normal.index];
-		s_currentVB.normal.fmt = streamInfo.normal.format;
-
-		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.normal.res);
-		s_currentVB.normal.size_bytes = desc.buffer.size;
-	}
-	if (streamInfo.color.format != format::unknown && first <= streamInfo.color.index && count > (streamInfo.color.index - first))
-	{
-		s_currentVB.color.res = buffers[streamInfo.color.index];
-		s_currentVB.color.offset = (uint32_t)offsets[streamInfo.color.index];
-		s_currentVB.color.elem_offset = streamInfo.color.offset;
-		s_currentVB.color.count = 0;
-		s_currentVB.color.stride = strides[streamInfo.color.index];
-		s_currentVB.color.fmt = streamInfo.color.format;
-
-		resource_desc desc = cmd_list->get_device()->get_resource_desc(s_currentVB.color.res);
-		s_currentVB.color.size_bytes = desc.buffer.size;
-	}
+	s_currentStreamData.pos = get_stream_data(cmd_list, streamInfo.pos, buffers, offsets, strides, first, count);
+	s_currentStreamData.normal = get_stream_data(cmd_list, streamInfo.normal, buffers, offsets, strides, first, count);
+	s_currentStreamData.uv = get_stream_data(cmd_list, streamInfo.uv, buffers, offsets, strides, first, count);
+	s_currentStreamData.color = get_stream_data(cmd_list, streamInfo.color, buffers, offsets, strides, first, count);
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
 }
@@ -1385,31 +1364,29 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		return false;
 	}
 
-	assert(s_shadow_resources.find(s_currentVB.pos.res.handle) != s_shadow_resources.end());
-	assert(s_shadow_resources.find(s_currentIB.ib.handle) != s_shadow_resources.end());
-	const bool dynamic_resource = s_dynamic_resources.contains(s_currentVB.pos.res.handle);
+	assert(s_shadow_resources.find(s_currentStreamData.pos.res.handle) != s_shadow_resources.end());
+	assert(s_shadow_resources.find(s_currentStreamData.index.res.handle) != s_shadow_resources.end());
+	const bool dynamic_resource = s_dynamic_resources.contains(s_currentStreamData.pos.res.handle);
 
 	BlasBuildDesc desc = {
 		.vb = {
-			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle().handle,
-			.offset = s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride),
+			.res = s_shadow_resources[s_currentStreamData.pos.res.handle].handle().handle,
+			.offset = s_currentStreamData.pos.offset + (vertex_offset * s_currentStreamData.pos.stride),
 			.count = vertex_count,
-			.stride = s_currentVB.pos.stride,
-			.fmt = s_currentVB.pos.fmt
+			.stride = s_currentStreamData.pos.stride,
+			.fmt = s_currentStreamData.pos.fmt
 		},
 		.ib = {
-			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
-			.offset = s_currentIB.offset + (first_index * s_currentIB.stride),
+			.res = s_shadow_resources[s_currentStreamData.index.res.handle].handle().handle,
+			.offset = s_currentStreamData.index.offset + (first_index * s_currentStreamData.index.stride),
 			.count = index_count,
-			.fmt = s_currentIB.fmt
+			.fmt = s_currentStreamData.index.fmt
 		},
 		.transparent = s_transparency_enabled,
 		.alphatest = s_alphatest_enabled,
 	};
 
-	const bool has_uvs = s_currentVB.uv.res.handle != 0;
-	const bool has_normal = s_currentVB.normal.res.handle != 0;
-	const bool has_color = s_currentVB.color.res.handle != 0;
+	const bool has_uvs = s_currentStreamData.uv.res.handle != 0;
 	uint32_t texslot = 0;
 	uint64_t texhandle = 0;
 
@@ -1444,69 +1421,24 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 			break;
 		}
 	}
-	
+
+	// this layout needs to match the layout in the shader. see: RtInstanceAttachments
 	bvh_manager::AttachmentDesc attachments[] = {
 		// ib
-		{
-			.res = s_shadow_resources[s_currentIB.ib.handle].handle().handle,
-			.type = resource_type::buffer,
-			.offset = (s_currentIB.offset + (first_index * s_currentIB.stride)) / s_currentIB.stride,
-			.count = index_count,
-			.stride = s_currentIB.stride,
-			.fmt = s_currentIB.fmt,
-		},
-		// vb
-		{
-			.res = s_shadow_resources[s_currentVB.pos.res.handle].handle(),
-			.type = resource_type::buffer,
-			.offset = (s_currentVB.pos.offset + (vertex_offset * s_currentVB.pos.stride)) / s_currentVB.pos.stride,
-			.elem_offset = s_currentVB.pos.elem_offset,
-			.count = vertex_count,
-			.stride = s_currentVB.pos.stride,
-			.fmt = s_currentVB.pos.fmt,
-			.view_as_raw = true,
-		},
+		get_attach_desc(s_currentStreamData.index, index_count, first_index, false),
+		// pos
+		get_attach_desc(s_currentStreamData.pos, vertex_count, vertex_offset, true),
 		// uv
-		{
-			// uv may not always be available
-			.res = has_uvs ? s_shadow_resources[s_currentVB.uv.res.handle].handle() : resource{0},
-			.type = resource_type::buffer,
-			.offset = has_uvs ? (s_currentVB.uv.offset + (vertex_offset * s_currentVB.uv.stride)) / s_currentVB.uv.stride : 0,
-			.elem_offset = s_currentVB.uv.elem_offset,
-			.count = vertex_count,
-			.stride = s_currentVB.uv.stride,
-			.fmt = s_currentVB.uv.fmt,
-			.view_as_raw = true,
-		},
+		get_attach_desc(s_currentStreamData.uv, vertex_count, vertex_offset, true),
 		// normal
-		{
-			// normal may not always be available
-			.res = has_normal ? s_shadow_resources[s_currentVB.normal.res.handle].handle() : resource{0},
-			.type = resource_type::buffer,
-			.offset = has_normal ? (s_currentVB.normal.offset + (vertex_offset * s_currentVB.normal.stride)) / s_currentVB.normal.stride : 0,
-			.elem_offset = s_currentVB.normal.elem_offset,
-			.count = vertex_count,
-			.stride = s_currentVB.normal.stride,
-			.fmt = s_currentVB.normal.fmt,
-			.view_as_raw = true,
-		},
+		get_attach_desc(s_currentStreamData.normal, vertex_count, vertex_offset, true),
+		// vert color
+		get_attach_desc(s_currentStreamData.color, vertex_count, vertex_offset, true),
 		// texture 0 (only if the texcoord is valid)
 		{
-			.res = has_uvs && texhandle > 0 ? s_shadow_resources[texhandle].handle() : resource{0},
+			.res = has_uvs && texhandle != 0 ? s_shadow_resources[texhandle].handle() : resource{0},
 			.type = resource_type::texture_2d,
 			.fmt = format::unknown,
-		},
-		// vert color
-		{
-			// normal may not always be available
-			.res = has_color ? s_shadow_resources[s_currentVB.color.res.handle].handle() : resource{0},
-			.type = resource_type::buffer,
-			.offset = has_color ? (s_currentVB.color.offset + (vertex_offset * s_currentVB.color.stride)) / s_currentVB.color.stride : 0,
-			.elem_offset = s_currentVB.color.elem_offset,
-			.count = vertex_count,
-			.stride = s_currentVB.color.stride,
-			.fmt = s_currentVB.color.fmt,
-			.view_as_raw = true,
 		},
 	};
 
