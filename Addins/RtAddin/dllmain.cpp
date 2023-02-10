@@ -1443,10 +1443,13 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	};
 
 	Material mtrl = s_current_material;
+#if 0
+	// disable this for now as multiplying roughness by texture.a seems to work well
 	if (reflection_view_bound)
 	{
 		mtrl.roughness = 0.15f;
 	}
+#endif
 
 	bvh_manager::DrawDesc draw_desc = {
 		.d3d9device = cmd_list->get_device(),

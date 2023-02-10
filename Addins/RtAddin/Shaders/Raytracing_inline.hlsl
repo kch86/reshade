@@ -240,9 +240,19 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	mtrl.opacity = data.diffuse.a * textureAlbedo.a;
 	mtrl.opaque = instance_is_opaque(data);
 
+	float roughness = data.roughness.x;
+
+	if (mtrl.opaque)
+	{
+		// this usually helps roughness
+		// the ground uses alpha for puddles, but the cars seem to benefit too
+		roughness *= textureAlbedo.a;
+	}
+
 	// there's a bug somewhere with either 0.0 or 1.0 roughness
 	// clamp to [.1, .9]
-	mtrl.roughness = clamp(data.roughness.x, 0.05, 0.95);
+	mtrl.roughness = clamp(roughness, 0.05, 0.95);
+
 	return mtrl;
 }
 
@@ -278,6 +288,9 @@ struct Visitor
 {
 	static bool visit(RayDesc ray, RayHit hit)
 	{
+		if (g_constants.transparentEnable == false)
+			return true;
+
 		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
 
 		Material mtrl;
@@ -453,7 +466,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		ray.Origin = get_ray_origin_offset(ray, shade.surface);
 		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
 
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
+		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
 
 		if (hit.hitT < 0.0)
 		{
@@ -626,7 +640,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		float3 radiance = 0.0;
 
 		// send a primary ray, ignoring transparent geo, but include alpha-tested geo
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
+		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
 
 		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
@@ -698,7 +713,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	}
 	else
 	{
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
+		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
 
 		float4 value = float4(0.0, 0.0, 0.0, 1.0);
 

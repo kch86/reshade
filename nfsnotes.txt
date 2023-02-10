@@ -44,6 +44,7 @@ todo:
 -- has cubemap
 -- specific shader (not unique)
 - there's puddles on the ground. where is this coming from? ground alpha?
+- headlights need some custom material
 
 
 
@@ -60,10 +61,36 @@ todo:
 //   EnvmapPower   c23      1
 
 // red car paint, no decals
-spec min	{ 1.1025, 1.0458, 0.9135, 0 },
-spec range	{ -0.6825, -0.6636, -0.6874, 0 },
-spec pow	{ 3.85, 0, 0, 0 },
-env pow		{ 0.8, 0, 0, 0 },
+diff min 	{ 0.7343, 0.7217, 0.63, 1 },
+diff range 	{ 0.2657, 0.2783, 0.32, 0 },
+spec min 	{ 1.1025, 1.0458, 0.9135, 0 },
+spec range 	{ -0.6825, -0.6636, -0.6874, 0 },
+spec power 	{ 3.85, 0, 0, 0 }, = .58
+env power 	{ 0.8, 0, 0, 0 }, 4.8 = .54
+
+// blue car paint
+diff min 	{ 0.662, 0.65538, 0.67193, 0.993 },
+diff range 	{ 0.41, 0.41662, 0.251062, -0.828 },
+spec min 	{ 1, 1.015, 1.038, 0 },
+spec range 	{ -0.3652, -0.406, -0.4584, 0 },
+spec power 	{ 5.72, 0, 0, 0 }, = .5
+env power 	{ 0.262, 0, 0, 0 }, 21.8 = .29
+
+// celica
+diff min 	{ 1.08274, 1.0109, 0.071832, 1 },
+diff range 	{ 0.823092, 0.104124, 0.056014, -0.993 },
+spec min 	{ 1.64523, 0, 0, 0 },
+spec range 	{ -0.68623, 0.959, 0.959, 0 },
+spec power 	{ 1.3508, 0, 0, 0 }, = .77
+env power 	{ 0.5, 0, 0, 0 }, 2.7 = .65
+
+// ae86
+diff min 	{ 0.878148, 0.872226, 0.753786, 1 },
+diff range 	{ 0.132852, 0.127774, 0.362214, -0.955 },
+spec min 	{ 1.20086, 1.20978, 1.20086, 0 },
+spec range 	{ -0.113223, -0.122143, -0.320391, 0 },
+spec power 	{ 2.3353, 0, 0, 0 },
+env power 	{ 0.404, 0, 0, 0 }, 5.75 = .5
 
 // tires
 spec min	{ 0.248, 0.248, 0.2604, 0 },
@@ -86,11 +113,3 @@ spec min	{ 0, 0, 0, 0 },
 spec range	{ 0.195, 0.195, 0.195, 0 },
 spec pow	{ 1.3915, 0, 0, 0 },
 env pow		{ 2, 0, 0, 0 },
-
-// blue car paint
-{ 0.662, 0.65538, 0.67193, 0.993 },
-{ 0.41, 0.41662, 0.251062, -0.828 },
-{ 1, 1.015, 1.038, 0 },
-{ -0.3652, -0.406, -0.4584, 0 },
-{ 5.72, 0, 0, 0 },
-{ 0.262, 0, 0, 0 },
