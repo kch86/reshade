@@ -222,6 +222,7 @@ namespace
 	int s_ui_pathtrace_path_count = 4;
 	int s_ui_pathtrace_iter_count = 2;
 	int s_ui_show_debug = 0;
+	int s_ui_debug_channel = 4;
 	bool s_ui_use_game_camera = true;
 	bool s_ui_show_rt = false;
 	bool s_ui_transparent_enable = true;
@@ -1699,6 +1700,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.viewMatrix = getViewMatrix();
 	cb.viewPos = getViewPos();
 	cb.debugView = (DebugViewEnum)s_ui_show_debug;
+	cb.debugChannel = s_ui_debug_channel;
 	cb.transparentEnable = s_ui_transparent_enable;
 	cb.sunDirection = getSunDirection(s_ui_sun_azimuth, s_ui_sun_elevation);
 	cb.sunIntensity = s_ui_sun_intensity;
@@ -1901,33 +1903,64 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
 	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
 
-	// debug view combo box
-	const char *debug_views[] = {
-		"none", "instanceid", "normals", "uvs", "texture", "color", "motion",
-	};
-	static_assert(ARRAYSIZE(debug_views) == DebugView_Count);
-
-	static const char *selected_debug = debug_views[0];
-	if (ImGui::BeginCombo("Draw Debug", selected_debug))
+	// debug view elements
 	{
-		for (int n = 0; n < ARRAYSIZE(debug_views); n++)
+		const char *debug_views[] = {
+		"none", "instanceid", "normals", "uvs", "texture", "color", "motion",
+		};
+		static_assert(ARRAYSIZE(debug_views) == DebugView_Count);
+
+		static const char *selected_debug = debug_views[0];
+		if (ImGui::BeginCombo("Draw Debug", selected_debug))
 		{
-			CONST bool is_selected = (selected_debug == debug_views[n]); // You can store your selection however you want, outside or inside your objects
-			if (ImGui::Selectable(debug_views[n], is_selected))
+			for (int n = 0; n < ARRAYSIZE(debug_views); n++)
 			{
-				selected_debug = debug_views[n];
-				s_ui_show_debug = n;
+				CONST bool is_selected = (selected_debug == debug_views[n]); // You can store your selection however you want, outside or inside your objects
+				if (ImGui::Selectable(debug_views[n], is_selected))
+				{
+					selected_debug = debug_views[n];
+					s_ui_show_debug = n;
+				}
+
+				if (is_selected)
+				{
+					ImGui::SetItemDefaultFocus();   // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
+					s_ui_show_debug = n;
+				}
+
 			}
-				
-			if (is_selected)
-			{
-				ImGui::SetItemDefaultFocus();   // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
-				s_ui_show_debug = n;
-			}
-				
+			ImGui::EndCombo();
 		}
-		ImGui::EndCombo();
-	}
+		if (ImGui::BeginTable("channel_table", 5))
+		{
+			ImGui::TableNextRow();
+			if (ImGui::RadioButton("R", s_ui_debug_channel == 0))
+			{
+				s_ui_debug_channel = 0;
+			}
+			ImGui::TableNextColumn();
+			if (ImGui::RadioButton("G", s_ui_debug_channel == 1))
+			{
+				s_ui_debug_channel = 1;
+			}
+			ImGui::TableNextColumn();
+			if (ImGui::RadioButton("B", s_ui_debug_channel == 2))
+			{
+				s_ui_debug_channel = 2;
+			}
+			ImGui::TableNextColumn();
+			if (ImGui::RadioButton("A", s_ui_debug_channel == 3))
+			{
+				s_ui_debug_channel = 3;
+			}
+			ImGui::TableNextColumn();
+			if (ImGui::RadioButton("All", s_ui_debug_channel == 4))
+			{
+				s_ui_debug_channel = 4;
+			}
+			ImGui::EndTable();
+		}
+	}	
 
 	ImGui::Checkbox("Enable Transparent", &s_ui_transparent_enable);
 

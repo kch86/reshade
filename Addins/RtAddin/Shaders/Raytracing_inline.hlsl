@@ -177,6 +177,7 @@ float4 fetchTexture(RtInstanceAttachments att, float2 uv)
 	uint2 index = uint2(uv * float2(width, height) + 0.5);
 
 	float4 texcolor = tex0[index];
+	texcolor.rgb = to_linear_from_srgb(texcolor.rgb);
 
 	return texcolor;
 }
@@ -227,7 +228,7 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
-	float3 combined_base = to_linear_from_srgb(textureAlbedo.rgb) * baseColorTint;
+	float3 combined_base = textureAlbedo.rgb * baseColorTint;
 
 	// some textures have zero color as their color which is not physically accurate
 	//combined_base = max(0.05, combined_base);
@@ -288,6 +289,9 @@ struct Visitor
 {
 	static bool visit(RayDesc ray, RayHit hit)
 	{
+		// adding this is a repro
+		/*if (g_constants.debugView != DebugView_None)
+			return true;*/
 		if (g_constants.transparentEnable == false)
 			return true;
 
@@ -749,7 +753,16 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 				float2 uvs = fetchUvs(att, indices, baries);
 
 				float4 texcolor = fetchTexture(att, uvs);
-				value.rgb = texcolor.rgb;
+				if (g_constants.debugChannel == 0)
+					value.rgb = texcolor.rrr;
+				else if (g_constants.debugChannel == 1)
+					value.rgb = texcolor.ggg;
+				else if (g_constants.debugChannel == 2)
+					value.rgb = texcolor.bbb;
+				else if (g_constants.debugChannel == 3)
+					value.rgb = texcolor.aaa;
+				else
+					value.rgb = texcolor.rgb;
 			}
 			else if (g_constants.debugView == DebugView_Color)
 			{

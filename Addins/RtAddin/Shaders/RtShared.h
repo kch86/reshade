@@ -49,6 +49,14 @@ enum InstanceMask : uint
 	InstanceMask_opaque_alphatest = (InstanceMask_opaque | InstanceMask_alphatest),
 	InstanceMask_all = (InstanceMask_opaque | InstanceMask_transparent | InstanceMask_alphatest),
 };
+
+enum MaterialType : uint
+{
+	Material_Standard,
+	Material_Coat,
+	Material_Headlight,
+};
+
 struct RtInstanceAttachElem
 {
 	uint id;
@@ -98,7 +106,7 @@ struct RtConstants
 	float bounceBoost;
 	float sunRadius;
 	uint transparentEnable;
-	uint pad;
+	uint debugChannel;
 };
 
 #endif
