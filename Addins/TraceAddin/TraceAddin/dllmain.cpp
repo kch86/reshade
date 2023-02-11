@@ -878,7 +878,7 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 	if (!do_capture())
 		return;
 
-	resource res;
+	resource res = {};
 	resource_desc desc;
 	bool have_desc = false;
 
@@ -923,14 +923,22 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 #endif
 
 	std::stringstream s;
-	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index
-		<< ", {\n\t" << to_string(update.type)
-		<< "\n\thandle: " << (void*)res.handle
-		<< "\n\twidth: " << desc.texture.width
-		<< "\n\theight: " << desc.texture.height
-		<< "\n\tarray: " << desc.texture.depth_or_layers
-		<< "\n\tbinding, count: " << update.binding << ", " << update.count
-		<< " })";
+	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index;
+	if (res.handle)
+	{
+		s << ", {\n\t" << to_string(update.type)
+		  << "\n\thandle: " << (void *)res.handle
+		  << "\n\twidth: " << desc.texture.width
+		  << "\n\theight: " << desc.texture.height
+		  << "\n\tformat: " << to_string(desc.texture.format)
+		  << "\n\tarray: " << desc.texture.depth_or_layers
+		  << "\n\tbinding, count: " << update.binding << ", " << update.count
+		  << "\n})";
+	}
+	else
+	{
+		s << " )";
+	}		
 
 	reshade::log_message(3, s.str().c_str());
 }
