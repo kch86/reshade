@@ -43,10 +43,10 @@ todo:
 -- no alphatest/transparency
 -- has cubemap
 -- specific shader (not unique)
-- there's puddles on the ground. where is this coming from? ground alpha?
 - headlights need some custom material
 - add instance color data debug mode
-- add channel filtering for debug mode
+- add timing queries
+- pass my camera to the game
 
 
 
@@ -114,4 +114,29 @@ diff range	{ 0, 0, 0, 0 },
 spec min	{ 0, 0, 0, 0 },
 spec range	{ 0.195, 0.195, 0.195, 0 },
 spec pow	{ 1.3915, 0, 0, 0 },
+env pow		{ 2, 0, 0, 0 },
+
+//headlight normal
+reflector:
+diff min 	{ 0, 0, 0, 1 },
+diff range	{ 0, 0, 0, 0 },
+spec min	{ 1, 1, 1, 0 },
+spec range	{ 0, 0, 0, 0 },
+spec pow	{ 4.4, 0, 0, 0 },
+env pow		{ 2, 0, 0, 0 },
+
+projectors:
+diff min 	{ 1, 1, 1, 1 },
+diff range	{ 0, 0, 0, 0 },
+spec min	{ 1, 1, 1, 0 },
+spec range	{ 0, 0, 0, 0 },
+spec pow	{ 2.8193, 0, 0, 0 },
+env pow		{ 2, 0, 0, 0 },
+
+cover:
+diff min 	{ 1, 1, 1, 1 },
+diff range	{ 0, 0, 0, 0 },
+spec min	{ 1, 1, 1, 0 },
+spec range	{ 0, 0, 0, 0 },
+spec pow	{ 2.8193, 0, 0, 0 },
 env pow		{ 2, 0, 0, 0 },
