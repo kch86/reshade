@@ -161,6 +161,8 @@ namespace
 		default:
 		case dynamic_state::unknown:
 			return "unknown";
+		case dynamic_state::fog_enable:
+			return "fog_enable";
 		case dynamic_state::alpha_test_enable:
 			return "alpha_test_enable";
 		case dynamic_state::alpha_reference_value:
