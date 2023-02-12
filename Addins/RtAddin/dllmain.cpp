@@ -202,6 +202,8 @@ namespace
 	StreamData s_currentStreamData;
 	resource_view s_current_rtv = { 0 };
 	resource s_reflection_resource = { 0 };
+	resource s_spec_cube_resource = { 0 };
+	sampler s_spec_cube_sampler = {};
 	TextureBindings s_currentTextureBindings;
 
 	scopedresource s_empty_buffer;
@@ -465,8 +467,9 @@ static void load_rt_pipeline()
 #endif
 
 	pipeline_layout_param params[] = {
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::sampler}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 3, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants) / sizeof(int), .visibility = shader_stage::compute}),
 	};
@@ -550,6 +553,9 @@ static void init_default_resources()
 
 	s_empty_buffer = scopedresource(s_d3d12device, d3d12res);
 	s_empty_srv = scopedresourceview(s_d3d12device, srv);
+
+	sampler_desc s_desc{};
+	s_d3d12device->create_sampler(s_desc, &s_spec_cube_sampler);
 }
 
 static void on_init_device(device *device)
@@ -909,7 +915,8 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 	{
 		// make sure it's not dynamic? or strip later?
 		// only use texture2d for now
-		if (desc.texture.depth_or_layers == 1)
+		//if (desc.texture.depth_or_layers == 1)
+		//if((desc.flags & resource_flags::dynamic) == 0)
 		{
 			texture = true;
 			supported_resource |= true;
@@ -938,6 +945,12 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 	{
 		resource_desc new_desc = desc;
 		new_desc.heap = memory_heap::gpu_only;
+		new_desc.flags &= ~resource_flags::dynamic;
+
+		if (new_desc.texture.depth_or_layers > 1)
+		{
+			s_spec_cube_resource = handle;
+		}
 
 		resource d3d12res;
 		s_d3d12device->create_resource(
@@ -1695,6 +1708,15 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		s_d3d12device->create_resource_view(s_tlas.handle(), resource_usage::acceleration_structure, tlas_srv_desc, &tlas_srv);
 		scopedresourceview scoped_tlas_view(s_d3d12device, tlas_srv);
 	}
+	resource_view spec_srv;
+	{
+		DynamicResource &res = s_shadow_resources[s_spec_cube_resource.handle];
+		resource_view_desc view_desc(res.desc.texture.format);
+		view_desc.type = resource_view_type::texture_cube;
+
+		s_d3d12device->create_resource_view(res.handle(), resource_usage::shader_resource, view_desc, &spec_srv);
+		scopedresourceview scoped_tlas_view(s_d3d12device, spec_srv);
+	}
 
 	RtConstants cb;
 	cb.viewMatrix = getViewMatrix();
@@ -1714,10 +1736,19 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	{
 		return srv.handle().handle ? srv.handle() : s_empty_srv.handle();
 	};
+	auto get_srv2 = [&](resource_view &srv)
+	{
+		return srv.handle ? srv : s_empty_srv.handle();
+	};
+
+	sampler samplers[] = {
+		s_spec_cube_sampler
+	};
 
 	resource_view srvs[] = {
 		get_srv(s_attachments_srv),
 		get_srv(s_instance_data_srv),
+		get_srv2(spec_srv),
 	};
 
 	resource_view uavs[] = {
@@ -1727,6 +1758,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	//update descriptors
 	descriptor_set_update updates[] = {
+		{
+			.count = ARRAYSIZE(samplers),
+			.type = descriptor_type::sampler,
+			.descriptors = samplers, // bind tlas srv
+		},
 		{
 			.count = 1,
 			.type = descriptor_type::acceleration_structure,

@@ -21,9 +21,12 @@ struct ShadeRayResult
 	float3 radiance;
 };
 
+sampler g_cube_sampler : register(s0, space0);
+
 RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
 StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
+TextureCube<float3> g_spec_cube : register(t2, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
 RWTexture2D<float> g_hitHistory : register(u1);
@@ -671,6 +674,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		else
 		{
 			//sample sky?
+			//radiance = g_spec_cube.SampleLevel(g_cube_sampler, ray.Direction, 0);
 		}
 
 		//trace transparent
