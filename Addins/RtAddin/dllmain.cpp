@@ -1934,6 +1934,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 		if (ImGui::BeginTable("channel_table", 5))
 		{
 			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
 			if (ImGui::RadioButton("R", s_ui_debug_channel == 0))
 			{
 				s_ui_debug_channel = 0;
@@ -1954,7 +1955,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 				s_ui_debug_channel = 3;
 			}
 			ImGui::TableNextColumn();
-			if (ImGui::RadioButton("All", s_ui_debug_channel == 4))
+			if (ImGui::RadioButton("RGB", s_ui_debug_channel == 4))
 			{
 				s_ui_debug_channel = 4;
 			}
