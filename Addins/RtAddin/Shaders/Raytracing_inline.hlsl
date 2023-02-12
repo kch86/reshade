@@ -400,6 +400,11 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 	return shade_ray(ray, hit, mtrl, surface, rng);
 }
 
+float3 get_sky(float3 dir)
+{
+	return float3(0.1, 0.1, 0.25) * 1.0;
+}
+
 #define SAMPLE_SPEUCULAR_GGX 1
 float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, inout float3 throughput, inout uint2 rng)
 {
@@ -476,7 +481,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
-			total_radiance += throughput * float3(0.1, 0.1, 0.25) * 1.0;
+			total_radiance += throughput * get_sky(ray.Direction);
 			break;
 		}
 
@@ -509,7 +514,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		if (hit.hitT < 0.0)
 		{
 			//TODO: sample a skybox
-			total_radiance += throughput * float3(0.1, 0.1, 0.25) * 1.0;
+			total_radiance += throughput * get_sky(ray.Direction);
 			break;
 		}
 
@@ -683,7 +688,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 			// trace transparent only, exclude alpha-test
 			RayHit trans_hit = trace_ray_closest_transparent<Visitor>(g_rtScene, trans_ray, InstanceMask_transparent);
-			if (trans_hit.hitT >= 0.0 && trans_hit.hitT <= hit.hitT)
+			if (trans_hit.hitT >= 0.0)
 			{
 				ShadeRayResult shade = (ShadeRayResult)0;
 				fetchMaterialAndSurface(trans_ray, trans_hit, shade.mtrl, shade.surface);
@@ -697,6 +702,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				// replace the radiance with our radiance
 				radiance = transparent;
+
+				// replace the hit with the 1st glass surface hit
 				hit = trans_hit;
 			}			
 		}
