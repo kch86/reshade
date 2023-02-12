@@ -251,6 +251,98 @@ namespace
 			return "back_stencil_depth_fail_op";
 		}
 	}
+	inline auto to_string(blend_op value)
+	{
+		switch (value)
+		{
+		case blend_op::add:
+			return "add";
+		case blend_op::subtract:
+			return "subtract";
+		case blend_op::reverse_subtract:
+			return "1-subtract";
+		case blend_op::min:
+			return "min";
+		case blend_op::max:
+			return "max";
+		default:
+			assert(false);
+		}
+
+		return "unknown";
+	}
+	inline auto to_string(blend_factor value)
+	{
+		switch (value)
+		{
+		default:
+			assert(false);
+			[[fallthrough]];
+		case blend_factor::zero:
+			return "zero";
+		case blend_factor::one:
+			return "one";
+		case blend_factor::source_color:
+			return "srccolor";
+		case blend_factor::one_minus_source_color:
+			return "1-srccolor";
+		case blend_factor::dest_color:
+			return "destcolor";
+		case blend_factor::one_minus_dest_color:
+			return "1-destcolor";
+		case blend_factor::source_alpha:
+			return "srcalpha";
+		case blend_factor::one_minus_source_alpha:
+			return "1-srcalpha";
+		case blend_factor::dest_alpha:
+			return "destalpha";
+		case blend_factor::one_minus_dest_alpha:
+			return "1-destalpha";
+		case blend_factor::constant_alpha:
+			assert(false);
+			[[fallthrough]];
+		case blend_factor::constant_color:
+			return "blendfactor";
+		case blend_factor::one_minus_constant_alpha:
+			assert(false);
+			[[fallthrough]];
+		case blend_factor::one_minus_constant_color:
+			return "1-blendfactor";
+		case blend_factor::source_alpha_saturate:
+			return "srcalphasat";
+		case blend_factor::source1_alpha:
+			assert(false);
+			[[fallthrough]];
+		case blend_factor::source1_color:
+			return "srccolor2";
+		case blend_factor::one_minus_source1_alpha:
+			assert(false);
+			[[fallthrough]];
+		case blend_factor::one_minus_source1_color:
+			return "1-srccolor2";
+		}
+	}
+	inline auto to_string(dynamic_state state, uint32_t value)
+	{
+		std::stringstream s;
+
+		switch (state)
+		{
+		case dynamic_state::color_blend_op:
+		case dynamic_state::alpha_blend_op:
+			s << to_string((blend_op)value);
+			break;
+		case dynamic_state::source_color_blend_factor:
+		case dynamic_state::dest_color_blend_factor:
+		case dynamic_state::source_alpha_blend_factor:
+		case dynamic_state::dest_alpha_blend_factor:
+			s << to_string((blend_factor)value);
+			break;
+		default:
+			s << value;
+		}
+		return s.str();
+	}
 	inline auto to_string(resource_usage usage)
 	{
 		std::stringstream s;
@@ -819,7 +911,7 @@ static void on_bind_pipeline_states(command_list *, uint32_t count, const dynami
 
 	std::stringstream s;
 	for (uint32_t i = 0; i < count; ++i)
-		s << "bind_pipeline_state(" << to_string(states[i]) << ", " << values[i] << ")" << std::endl;
+		s << "bind_pipeline_state(" << to_string(states[i]) << ", " << to_string(states[i], values[i]) << ")" << std::endl;
 
 	reshade::log_message(3, s.str().c_str());
 }
