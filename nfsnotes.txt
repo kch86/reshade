@@ -173,3 +173,91 @@ r1 = sample(s1, t1) * v0 // (lit diffuse) * texture
 r0.xyz = r0.xyz * r1.a //(lit spec) * tex.a
 r0.xyz += r1.xyz // (diff + spec)
 r0.w = r1.a
+
+//hood
+vs 5461187419696972836
+ps 7314718503845779620
+{ 0.662, 0.65538, 0.67193, 0.993 },
+{ 0.41, 0.41662, 0.251062, -0.828 },
+{ 1, 1.015, 1.038, 0 },
+{ -0.3652, -0.406, -0.4584, 0 },
+{ 5.72, 0, 0, 0 },
+{ 0.262, 0, 0, 0 },
+
+bind_pipeline_state(fog_enable, 0)
+bind_pipeline_state(render_target_write_mask, 7)
+bind_pipeline_state(alpha_test_enable, 0)
+bind_pipeline_state(alpha_reference_value, 0)
+bind_pipeline_state(blend_enable, 0)
+bind_pipeline_state(src_color_blend_factor, srcalpha)
+bind_pipeline_state(dst_color_blend_factor, 1-srcalpha)
+bind_pipeline_state(depth_func, 3)
+
+//windshield
+vs 5461187419696972836
+ps 7314718503845779620
+{ 0.831, 0.969, 0.738, 0.3 },
+{ -0.464, -0.607505, -0.379441, 0.7 },
+{ 0.7359, 0.81618, 0.458934, 0 },
+{ -0.6039, -0.66978, -0.311334, 0 },
+{ 2.6312, 0, 0, 0 },
+{ 1.4, 0, 0, 0 },
+
+bind_pipeline_state(fog_enable, 0)
+bind_pipeline_state(render_target_write_mask, 7)
+bind_pipeline_state(alpha_test_enable, 0)
+bind_pipeline_state(alpha_reference_value, 0)
+bind_pipeline_state(blend_enable, 1)
+bind_pipeline_state(src_color_blend_factor, srcalpha)
+bind_pipeline_state(dst_color_blend_factor, 1-srcalpha)
+bind_pipeline_state(depth_func, 3)
+
+init_pipeline(input_layout, 17DE63A0 = {
+	POSITION: r32g32b32_float
+	NORMAL: r32g32b32_float
+	TEXCOORD: r32g32b32_float
+	BLENDWEIGHT: r32g32b32_float
+	BLENDINDICES: r32g32b32_float
+})
+init_pipeline(input_layout, 17DE63A0 = {
+	POSITION: r32g32b32_float
+	NORMAL: r32g32b32_float
+	COLOR: b8g8r8a8_unorm
+	TEXCOORD: r32g32_float
+})
+
+
+//headlight
+vs 5461187419696972836
+ps 7314718503845779620
+{ 0.99, 0.99, 0.99, 0.4 },
+{ 0.00999993, 0.00999993, 0.00999993, 0.4 },
+{ 0.97162, 0.962, 0.98124, 0 },
+{ -0.1212, -0.12, -0.1224, 0 },
+{ 5.4131, 0, 0, 0 },
+{ 3.246, 0, 0, 0 },
+
+bind_pipeline_state(fog_enable, 0)
+bind_pipeline_state(render_target_write_mask, 7)
+bind_pipeline_state(alpha_test_enable, 0)
+bind_pipeline_state(alpha_reference_value, 0)
+bind_pipeline_state(blend_enable, 1)
+bind_pipeline_state(src_color_blend_factor, srcalpha)
+bind_pipeline_state(dst_color_blend_factor, one)
+bind_pipeline_state(depth_func, 3)
+
+init_pipeline(input_layout, 17DE63A0 = {
+	POSITION: r32g32b32_float
+	NORMAL: r32g32b32_float
+	TEXCOORD: r32g32b32_float
+	BLENDWEIGHT: r32g32b32_float
+	BLENDINDICES: r32g32b32_float
+})
+init_pipeline(input_layout, 17DE63A0 = {
+	POSITION: r32g32b32_float
+	NORMAL: r32g32b32_float
+	COLOR: b8g8r8a8_unorm
+	TEXCOORD: r32g32_float
+})
+
+// additive blending. can differentiate with glass 
