@@ -174,6 +174,33 @@ namespace
 		int min_spec_offset;
 	};
 
+	struct FrameState
+	{
+		TextureBindings bindings;
+		StreamData stream_data;
+		Material mtrl;
+		XMMATRIX wvp = XMMatrixIdentity();
+
+		pipeline vs = {};
+		pipeline ps = {};
+		pipeline il = {};
+		resource_view rtv = {};
+		resource reflection_texture = {};
+
+		blend_factor dst_blend = blend_factor::zero;
+		bool blend_enable = false;
+		bool alpha_test_enable = false;
+		bool null_shader_has_been_bound = false;
+		bool static_geo_shader_is_bound = false;
+		bool got_viewproj = false;
+
+		void reset()
+		{
+			*this = {};
+			bindings.clear();
+		}
+	};
+
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_backbuffers;
 	std::unordered_map<uint64_t, resource_desc> s_resources;
@@ -198,18 +225,14 @@ namespace
 	scopedresourceview s_history_uav;
 	uint32_t s_width = 0, s_height = 0;
 
-	pipeline s_currentInputLayout;
-	StreamData s_currentStreamData;
-	resource_view s_current_rtv = { 0 };
-	resource s_reflection_resource = { 0 };
+	FrameState s_frame_state;
 	resource s_spec_cube_resource = { 0 };
 	sampler s_spec_cube_sampler = {};
-	TextureBindings s_currentTextureBindings;
 
 	scopedresource s_empty_buffer;
 	scopedresourceview s_empty_srv;
 
-	device* s_d3d12device = nullptr;
+	device *s_d3d12device = nullptr;
 	command_list *s_d3d12cmdlist = nullptr;
 	command_queue *s_d3d12cmdqueue = nullptr;
 
@@ -244,24 +267,13 @@ namespace
 	std::unordered_set<uint64_t> s_ps_texbinding_map;
 	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 
-	Material s_current_material;
-	bool s_transparency_enabled = false;
-	bool s_alphatest_enabled = false;
-
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
 	std::unordered_set<uint64_t> s_ui_pipelines;
 
-	bool s_staticgeo_vs_pipeline_is_bound = false;
-	bool s_null_vs_ps_has_been_bound = false;
-	pipeline s_current_vs_pipeline;
-	pipeline s_current_ps_pipeline;
 	bvh_manager s_bvh_manager;
-
-	XMMATRIX s_current_wvp = XMMatrixIdentity();
 	GameCamera s_game_camera;
 	FpsCamera s_camera;
-	bool s_got_viewproj = false;
 
 	int s_draw_count = 0;
 	uint32_t s_frame_id = 0;
@@ -326,7 +338,7 @@ StreamData::stream get_stream_data(
 		.size_bytes = desc.buffer.size,
 		.fmt = info.format,
 	};
-	
+
 }
 
 static void init_vs_mappings()
@@ -564,7 +576,7 @@ static void on_init_device(device *device)
 
 	if (device->get_api() == device_api::d3d9)
 	{
-		ID3D12CommandQueue* d3d12queue = (ID3D12CommandQueue * )s_d3d12cmdqueue->get_native();
+		ID3D12CommandQueue *d3d12queue = (ID3D12CommandQueue *)s_d3d12cmdqueue->get_native();
 		//resource->SetPrivateData(__uuidof(device_proxy), &device_proxy, sizeof(device_proxy), 0);
 		device->set_private_data(reinterpret_cast<const uint8_t *>(&__uuidof(d3d12queue)), (uint64_t)d3d12queue);
 	}
@@ -597,11 +609,11 @@ static void on_destroy_command_list(command_list *cmd_list)
 
 static void on_init_command_queue(command_queue *cmd_queue)
 {
-if (cmd_queue->get_device()->get_api() == device_api::d3d12)
-{
-	if ((cmd_queue->get_type() & command_queue_type::graphics) != 0)
-		s_d3d12cmdqueue = cmd_queue;
-}
+	if (cmd_queue->get_device()->get_api() == device_api::d3d12)
+	{
+		if ((cmd_queue->get_type() & command_queue_type::graphics) != 0)
+			s_d3d12cmdqueue = cmd_queue;
+	}
 }
 static void on_destroy_command_queue(command_queue *cmd_list)
 {
@@ -624,7 +636,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 			// todo: there are a bunch of texcoord streams. maybbe some are normals mislabeled...
 			{
 				std::stringstream s;
-				s << "init_pipeline(input_layout, " << (void*)handle.handle << ", ";
+				s << "init_pipeline(input_layout, " << (void *)handle.handle << ", ";
 
 				for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
 				{
@@ -855,17 +867,17 @@ static void on_bind_pipeline(command_list *, pipeline_stage type, pipeline pipel
 
 	if (type == pipeline_stage::input_assembler)
 	{
-		s_currentInputLayout = pipeline;
+		s_frame_state.il = pipeline;
 	}
-	else if(type == pipeline_stage::vertex_shader)
+	else if (type == pipeline_stage::vertex_shader)
 	{
-		s_staticgeo_vs_pipeline_is_bound = s_static_geo_vs_pipelines.contains(pipeline.handle);
+		s_frame_state.static_geo_shader_is_bound = s_static_geo_vs_pipelines.contains(pipeline.handle);
 
-		s_current_vs_pipeline = pipeline;
+		s_frame_state.vs = pipeline;
 	}
 	else if (type == pipeline_stage::pixel_shader)
 	{
-		s_current_ps_pipeline = pipeline;
+		s_frame_state.ps = pipeline;
 	}
 }
 static void on_bind_pipeline_states(command_list *, uint32_t count, const dynamic_state *states, const uint32_t *values)
@@ -877,13 +889,17 @@ static void on_bind_pipeline_states(command_list *, uint32_t count, const dynami
 	{
 		if (states[i] == dynamic_state::blend_enable)
 		{
-			s_transparency_enabled = values[i];
+			s_frame_state.blend_enable = values[i];
 			break;
 		}
 		else if (states[i] == dynamic_state::alpha_test_enable)
 		{
-			s_alphatest_enabled = values[i];
+			s_frame_state.alpha_test_enable = values[i];
 			break;
+		}
+		else if (states[i] == dynamic_state::dest_color_blend_factor)
+		{
+			s_frame_state.dst_blend = (blend_factor)values[i];
 		}
 	}
 }
@@ -920,7 +936,7 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 		{
 			texture = true;
 			supported_resource |= true;
-		}		
+		}
 	}
 
 	if (!supported_resource)
@@ -977,7 +993,7 @@ void on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 	if (desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer)
 	{
 		if (s_resources.find(handle.handle) != s_resources.end())
-		{			
+		{
 			s_mapped_resources[handle.handle] = MapRegion{
 				.buffer = MapRegion::Buffer{
 					.data = *data
@@ -989,7 +1005,7 @@ void on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 				s_shadow_resources[handle.handle].set_dynamic();
 			}
 		}
-	}	
+	}
 }
 void on_unmap_buffer_region(device *device, resource handle)
 {
@@ -1025,7 +1041,7 @@ void on_unmap_buffer_region(device *device, resource handle)
 
 			s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
 		}
-		
+
 		s_mapped_resources.erase(handle.handle);
 	}
 }
@@ -1044,7 +1060,7 @@ static void on_map_texture_region(device *device, resource resource, uint32_t su
 				}
 			};
 		}
-		
+
 	}
 }
 static void on_unmap_texture_region(device *device, resource handle, uint32_t subresource)
@@ -1079,7 +1095,7 @@ static void on_unmap_texture_region(device *device, resource handle, uint32_t su
 				d3d12res,
 				region.texture.subresource,
 				valid_box ? &region.texture.box : nullptr);
-		}		
+		}
 
 		s_mapped_resources.erase(handle.handle);
 	}
@@ -1101,13 +1117,13 @@ static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uin
 	// any other target is for secondary effects
 	if (s_backbuffers.contains(new_main_rtv.handle))
 	{
-		s_current_rtv = new_main_rtv;
+		s_frame_state.rtv = new_main_rtv;
 	}
 	else
 	{
-		s_current_rtv.handle = 0;
+		s_frame_state.rtv.handle = 0;
 
-		s_reflection_resource = cmd_list->get_device()->get_resource_from_view(new_main_rtv);
+		s_frame_state.reflection_texture = cmd_list->get_device()->get_resource_from_view(new_main_rtv);
 	}
 }
 static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64_t offset, uint32_t index_size)
@@ -1115,26 +1131,26 @@ static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64
 	if (filter_command())
 		return;
 
-	s_currentStreamData.index.res = buffer;
-	s_currentStreamData.index.offset = (uint32_t)offset;
-	s_currentStreamData.index.elem_offset = 0;
-	s_currentStreamData.index.stride = index_size;
-	s_currentStreamData.index.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
+	s_frame_state.stream_data.index.res = buffer;
+	s_frame_state.stream_data.index.offset = (uint32_t)offset;
+	s_frame_state.stream_data.index.elem_offset = 0;
+	s_frame_state.stream_data.index.stride = index_size;
+	s_frame_state.stream_data.index.fmt = index_size == 2 ? format::r16_uint : format::r32_uint;
 
 	resource_desc desc = cmd_list->get_device()->get_resource_desc(buffer);
-	s_currentStreamData.index.size_bytes = desc.buffer.size;
+	s_frame_state.stream_data.index.size_bytes = desc.buffer.size;
 }
 static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint32_t count, const resource *buffers, const uint64_t *offsets, const uint32_t *strides)
 {
 	if (filter_command())
 		return;
 
-	const StreamInfo &streamInfo = s_inputLayoutPipelines[s_currentInputLayout.handle];
+	const StreamInfo &streamInfo = s_inputLayoutPipelines[s_frame_state.il.handle];
 
-	s_currentStreamData.pos = get_stream_data(cmd_list, streamInfo.pos, buffers, offsets, strides, first, count);
-	s_currentStreamData.normal = get_stream_data(cmd_list, streamInfo.normal, buffers, offsets, strides, first, count);
-	s_currentStreamData.uv = get_stream_data(cmd_list, streamInfo.uv, buffers, offsets, strides, first, count);
-	s_currentStreamData.color = get_stream_data(cmd_list, streamInfo.color, buffers, offsets, strides, first, count);
+	s_frame_state.stream_data.pos = get_stream_data(cmd_list, streamInfo.pos, buffers, offsets, strides, first, count);
+	s_frame_state.stream_data.normal = get_stream_data(cmd_list, streamInfo.normal, buffers, offsets, strides, first, count);
+	s_frame_state.stream_data.uv = get_stream_data(cmd_list, streamInfo.uv, buffers, offsets, strides, first, count);
+	s_frame_state.stream_data.color = get_stream_data(cmd_list, streamInfo.color, buffers, offsets, strides, first, count);
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
 }
@@ -1144,15 +1160,15 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		return;
 
 	// early out for the wrong rtv bound
-	if (s_current_rtv.handle == 0)
+	if (s_frame_state.rtv.handle == 0)
 	{
 		return;
 	}
 
-	if (s_staticgeo_vs_pipeline_is_bound && !s_got_viewproj)
+	if (s_frame_state.static_geo_shader_is_bound && !s_frame_state.got_viewproj)
 	{
 		//extract our viewproj matrix. it is the 1st value in the array
-		s_got_viewproj = true;
+		s_frame_state.got_viewproj = true;
 
 		XMMATRIX *matrices = (XMMATRIX *)values;
 		XMFLOAT3X4 viewAffine = *((XMFLOAT3X4 *)&matrices[1]);
@@ -1160,33 +1176,33 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		s_game_camera.set_viewproj(matrices[0]);
 	}
 
-	if (s_current_vs_pipeline.handle != 0 && (stages & shader_stage::vertex) != 0)
+	if (s_frame_state.vs.handle != 0 && (stages & shader_stage::vertex) != 0)
 	{
 		// extract the wvp from vertex shader constants
 		// some vs do not have the WVP at slot 0
 		// we hashed those shaders earlier and check them here
 		{
-			assert(s_vs_hash_map.contains(s_current_vs_pipeline.handle));
-			const uint64_t hash = s_vs_hash_map[s_current_vs_pipeline.handle];
+			assert(s_vs_hash_map.contains(s_frame_state.vs.handle));
+			const uint64_t hash = s_vs_hash_map[s_frame_state.vs.handle];
 			if (auto offset = s_vs_transform_map.find(hash); offset != s_vs_transform_map.end())
 			{
 				//found a mapping, index by vector4 slot
 				XMVECTOR *vectors = (XMVECTOR *)values;
 
-				s_current_wvp = *((XMMATRIX *)&vectors[offset->second]);
+				s_frame_state.wvp = *((XMMATRIX *)&vectors[offset->second]);
 			}
 			else
 			{
 				//most vs have the same layout, assume so for now
 				XMMATRIX *matrices = (XMMATRIX *)values;
-				s_current_wvp = matrices[0];
+				s_frame_state.wvp = matrices[0];
 			}
 		}
 
 		// extract material data from vertex constants
 		{
-			assert(s_vs_hash_map.contains(s_current_vs_pipeline.handle));
-			const uint64_t hash = s_vs_hash_map[s_current_vs_pipeline.handle];
+			assert(s_vs_hash_map.contains(s_frame_state.vs.handle));
+			const uint64_t hash = s_vs_hash_map[s_frame_state.vs.handle];
 			if (auto offset = s_vs_material_map.find(hash); offset != s_vs_material_map.end())
 			{
 				XMVECTOR *vectors = (XMVECTOR *)values;
@@ -1243,14 +1259,14 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 					//float e = max(0.4f, env_power);
 					float e = max(0.0f, min(1.0f, 1.0f - env_power));
 					float m = spec_min == 0.0f ? 1.0f : spec_min;
-					s = (s*m) / e;
+					s = (s * m) / e;
 					float roughness = sqrtf(2.0f / (s + 2.0f));
 
 					roughness = powf(roughness, 2.0);
 					return roughness;
 				};
 
-				s_current_material = {
+				s_frame_state.mtrl = {
 					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					//TODO most of the specular color values are bogus pre-pbr values
 					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
@@ -1263,7 +1279,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 			}
 			else
 			{
-				s_current_material = {};
+				s_frame_state.mtrl = {};
 			}
 		}
 	}
@@ -1295,7 +1311,7 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 			if (view.handle != 0)
 			{
 				res = cmd_list->get_device()->get_resource_from_view(view);
-				s_currentTextureBindings.slots[update.binding] = res;
+				s_frame_state.bindings.slots[update.binding] = res;
 			}
 		}
 		break;
@@ -1315,7 +1331,7 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 	}
 }
 
-static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
+static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_draw_count++;
@@ -1324,12 +1340,12 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 	auto &data = cmd_list->get_private_data<command_list_data>();
 
 	// null pipelines are bound and a draw occurs right before the ui is drawn
-	if (s_current_vs_pipeline.handle == 0 && s_current_ps_pipeline.handle == 0)
+	if (s_frame_state.vs.handle == 0 && s_frame_state.ps.handle == 0)
 	{
-		s_null_vs_ps_has_been_bound = true;
+		s_frame_state.null_shader_has_been_bound = true;
 	}
 
-	if (s_current_rtv.handle == 0)
+	if (s_frame_state.rtv.handle == 0)
 	{
 		return false;
 	}
@@ -1347,7 +1363,7 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 
 	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
 	// This is not perfect, since there may be multiple command lists and this will try and render effects in every single one ...
-	if(s_ui_render_before_ui && s_null_vs_ps_has_been_bound && s_ui_pipelines.contains(s_current_vs_pipeline.handle) && s_ui_pipelines.contains(s_current_ps_pipeline.handle))
+	if (s_ui_render_before_ui && s_frame_state.null_shader_has_been_bound && s_ui_pipelines.contains(s_frame_state.vs.handle) && s_ui_pipelines.contains(s_frame_state.ps.handle))
 	{
 		// TODO: find last valid 3d render target and apply that before drawing
 		const auto &current_state = cmd_list->get_private_data<state_block>();
@@ -1362,74 +1378,74 @@ static bool on_draw(command_list* cmd_list, uint32_t vertices, uint32_t instance
 	return false;
 }
 
-static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
+static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_draw_count++;
-		s_currentTextureBindings.clear();
+	s_frame_state.bindings.clear();
 	});
 
 	if (filter_command())
 		return false;
 
-	if (s_current_rtv.handle == 0)
+	if (s_frame_state.rtv.handle == 0)
 	{
 		return false;
 	}
 
-	assert(s_shadow_resources.find(s_currentStreamData.pos.res.handle) != s_shadow_resources.end());
-	assert(s_shadow_resources.find(s_currentStreamData.index.res.handle) != s_shadow_resources.end());
-	const bool dynamic_resource = s_dynamic_resources.contains(s_currentStreamData.pos.res.handle);
+	assert(s_shadow_resources.find(s_frame_state.stream_data.pos.res.handle) != s_shadow_resources.end());
+	assert(s_shadow_resources.find(s_frame_state.stream_data.index.res.handle) != s_shadow_resources.end());
+	const bool dynamic_resource = s_dynamic_resources.contains(s_frame_state.stream_data.pos.res.handle);
 
 	BlasBuildDesc desc = {
 		.vb = {
-			.res = s_shadow_resources[s_currentStreamData.pos.res.handle].handle().handle,
-			.offset = s_currentStreamData.pos.offset + (vertex_offset * s_currentStreamData.pos.stride),
+			.res = s_shadow_resources[s_frame_state.stream_data.pos.res.handle].handle().handle,
+			.offset = s_frame_state.stream_data.pos.offset + (vertex_offset * s_frame_state.stream_data.pos.stride),
 			.count = vertex_count,
-			.stride = s_currentStreamData.pos.stride,
-			.fmt = s_currentStreamData.pos.fmt
+			.stride = s_frame_state.stream_data.pos.stride,
+			.fmt = s_frame_state.stream_data.pos.fmt
 		},
 		.ib = {
-			.res = s_shadow_resources[s_currentStreamData.index.res.handle].handle().handle,
-			.offset = s_currentStreamData.index.offset + (first_index * s_currentStreamData.index.stride),
+			.res = s_shadow_resources[s_frame_state.stream_data.index.res.handle].handle().handle,
+			.offset = s_frame_state.stream_data.index.offset + (first_index * s_frame_state.stream_data.index.stride),
 			.count = index_count,
-			.fmt = s_currentStreamData.index.fmt
+			.fmt = s_frame_state.stream_data.index.fmt
 		},
-		.transparent = s_transparency_enabled,
-		.alphatest = s_alphatest_enabled,
+		.transparent = s_frame_state.blend_enable,
+		.alphatest = s_frame_state.alpha_test_enable,
 	};
 
-	const bool has_uvs = s_currentStreamData.uv.res.handle != 0;
+	const bool has_uvs = s_frame_state.stream_data.uv.res.handle != 0;
 	uint32_t texslot = 0;
 	uint64_t texhandle = 0;
 
 	// get the albedo texture slot
 	{
-		if (s_current_ps_pipeline.handle)
+		if (s_frame_state.ps.handle)
 		{
-			assert(s_ps_hash_map.contains(s_current_ps_pipeline.handle));
-			const uint64_t hash = s_ps_hash_map[s_current_ps_pipeline.handle];
+			assert(s_ps_hash_map.contains(s_frame_state.ps.handle));
+			const uint64_t hash = s_ps_hash_map[s_frame_state.ps.handle];
 			if (s_ps_texbinding_map.contains(hash))
 			{
 				texslot = 1;
 			}
 		}
-		if (texslot == 1 && s_currentTextureBindings.slots[1].handle)
+		if (texslot == 1 && s_frame_state.bindings.slots[1].handle)
 		{
-			texhandle = s_currentTextureBindings.slots[1].handle;
+			texhandle = s_frame_state.bindings.slots[1].handle;
 		}
 		else
 		{
-			texhandle = s_currentTextureBindings.slots[0].handle;
+			texhandle = s_frame_state.bindings.slots[0].handle;
 		}
 	}
 
 	// is the reflection view bound?
 	bool reflection_view_bound = false;
-	for (auto &res : s_currentTextureBindings.slots)
+	for (auto &res : s_frame_state.bindings.slots)
 	{
-		if (res.handle == s_reflection_resource)
+		if (res.handle == s_frame_state.reflection_texture)
 		{
 			reflection_view_bound = true;
 			break;
@@ -1439,15 +1455,15 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 	// this layout needs to match the layout in the shader. see: RtInstanceAttachments
 	bvh_manager::AttachmentDesc attachments[] = {
 		// ib
-		get_attach_desc(s_currentStreamData.index, index_count, first_index, false),
+		get_attach_desc(s_frame_state.stream_data.index, index_count, first_index, false),
 		// pos
-		get_attach_desc(s_currentStreamData.pos, vertex_count, vertex_offset, true),
+		get_attach_desc(s_frame_state.stream_data.pos, vertex_count, vertex_offset, true),
 		// uv
-		get_attach_desc(s_currentStreamData.uv, vertex_count, vertex_offset, true),
+		get_attach_desc(s_frame_state.stream_data.uv, vertex_count, vertex_offset, true),
 		// normal
-		get_attach_desc(s_currentStreamData.normal, vertex_count, vertex_offset, true),
+		get_attach_desc(s_frame_state.stream_data.normal, vertex_count, vertex_offset, true),
 		// vert color
-		get_attach_desc(s_currentStreamData.color, vertex_count, vertex_offset, true),
+		get_attach_desc(s_frame_state.stream_data.color, vertex_count, vertex_offset, true),
 		// texture 0 (only if the texcoord is valid)
 		{
 			.res = has_uvs && texhandle != 0 ? s_shadow_resources[texhandle].handle() : resource{0},
@@ -1456,7 +1472,7 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		},
 	};
 
-	Material mtrl = s_current_material;
+	Material mtrl = s_frame_state.mtrl;
 #if 0
 	// disable this for now as multiplying roughness by texture.a seems to work well
 	if (reflection_view_bound)
@@ -1470,16 +1486,16 @@ static bool on_draw_indexed(command_list * cmd_list, uint32_t index_count, uint3
 		.cmd_list = s_d3d12cmdlist,
 		.cmd_queue = s_d3d12cmdqueue,
 		.blas_desc = desc,
-		.transform = s_current_wvp,
+		.transform = s_frame_state.wvp,
 		.attachments = attachments,
 		.material = mtrl,
 		.dynamic = dynamic_resource,
-		.is_static = s_staticgeo_vs_pipeline_is_bound,
+		.is_static = s_frame_state.static_geo_shader_is_bound,
 	};
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
-	if(!s_ui_pause)
-		s_bvh_manager.on_geo_draw(draw_desc);	
+	if (!s_ui_pause)
+		s_bvh_manager.on_geo_draw(draw_desc);
 
 	return false;
 }
@@ -1494,13 +1510,13 @@ static void on_present(effect_runtime *runtime)
 	doDeferredDeletes();
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
-	s_got_viewproj = false;
-	s_null_vs_ps_has_been_bound = false;
-	s_transparency_enabled = false;
-	s_alphatest_enabled = false;
+	s_frame_state.got_viewproj = false;
+	s_frame_state.null_shader_has_been_bound = false;
+	s_frame_state.blend_enable = false;
+	s_frame_state.alpha_test_enable = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
-	s_currentTextureBindings.clear();
+	s_frame_state.bindings.clear();
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
@@ -1520,7 +1536,7 @@ static void update_rt()
 	s_tlas.free();
 
 	s_tlas = s_bvh_manager.build_tlas(
-		s_got_viewproj ? &s_game_camera.get_viewproj() : nullptr,
+		s_frame_state.got_viewproj ? &s_game_camera.get_viewproj() : nullptr,
 		s_d3d12cmdlist,
 		s_d3d12cmdqueue);
 
