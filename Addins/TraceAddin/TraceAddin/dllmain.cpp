@@ -790,8 +790,23 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 	{
 		const pipeline_subobject &object = subObjects[i];
 
-		if (object.type == pipeline_subobject_type::vertex_shader ||
-			object.type == pipeline_subobject_type::pixel_shader)
+		if (object.type == pipeline_subobject_type::input_layout)
+		{
+			std::stringstream s;
+			s << "init_pipeline(input_layout, " << (void *)handle.handle << " = {\n";
+
+			for (uint32_t elemIdx = 0; elemIdx < object.count; elemIdx++)
+			{
+				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
+
+				s << "\t" << elem.semantic << ": " << to_string(elem.format) << "\n";
+			}
+
+			s << "})";
+			reshade::log_message(3, s.str().c_str());
+		}
+		else if (object.type == pipeline_subobject_type::vertex_shader ||
+				 object.type == pipeline_subobject_type::pixel_shader)
 		{
 			shader_desc *shader_data = (shader_desc*)object.data;
 			ComPtr<ID3DBlob> blob;
@@ -941,7 +956,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		return;
 
 	std::stringstream s;
-	if (stages == shader_stage::vertex)
+	if (stages == shader_stage::vertex || stages == shader_stage::pixel)
 	{
 		float *floats = (float *)values;
 		s << "push_constants(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index << ", " << first << ", " << count << ", { ";
