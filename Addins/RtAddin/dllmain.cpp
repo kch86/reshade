@@ -1516,7 +1516,7 @@ static void on_present(effect_runtime *runtime)
 	s_frame_state.alpha_test_enable = false;
 	s_draw_count = 0;
 	s_bvh_manager.update();
-	s_frame_state.bindings.clear();
+	s_frame_state.reset();
 
 	bool is_shift_down = runtime->is_key_down(VK_SHIFT) || runtime->is_key_down(VK_LSHIFT);
 	if (s_ctrl_down && is_shift_down && (runtime->is_key_down('r') || runtime->is_key_down('R')))
