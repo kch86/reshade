@@ -223,6 +223,8 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	RtInstanceData data = g_instance_data_buffer[instance_id];
 	RtInstanceAttachments att = g_attachments_buffer[instance_id];
 
+	const bool is_opaque = instance_is_opaque(data);
+
 	float4 textureAlbedo = fetchTexture(att, uv);
 
 	// not sure what to do with this yet
@@ -230,6 +232,15 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	//float3 emissive = fetchVertexColor(instance_id, indices, baries);
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
+
+	if (!is_opaque)
+	{
+		//tex is used to cancel out the diffuse term...
+
+		// only do this for headlight glass
+		//float opacity = pow(textureAlbedo.a * data.diffuse.a, 5.0);
+		//textureAlbedo.rgb = lerp(textureAlbedo.rgb, baseColorTint, opacity);
+	}
 
 	float3 combined_base = textureAlbedo.rgb * baseColorTint;
 
@@ -251,6 +262,11 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 		// this usually helps roughness
 		// the ground uses alpha for puddles, but the cars seem to benefit too
 		roughness *= textureAlbedo.a;
+	}
+	else
+	{
+		// only do this for glass
+		roughness = lerp(roughness, 1.0, mtrl.opacity);
 	}
 
 	// there's a bug somewhere with either 0.0 or 1.0 roughness
@@ -405,7 +421,9 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
 
 float3 get_sky(float3 dir)
 {
-	return float3(0.1, 0.1, 0.25) * 1.0;
+	const float3 high = float3(0.1, 0.1, 0.25);
+	const float3 low = float3(0.2, 0.2, 0.25);
+	return lerp(low, high, saturate(dir.z)) * 1.0;
 }
 
 #define SAMPLE_SPEUCULAR_GGX 1
@@ -578,10 +596,11 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		if (!is_reflection)
 		{
-			// glas is a single, double sided surface
+			// glass is a single, double sided surface
 			ray.Direction = refract(-V, shade.surface.shading_normal, eta);
 
 			float cosa = abs(dot(ray.Direction, shade.surface.shading_normal));
+			//float d = min(0.01, glass_thickness / max(cosa, 0.05));
 			float d = glass_thickness / max(cosa, 0.05);
 
 			// for glass close to a surface, this could go under the beneath surface
@@ -601,11 +620,15 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		if (hit.hitT < 0.0)
 		{
+			total_radiance += transmittance * get_sky(ray.Direction);
 			break;
 		}
 
 		fetchMaterialAndSurface(ray, hit, shade.mtrl, shade.surface);
 
+		// 1st opaque hit inside a headlight is a reflector
+		// TODO: only do this if the primary surface was headlight glass
+		const bool is_reflector = dot(shade.mtrl.tint, 1.0) < 0.01 && shade.mtrl.opacity > 0.5;
 		if (shade.mtrl.opaque)
 		{
 			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
@@ -614,8 +637,15 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 			const float3 ambient = 0.5 * shade.mtrl.base_color * ambient_brdf(shade.mtrl, shade.surface.shading_normal, V);
 			float3 L = shade_local.radiance + shade_local.mtrl.emissive + ambient;
 
-			total_radiance += transmittance * L;
-			break;
+			if (is_reflector)
+			{
+				total_radiance += transmittance * shade_local.radiance;
+			}
+			else
+			{
+				total_radiance += transmittance * L;
+				break;
+			}			
 		}
 	}
 

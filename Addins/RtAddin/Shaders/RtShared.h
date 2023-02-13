@@ -54,6 +54,7 @@ enum MaterialType : uint
 {
 	Material_Standard,
 	Material_Coat,
+	Material_Glass,
 	Material_Headlight,
 };
 

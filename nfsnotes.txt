@@ -47,6 +47,8 @@ todo:
 - add instance color data debug mode
 - add timing queries
 - pass my camera to the game
+- glass doesn't show in the reflections
+-- sample last frame's glass on glass hit?
 
 
 
@@ -141,3 +143,33 @@ spec range	{ -0.1212, -0.12, -0.1224, 0 },
 spec pow	{ 5.4131, 0, 0, 0 },
 env pow		{ 3.246, 0, 0, 0 },
 blend = src * src.a + dst * 1
+
+// glass pixel shader
+//   EnvmapMin      c0       1
+//   EnvmapRange    c1       1
+//   envmap_sampler s0       1
+//   samp           s1       1
+//
+// v0 == oD0
+// v1 == oD1
+// t0 == oT0
+// t1 == oT1
+ps_1_1
+tex t0
+tex t1
+mad r0.xyz, v1.w, c1, c0
+mul_x2 r0.xyz, t0, r0
+add r0.xyz, r0, v1
+mul_x2 r1, t1, v0
+mul_x2 r0.xyz, r0, r1.w
+add r0.xyz, r0, r1
++ mov r0.w, r1.w
+
+r0 = v1.w * c1 + c0
+r0 = sample(s0, t0) * r0
+r0.xyz += v1.xyz //(lit spec) + envmap
+
+r1 = sample(s1, t1) * v0 // (lit diffuse) * texture
+r0.xyz = r0.xyz * r1.a //(lit spec) * tex.a
+r0.xyz += r1.xyz // (diff + spec)
+r0.w = r1.a
