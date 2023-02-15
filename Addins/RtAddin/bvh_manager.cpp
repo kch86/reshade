@@ -140,18 +140,18 @@ void bvh_manager::prune_stale_geo()
 bool bvh_manager::attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments)
 {
 	if(stored.data.size() != attachments.size())
-		return false;
+		return true;
 
 	int i = 0;
 	for (const AttachmentDesc &attachment : attachments)
 	{
-		if (attachment.res != stored.data[i].orig_res)
-			return false;
+		if (attachment.res.handle != stored.data[i].orig_res.handle)
+			return true;
 
 		i++;
 	}
 
-	return true;
+	return false;
 }
 
 void bvh_manager::on_geo_updated(resource res)
@@ -247,7 +247,6 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			attachment.data.clear();
 			attachment = std::move(gpuattach);
 		}
-		
 
 		if (geostate.needs_rebuild)
 		{
