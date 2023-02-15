@@ -280,6 +280,107 @@ void reshade::d3d9::convert_color(D3DCOLOR c, float *color)
 	color[3] = ((c >> 24) & 0xFF) / 255.0f;
 }
 
+auto reshade::d3d9::convert_sampler_substate(D3DSAMPLERSTATETYPE type, DWORD value) -> api::sampler_substate
+{
+	api::sampler_substate state{};
+
+	auto to_native_address = [](D3DTEXTUREADDRESS value) -> api::texture_address_mode
+	{
+		switch (value)
+		{
+		case D3DTADDRESS_WRAP:
+			return api::texture_address_mode::wrap;
+		case D3DTADDRESS_MIRROR:
+			return api::texture_address_mode::mirror;
+		case D3DTADDRESS_CLAMP:
+			return api::texture_address_mode::clamp;
+		case D3DTADDRESS_BORDER:
+			return api::texture_address_mode::border;
+		case D3DTADDRESS_MIRRORONCE:
+			return api::texture_address_mode::mirror_once;
+		default:
+			return api::texture_address_mode::wrap;
+		}
+	};
+
+	auto to_native_filter = [](D3DTEXTUREFILTERTYPE value) -> api::filter_mode {
+		switch (value)
+		{
+			default:
+			case D3DTEXF_NONE:
+				return api::filter_mode::min_mag_mip_point;
+			case D3DTEXF_POINT:
+				return api::filter_mode::min_mag_mip_point;
+			case D3DTEXF_LINEAR:
+				return api::filter_mode::min_mag_mip_linear;
+			case D3DTEXF_ANISOTROPIC:
+				return api::filter_mode::anisotropic;
+			case D3DTEXF_PYRAMIDALQUAD:
+				return api::filter_mode::compare_min_mag_mip_point;
+			case D3DTEXF_GAUSSIANQUAD:
+				return api::filter_mode::compare_min_mag_mip_point;
+			case D3DTEXF_CONVOLUTIONMONO:
+				return api::filter_mode::compare_min_mag_mip_point;
+		}
+	};
+
+	switch (type)
+	{
+		case D3DSAMP_ADDRESSU:
+			state.type = api::sampler_substate_type::addressu;
+			state.address_u = to_native_address((D3DTEXTUREADDRESS)value);
+			break;
+		case D3DSAMP_ADDRESSV:
+			state.type = api::sampler_substate_type::addressv;
+			state.address_v = to_native_address((D3DTEXTUREADDRESS)value);
+			break;
+		case D3DSAMP_ADDRESSW:
+			state.type = api::sampler_substate_type::addressw;
+			state.address_w = to_native_address((D3DTEXTUREADDRESS)value);
+			break;
+		case D3DSAMP_BORDERCOLOR:
+			state.type = api::sampler_substate_type::bordercolor;
+			convert_color((D3DCOLOR)value, state.border_color);
+			break;
+		case D3DSAMP_MAGFILTER:
+			state.type = api::sampler_substate_type::magfilter;
+			state.filter = to_native_filter((D3DTEXTUREFILTERTYPE)value);
+			break;
+		case D3DSAMP_MINFILTER:
+			state.type = api::sampler_substate_type::minfilter;
+			state.filter = to_native_filter((D3DTEXTUREFILTERTYPE)value);
+			break;
+		case D3DSAMP_MIPFILTER:
+			state.type = api::sampler_substate_type::mipfilter;
+			state.filter = to_native_filter((D3DTEXTUREFILTERTYPE)value);
+			break;
+		case D3DSAMP_MIPMAPLODBIAS:
+			state.type = api::sampler_substate_type::mipmaplodbias;
+			state.mip_lod_bias = value;
+			break;
+		case D3DSAMP_MAXMIPLEVEL:
+			state.type = api::sampler_substate_type::maxmiplevel;
+			state.max_lod = value;
+			break;
+		case D3DSAMP_MAXANISOTROPY:
+			state.type = api::sampler_substate_type::maxanisotropy;
+			state.max_anisotropy = value;
+			break;
+		case D3DSAMP_SRGBTEXTURE:
+			break;
+		case D3DSAMP_ELEMENTINDEX:
+			break;
+		case D3DSAMP_DMAPOFFSET:
+			break;
+		case D3DSAMP_FORCE_DWORD:
+			break;
+		default:
+			break;
+	}
+
+	return state;	
+}
+
 void reshade::d3d9::convert_memory_heap_to_d3d_pool(api::memory_heap heap, D3DPOOL &d3d_pool)
 {
 	// Managed resources are special and already moved to device-accessible memory as needed, so do not change pool to an explicit one for those

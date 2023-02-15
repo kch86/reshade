@@ -100,6 +100,7 @@ namespace reshade::api
 		constant_buffer = 6,
 		shader_storage_buffer = 7,
 		acceleration_structure = 8,
+		sampler_substate = 9,
 	};
 
 	/// <summary>

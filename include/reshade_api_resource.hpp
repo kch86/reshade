@@ -80,6 +80,69 @@ namespace reshade::api
 		mirror_once = 5
 	};
 
+	enum class sampler_substate_type : uint32_t
+	{
+		addressu = 1,
+		addressv = 2,
+		addressw = 3,
+		bordercolor = 4,
+		magfilter = 5,
+		minfilter = 6,
+		mipfilter = 7,
+		mipmaplodbias = 8,
+		maxmiplevel = 9,
+		maxanisotropy = 10,
+		srgbtexture = 11,
+		elementindex = 12,
+		dmapoffset = 13,
+		force_dword = 0x7fffffff
+	};
+
+	struct sampler_substate
+	{
+		union
+		{
+			filter_mode filter;
+			/// <summary>
+			/// Method to use for resolving U texture coordinates outside 0 to 1 range.
+			/// </summary>
+			texture_address_mode address_u;
+			/// <summary>
+			/// Method to use for resolving V texture coordinates outside 0 to 1 range.
+			/// </summary>
+			texture_address_mode address_v;
+			/// <summary>
+			/// Method to use for resolving W texture coordinates outside 0 to 1 range.
+			/// </summary>
+			texture_address_mode address_w;
+			/// <summary>
+			/// Offset applied to the calculated mipmap level when sampling a texture.
+			/// </summary>
+			float mip_lod_bias;
+			/// <summary>
+			/// Clamping value to use when filtering mode is <see cre;
+			/// </summary>
+			float max_anisotropy;
+			/// <summary>
+			/// Comparison function to use to compare sampled data against existing sampled data.
+			/// </summary>
+			compare_op compare_op;
+			/// <summary>
+			/// RGBA value to return for texture coordinates outside 0 to 1 range when addressing mode is <see cre;
+			/// </summary>
+			float border_color[4];
+			/// <summary>
+			/// Lower end of the mipmap range to clamp access to.
+			/// </summary>
+			float min_lod;
+			/// <summary>
+			/// Upper end of the mipmap range to clamp access to.
+			/// </summary>
+			float max_lod;
+		};
+		sampler_substate_type type;
+	};
+
 	/// <summary>
 	/// Describes a sampler state.
 	/// </summary>

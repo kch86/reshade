@@ -650,6 +650,78 @@ namespace
 
 		return "unkown";
 	}
+	inline auto to_string(sampler_substate state)
+	{
+		auto to_string_address = [](texture_address_mode value){
+			switch (value)
+			{
+				case texture_address_mode::wrap:
+					return "wrap";
+				case texture_address_mode::mirror:
+					return "mirror";
+				case texture_address_mode::clamp:
+					return "clamp";
+				case texture_address_mode::border:
+					return "border";
+				case texture_address_mode::mirror_once:
+					return "mirror_once";
+			default:
+				return "unknown";
+			}
+		};
+
+		auto to_string_filter = [](filter_mode value) {
+			switch (value)
+			{
+				default:
+					return "unkown";
+				case filter_mode::min_mag_mip_point:
+					return "point";
+				case filter_mode::min_mag_mip_linear:
+					return "linear";
+				case filter_mode::anisotropic:
+					return "aniso";
+			}
+		};
+
+		std::stringstream s;
+
+		switch (state.type)
+		{
+			case sampler_substate_type::addressu:
+				s << "address U: " << to_string_address(state.address_u);
+				break;
+			case sampler_substate_type::addressv:
+				s << "address V: " << to_string_address(state.address_v);
+				break;
+			case sampler_substate_type::addressw:
+				s << "address W: " << to_string_address(state.address_w);
+				break;
+			case sampler_substate_type::bordercolor:
+				s << "address W: {"
+					<< state.border_color[0] << ", "
+					<< state.border_color[1] << ", "
+					<< state.border_color[2] << ", "
+					<< state.border_color[3] << "}";
+				break;
+			case sampler_substate_type::magfilter:
+				s << "mag filter: " << to_string_filter(state.filter);
+				break;
+			case sampler_substate_type::minfilter:
+				s << "min filter: " << to_string_filter(state.filter);
+				break;
+			case sampler_substate_type::mipfilter:
+				s << "mip filter: " << to_string_filter(state.filter);
+				break;
+			case sampler_substate_type::maxanisotropy:
+				s << "max aniso : " << state.max_anisotropy;
+				break;
+			default:
+				s << "unkown";
+				break;
+		}
+		return s.str();
+	}
 }
 
 static bool do_capture(bool limit_to_range=true)
@@ -996,9 +1068,8 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 	if (!do_capture())
 		return;
 
-	resource res = {};
-	resource_desc desc;
-	bool have_desc = false;
+	std::stringstream s;
+	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index;
 
 #ifndef NDEBUG
 	{	const std::shared_lock<std::shared_mutex> lock(s_mutex);
@@ -1008,6 +1079,17 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 	case descriptor_type::sampler:
 		for (uint32_t i = 0; i < update.count; ++i)
 			assert(static_cast<const sampler *>(update.descriptors)[i].handle == 0 || s_samplers.find(static_cast<const sampler *>(update.descriptors)[i].handle) != s_samplers.end());
+		break;
+	case descriptor_type::sampler_substate:
+#if 0
+		// enable to print out sampler info
+		for (uint32_t i = 0; i < update.count; ++i)
+		{
+			s << ", sampler_state: " << to_string(((sampler_substate *)update.descriptors)[i]);
+			if (i < update.count - 1)
+				s << "\n";
+		}
+#endif
 		break;
 	case descriptor_type::sampler_with_resource_view:
 		for (uint32_t i = 0; i < update.count; ++i)
@@ -1019,9 +1101,17 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 			resource_view view = sv[i].view;
 			if (view.handle != 0)
 			{
-				res = cmd_list->get_device()->get_resource_from_view(view);
-				desc = cmd_list->get_device()->get_resource_desc(res);
-				have_desc = true;
+				resource res = cmd_list->get_device()->get_resource_from_view(view);
+				resource_desc desc = cmd_list->get_device()->get_resource_desc(res);
+
+				s << ", {\n\t" << to_string(update.type)
+					<< "\n\thandle: " << (void *)res.handle
+					<< "\n\twidth: " << desc.texture.width
+					<< "\n\theight: " << desc.texture.height
+					<< "\n\tformat: " << to_string(desc.texture.format)
+					<< "\n\tarray: " << desc.texture.depth_or_layers
+					<< "\n\tbinding, count: " << update.binding << ", " << update.count
+					<< "\n},";
 			}
 		}			
 		break;
@@ -1039,24 +1129,7 @@ static void on_push_descriptors(command_list * cmd_list, shader_stage stages, pi
 	}
 	}
 #endif
-
-	std::stringstream s;
-	s << "push_descriptors(" << to_string(stages) << ", " << (void *)layout.handle << ", " << param_index;
-	if (res.handle)
-	{
-		s << ", {\n\t" << to_string(update.type)
-		  << "\n\thandle: " << (void *)res.handle
-		  << "\n\twidth: " << desc.texture.width
-		  << "\n\theight: " << desc.texture.height
-		  << "\n\tformat: " << to_string(desc.texture.format)
-		  << "\n\tarray: " << desc.texture.depth_or_layers
-		  << "\n\tbinding, count: " << update.binding << ", " << update.count
-		  << "\n})";
-	}
-	else
-	{
-		s << " )";
-	}		
+	s << ")";
 
 	reshade::log_message(3, s.str().c_str());
 }

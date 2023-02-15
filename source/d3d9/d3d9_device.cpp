@@ -1670,7 +1670,24 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::GetSamplerState(DWORD Sampler, D3DSAM
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetSamplerState(DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value)
 {
-	return _orig->SetSamplerState(Sampler, Type, Value);
+	const HRESULT hr = _orig->SetSamplerState(Sampler, Type, Value);
+
+#if 0 //RESHADE_ADDON && !RESHADE_ADDON_LITE
+	if (SUCCEEDED(hr) &&
+		reshade::has_addon_event<reshade::addon_event::push_descriptors>())
+	{
+		reshade::api::sampler_substate state = reshade::d3d9::convert_sampler_substate(Type, Value);
+		
+		reshade::invoke_addon_event<reshade::addon_event::push_descriptors>(
+			this,
+			reshade::api::shader_stage::pixel,
+			// See global pipeline layout specified in 'device_impl::on_init'
+			reshade::d3d9::global_pipeline_layout,
+			1,
+			reshade::api::descriptor_set_update{ {}, Sampler, 0, 1, reshade::api::descriptor_type::sampler_substate, &state });
+	}
+#endif
+	return hr;
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::ValidateDevice(DWORD *pNumPasses)
 {
