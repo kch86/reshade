@@ -965,6 +965,7 @@ namespace reshade::api
 		alpha_reference_value = 24,
 		alpha_func = 25,
 		fog_enable = 28,
+		fog_color = 34,
 		srgb_write_enable = 194,
 		primitive_topology = 1000,
 		sample_mask = 162,

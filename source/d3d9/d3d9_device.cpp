@@ -1546,6 +1546,8 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetRenderState(D3DRENDERSTATETYPE Sta
 {
 	const HRESULT hr = _orig->SetRenderState(State, Value);
 #if RESHADE_ADDON && !RESHADE_ADDON_LITE
+	temp_mem<uint32_t> temp_storage(4);
+
 	if (SUCCEEDED(hr) &&
 		reshade::has_addon_event<reshade::addon_event::bind_pipeline_states>())
 	{
@@ -1580,6 +1582,10 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetRenderState(D3DRENDERSTATETYPE Sta
 		case D3DRS_CCW_STENCILZFAIL:
 		case D3DRS_CCW_STENCILPASS:
 			Value = static_cast<uint32_t>(reshade::d3d9::convert_stencil_op(static_cast<D3DSTENCILOP>(Value)));
+			break;
+		case D3DRS_FOGCOLOR:
+			reshade::d3d9::convert_color((D3DCOLOR)Value, (float*)temp_storage.p);
+			Value = uintptr_t(temp_storage.p);
 			break;
 		}
 

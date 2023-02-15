@@ -272,6 +272,13 @@ auto reshade::d3d9::convert_format(D3DFORMAT d3d_format, BOOL *lockable) -> api:
 		return api::format::intz;
 	}
 }
+void reshade::d3d9::convert_color(D3DCOLOR c, float *color)
+{
+	color[0] = ((c >> 16) & 0xFF) / 255.0f;
+	color[1] = ((c >> 8) & 0xFF) / 255.0f;
+	color[2] = (c & 0xFF) / 255.0f;
+	color[3] = ((c >> 24) & 0xFF) / 255.0f;
+}
 
 void reshade::d3d9::convert_memory_heap_to_d3d_pool(api::memory_heap heap, D3DPOOL &d3d_pool)
 {
