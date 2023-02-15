@@ -1,7 +1,6 @@
 
 #include "bvh_manager.h"
 #include "raytracing.h"
-#include "Shaders/RtShared.h"
 
 #include <reshade.hpp>
 #include "hash.h"
@@ -229,6 +228,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			.dynamic = !desc.is_static
 		});
 
+		//TODO: add attachments to instance data
 		ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 		m_attachments.push_back(std::move(gpuattach));
 	}
@@ -352,6 +352,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				rt_instance_data.roughness = instanceData.mtrl.roughness;
 				rt_instance_data.toWorldPrevT = toPrevWorldTransform;
 				rt_instance_data.flags = (instance.instance_mask & InstanceMask_opaque_alphatest) != 0 ? 1 : 0;
+				rt_instance_data.mtrl = instanceData.mtrl.type;
 				instance_data.push_back(rt_instance_data);
 			}
 		}

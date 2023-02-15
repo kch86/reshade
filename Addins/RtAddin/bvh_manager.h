@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <DirectXMath.h>
 #include "raytracing.h"
+#include "Shaders/RtShared.h"
 
 //forward declarations
 struct RtInstanceData;
@@ -14,6 +15,7 @@ struct Material
 	DirectX::XMVECTOR diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
 	DirectX::XMVECTOR specular = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float roughness = 0.8f;
+	MaterialType type = MaterialType::Material_Standard;
 };
 
 class bvh_manager

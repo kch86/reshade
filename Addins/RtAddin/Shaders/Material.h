@@ -4,6 +4,7 @@
 #include "Color.h"
 #include "Math.h"
 #include "Sampling.h"
+#include "RtShared.h"
 
 struct Surface
 {
@@ -20,6 +21,7 @@ struct Material
 	float metalness;
 	float roughness;
 	float opacity;
+	MaterialType type;
 	bool opaque;
 };
 

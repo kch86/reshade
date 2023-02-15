@@ -341,6 +341,46 @@ StreamData::stream get_stream_data(
 
 }
 
+MaterialType get_material_type(FrameState frame)
+{
+	const uint64_t car_vs_hashes[] = {
+		6550593362979704143,
+		5461187419696972836
+	};
+
+	const uint64_t car_ps_hashes[] = {
+		7314718503845779620
+	};
+
+	const uint64_t vshash = s_vs_hash_map[frame.vs.handle];
+	const uint64_t pshash = s_vs_hash_map[frame.ps.handle];
+
+	auto is_in_hash = [](std::span<const uint64_t> s, uint64_t hash)
+	{
+		for (uint64_t h : s)
+			if (h == hash)
+				return true;
+		return false;
+	};
+	const bool is_car_shader = is_in_hash(car_vs_hashes, vshash) && is_in_hash(car_ps_hashes, pshash);
+
+	MaterialType type = Material_Standard;
+
+	if (is_car_shader && frame.blend_enable)
+	{
+		if (frame.dst_blend == blend_factor::one)
+		{
+			type = Material_Headlight;
+		}
+		else
+		{
+			type = Material_Glass;
+		}
+	}
+
+	return type;
+}
+
 static void init_vs_mappings()
 {
 	// vs transform constants mappings
@@ -1473,6 +1513,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 	};
 
 	Material mtrl = s_frame_state.mtrl;
+	mtrl.type = get_material_type(s_frame_state);
 #if 0
 	// disable this for now as multiplying roughness by texture.a seems to work well
 	if (reflection_view_bound)

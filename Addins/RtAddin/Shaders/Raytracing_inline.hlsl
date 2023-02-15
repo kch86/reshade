@@ -233,13 +233,13 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
-	if (!is_opaque)
+	if (data.mtrl == Material_Headlight)
 	{
 		//tex is used to cancel out the diffuse term...
 
 		// only do this for headlight glass
-		//float opacity = pow(textureAlbedo.a * data.diffuse.a, 5.0);
-		//textureAlbedo.rgb = lerp(textureAlbedo.rgb, baseColorTint, opacity);
+		float opacity = pow(textureAlbedo.a * data.diffuse.a, 5.0);
+		textureAlbedo.rgb = lerp(textureAlbedo.rgb, baseColorTint, opacity);
 	}
 
 	float3 combined_base = textureAlbedo.rgb * baseColorTint;
@@ -254,6 +254,7 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	mtrl.metalness = 0.0;
 	mtrl.opacity = data.diffuse.a * textureAlbedo.a;
 	mtrl.opaque = instance_is_opaque(data);
+	mtrl.type = data.mtrl;
 
 	float roughness = data.roughness.x;
 
@@ -576,6 +577,8 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 	const float glass_thickness = 0.003;
 	const float3 glass_tint = saturate(primaryShade.mtrl.tint * 2.0 + 0.2);
 
+	const bool primary_is_headlight = primaryShade.mtrl.type == Material_Headlight;
+
 	ShadeRayResult shade = primaryShade;
 
 	const uint total_pathcount = g_constants.pathCount + additional_bounces;
@@ -628,7 +631,7 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 
 		// 1st opaque hit inside a headlight is a reflector
 		// TODO: only do this if the primary surface was headlight glass
-		const bool is_reflector = dot(shade.mtrl.tint, 1.0) < 0.01 && shade.mtrl.opacity > 0.5;
+		const bool is_reflector = primary_is_headlight && dot(shade.mtrl.tint, 1.0) < 0.01 && shade.mtrl.opacity > 0.5;
 		if (shade.mtrl.opaque)
 		{
 			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
