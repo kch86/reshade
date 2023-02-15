@@ -12,7 +12,8 @@
 #include <span>
 #include <fstream>
 #include <iostream>
-#include <sstream> //std::stringstream
+#include <sstream>
+#include "psapi.h"
 
 // dx12
 #include <d3d12.h>
@@ -1567,6 +1568,19 @@ static void on_present(effect_runtime *runtime)
 	else if (runtime->is_key_pressed(VK_F11))
 	{
 		load_rt_pipeline();
+	}
+	else if (runtime->is_key_pressed(VK_F12))
+	{
+		PROCESS_MEMORY_COUNTERS memCounter;
+		BOOL result = GetProcessMemoryInfo(GetCurrentProcess(),
+										   &memCounter,
+										   sizeof(memCounter));
+
+		const uint32_t in_use = memCounter.WorkingSetSize / 1024 / 1024;
+		const uint32_t in_use_hw = memCounter.PeakWorkingSetSize / 1024 / 1024;
+		std::stringstream s;
+		s << "memory in use: " << in_use << "MB, HW: " << in_use_hw << "MB";
+		reshade::log_message(3, s.str().c_str());
 	}
 
 	s_frame_id++;
