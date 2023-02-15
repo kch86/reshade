@@ -161,6 +161,8 @@ namespace
 		default:
 		case dynamic_state::unknown:
 			return "unknown";
+		case dynamic_state::fog_color:
+			return "fog_color";
 		case dynamic_state::fog_enable:
 			return "fog_enable";
 		case dynamic_state::alpha_test_enable:
@@ -338,6 +340,13 @@ namespace
 		case dynamic_state::dest_alpha_blend_factor:
 			s << to_string((blend_factor)value);
 			break;
+		case dynamic_state::fog_color:
+		{
+			float *c = (float *)value;
+			s << c[0] << ", " << c[1] << ", " << c[2] << ", " << c[3];
+			
+			break;
+		}
 		default:
 			s << value;
 		}
