@@ -19,6 +19,66 @@ uint32_t get_instance_mask(const BlasBuildDesc &desc)
 	return InstanceMask_opaque;
 }
 
+bvh_manager::ScopedAttachment bvh_manager::build_attachment(command_list* cmd_list, std::span<bvh_manager::AttachmentDesc> attachments)
+{
+	ScopedAttachment gpuattach;
+	for (const AttachmentDesc &attachment : attachments)
+	{
+		resource_view_flags flags = resource_view_flags::shader_visible;
+		if (attachment.type == resource_type::buffer)
+		{
+			format fmt = attachment.fmt;
+			uint32_t offset = attachment.offset;
+			uint32_t count = attachment.count;
+			uint32_t stride = attachment.stride;
+			if (attachment.view_as_raw)
+			{
+				fmt = format::r32_uint;
+				flags |= resource_view_flags::raw;
+				assert((stride % sizeof(uint32_t)) == 0);
+				offset *= stride / sizeof(uint32_t);
+				count *= stride / sizeof(uint32_t);
+			}
+			resource_view_desc view_desc(fmt, offset, count);
+			view_desc.flags = flags;
+
+			resource_view srv{};
+			if (attachment.res.handle != 0)
+				cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+
+			ScopedAttachment::Elem data;
+			data.orig_res = attachment.res;
+			data.srv = std::move(scopedresourceview(cmd_list->get_device(), srv));
+			data.offset = attachment.elem_offset;
+			data.stride = stride;
+			data.fmt = (uint32_t)attachment.fmt;
+			gpuattach.data.push_back(std::move(data));
+		}
+		else if (attachment.type == resource_type::texture_2d)
+		{
+			resource_view srv{};
+			if (attachment.res.handle != 0)
+			{
+				resource_desc res_desc = cmd_list->get_device()->get_resource_desc(attachment.res);
+
+				resource_view_desc view_desc(res_desc.texture.format);
+				view_desc.flags = flags;
+
+				cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
+			}
+
+			ScopedAttachment::Elem data;
+			data.orig_res = attachment.res;
+			data.srv = std::move(scopedresourceview(cmd_list->get_device(), srv));
+			data.offset = 0;
+			data.stride = 0;
+			data.fmt = 0;
+			gpuattach.data.push_back(std::move(data));
+		}
+	}
+	return gpuattach;
+}
+
 void bvh_manager::update()
 {
 	m_per_frame_instance_counts.clear();
@@ -75,6 +135,23 @@ void bvh_manager::prune_stale_geo()
 	m_instances.resize(count);
 	m_attachments.resize(count);
 	m_geo_state.resize(count);
+}
+
+bool bvh_manager::attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments)
+{
+	if(stored.data.size() != attachments.size())
+		return false;
+
+	int i = 0;
+	for (const AttachmentDesc &attachment : attachments)
+	{
+		if (attachment.res != stored.data[i].orig_res)
+			return false;
+
+		i++;
+	}
+
+	return true;
 }
 
 void bvh_manager::on_geo_updated(resource res)
@@ -152,59 +229,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			.dynamic = !desc.is_static
 		});
 
-		ScopedAttachment gpuattach;
-		for (const AttachmentDesc &attachment : desc.attachments)
-		{
-			resource_view_flags flags = resource_view_flags::shader_visible;
-			if (attachment.type == resource_type::buffer)
-			{
-				format fmt = attachment.fmt;
-				uint32_t offset = attachment.offset;
-				uint32_t count = attachment.count;
-				uint32_t stride = attachment.stride;
-				if (attachment.view_as_raw)
-				{
-					fmt = format::r32_uint;
-					flags |= resource_view_flags::raw;
-					assert((stride % sizeof(uint32_t)) == 0);
-					offset *= stride / sizeof(uint32_t);
-					count *= stride / sizeof(uint32_t);
-				}
-				resource_view_desc view_desc(fmt, offset, count);
-				view_desc.flags = flags;
-
-				resource_view srv{};
-				if (attachment.res.handle != 0)
-					desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
-
-				ScopedAttachment::Elem data;
-				data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
-				data.offset = attachment.elem_offset;
-				data.stride = stride;
-				data.fmt = (uint32_t)attachment.fmt;
-				gpuattach.data.push_back(std::move(data));
-			}
-			else if (attachment.type == resource_type::texture_2d)
-			{
-				resource_view srv{};
-				if (attachment.res.handle != 0)
-				{
-					resource_desc res_desc = desc.cmd_list->get_device()->get_resource_desc(attachment.res);
-
-					resource_view_desc view_desc(res_desc.texture.format);
-					view_desc.flags = flags;
-
-					desc.cmd_list->get_device()->create_resource_view(attachment.res, resource_usage::shader_resource, view_desc, &srv);
-				}
-
-				ScopedAttachment::Elem data;
-				data.srv = std::move(scopedresourceview(desc.cmd_list->get_device(), srv));
-				data.offset = 0;
-				data.stride = 0;
-				data.fmt = 0;
-				gpuattach.data.push_back(std::move(data));
-			}			
-		}
+		ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 		m_attachments.push_back(std::move(gpuattach));
 	}
 	else
@@ -213,6 +238,16 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 
 		GeometryState &geostate = m_geo_state[index];
 		geostate.last_visible = m_frame_id;
+
+		//update the attachments in case they've changed
+		ScopedAttachment &attachment = m_attachments[index];
+		if (attachment_is_dirty(attachment, desc.attachments))
+		{
+			ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
+			attachment.data.clear();
+			attachment = std::move(gpuattach);
+		}
+		
 
 		if (geostate.needs_rebuild)
 		{

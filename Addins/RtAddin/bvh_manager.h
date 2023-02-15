@@ -59,14 +59,13 @@ public:
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
 private:
-	void prune_stale_geo();
-
 	template<typename T>
 	struct AttachmentT
 	{
 		struct Elem
 		{
 			T srv;
+			reshade::api::resource orig_res;
 			uint32_t offset; // in elements
 			uint32_t stride; // in bytes
 			uint32_t fmt;
@@ -92,6 +91,10 @@ private:
 	using ScopedAttachment = AttachmentT<scopedresourceview>;
 	using Attachment = AttachmentT<reshade::api::resource_view>;
 	using GpuAttachment = AttachmentT<uint32_t>;
+
+	void prune_stale_geo();
+	ScopedAttachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments);
+	bool attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments);
 
 	std::vector<GeometryState> m_geo_state;
 	std::vector<BlasBuildDesc> m_geometry;
