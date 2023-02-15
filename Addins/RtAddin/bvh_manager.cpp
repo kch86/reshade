@@ -241,7 +241,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 
 		//update the attachments in case they've changed
 		ScopedAttachment &attachment = m_attachments[index];
-		if (attachment_is_dirty(attachment, desc.attachments))
+		if (attachment_is_dirty(attachment, desc.attachments) && instanceIndex == 0)
 		{
 			ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 			attachment.data.clear();
