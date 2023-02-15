@@ -1424,7 +1424,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 {
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_draw_count++;
-	s_frame_state.bindings.clear();
+		s_frame_state.bindings.clear();
 	});
 
 	if (filter_command())
