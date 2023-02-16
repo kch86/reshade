@@ -634,6 +634,11 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		const bool is_reflector = primary_is_headlight && dot(shade.mtrl.tint, 1.0) < 0.01 && shade.mtrl.opacity > 0.5;
 		if (shade.mtrl.opaque)
 		{
+			if (is_reflector)
+			{
+				//WIP... good? bad?
+				shade.mtrl.metalness = 1.0;
+			}
 			ShadeRayResult shade_local = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
 
 			// need better ambient estimate....
