@@ -45,6 +45,7 @@ todo:
 - pass my camera to the game
 - glass doesn't show in the reflections
 -- sample last frame's glass on glass hit?
+-- treat as opaque and continue path inside the glass?
 - blinking hazard lights are done by changing the texture every frame
 -- make an emmissive material for this
 - better material for head lights?
