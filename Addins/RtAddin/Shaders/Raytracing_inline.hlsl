@@ -663,12 +663,13 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 [numthreads(8, 8, 1)]
 void ray_gen(uint3 tid : SV_DispatchThreadID)
 {
+	uint width, height;
+	g_rtOutput.GetDimensions(width, height);
+
 	float3 rayorigin = g_constants.viewPos.xyz;
 	float3 raydir = 0.0;
 	{
 		//get far end of the ray
-		uint width, height;
-		g_rtOutput.GetDimensions(width, height);
 
 		float2 d = (((float2)tid.xy / float2(width, height)) * 2.f - 1.f);
 		float4 ndc = float4(d.x, -d.y, 1.0, 1.0);
@@ -751,6 +752,47 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 #endif
 
+#if 0
+		// variance clamping
+		float3 m1 = rgb_to_ycocg(radiance);
+		float3 m2 = m1 * m1;
+		for (int y = -1; y <= 1; y++)
+		{
+			for (int x = -1; x <= 1; x++)
+			{
+				int2 index = clamp(int2(tid.xy) + int2(x, y), 0.xx, int2(width-1, height-1));
+
+				float3 c = rgb_to_ycocg(g_rtOutput[index].rgb);
+				m1 += c;
+				m2 += c * c;
+			}
+		}
+
+		const float velocityConfidenceFactor = saturate(1.0 - length(mv) / 2.0);
+		const float varianceGamma = lerp(0.75, 4.0, velocityConfidenceFactor * velocityConfidenceFactor);
+
+		const float3 mean = m1 * (1.0/9.0);
+		const float3 variance = sqrt(m2 * (1.0 / 9.0) - mean * mean) * varianceGamma;
+
+		const float3 minC = float3(mean - variance);
+		const float3 maxC = float3(mean + variance);
+
+		float4 prevRadiance = g_rtOutput[tid.xy];
+		prevRadiance.rgb = clamp(prevRadiance.rgb, ycocg_to_rgb(minC), ycocg_to_rgb(maxC));
+
+		//TODO: load into groupshared, change to group shared barrier
+		DeviceMemoryBarrierWithGroupSync();
+
+		const float prevHitT = g_hitHistory[tid.xy];
+
+		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;
+		const bool motionInvalidate = dot(mv, mv) > 0.1;
+		const bool reset = g_constants.frameIndex == 0;// || motionInvalidate || hitInvalidate;
+
+		float weight = reset ? 0.0 : velocityConfidenceFactor * prevRadiance.a;
+		radiance = lerp(radiance, prevRadiance.rgb, weight);
+		weight = saturate(1.0 / 2.0 - weight);
+#else
 		const float prevHitT = g_hitHistory[tid.xy];
 
 		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;
@@ -760,6 +802,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		float4 prevRadiance = g_rtOutput[tid.xy];
 		float weight = reset ? 1.0f : 1.0f / (1.0f + (1.0f / prevRadiance.a));
 		radiance = lerp(prevRadiance.rgb, radiance, weight);
+#endif
 
 		g_rtOutput[tid.xy] = float4(radiance, weight);
 		g_hitHistory[tid.xy] = hit.hitT;
