@@ -28,4 +28,26 @@ float3 bgra_unorm_to_float(uint bgra)
 	return float3(r, g, b);
 }
 
+float3 rgb_to_ycocg(float3 inRGB)
+{
+	//Y = R / 4 + G / 2 + B / 4
+	//Co = R / 2 - B / 2
+	//Cg = -R / 4 + G / 2 - B / 4
+	const float y = dot(inRGB, float3(0.25f, 0.5f, 0.25f));
+	const float co = dot(inRGB, float3(0.5f, 0.f, -0.5f));
+	const float cg = dot(inRGB, float3(-0.25f, 0.5f, -0.25f));
+	return float3(y, co, cg);
+}
+
+float3 ycocg_to_rgb(float3 inYCoCg)
+{
+	//R = Y + Co - Cg
+	//G = Y + Cg
+	//B = Y - Co - Cg
+	const float r = dot(inYCoCg, float3(1.f, 1.f, -1.f));
+	const float g = dot(inYCoCg, float3(1.f, 0.f, 1.f));
+	const float b = dot(inYCoCg, float3(1.f, -1.f, -1.f));
+	return float3(r, g, b);
+}
+
 #endif //COLOR_HLSL
