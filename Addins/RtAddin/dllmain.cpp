@@ -188,6 +188,8 @@ namespace
 		resource_view rtv = {};
 		resource reflection_texture = {};
 
+		uint32_t draw_count = 0;
+
 		blend_factor dst_blend = blend_factor::zero;
 		bool blend_enable = false;
 		bool alpha_test_enable = false;
@@ -275,8 +277,6 @@ namespace
 	bvh_manager s_bvh_manager;
 	GameCamera s_game_camera;
 	FpsCamera s_camera;
-
-	int s_draw_count = 0;
 	uint32_t s_frame_id = 0;
 
 	bool s_d3d_debug_enabled = false;
@@ -462,7 +462,7 @@ static bool filter_command()
 {
 	// add 1 for the filter because the draw call index is only incremented on the draw
 	// so all the bound state is 1 behind
-	const int drawId = s_draw_count;
+	const int drawId = s_frame_state.draw_count;
 	return !s_ui_enable || !(drawId >= (s_ui_drawCallBegin) && drawId <= s_ui_drawCallEnd);
 }
 
@@ -1375,7 +1375,7 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
-		s_draw_count++;
+		s_frame_state.draw_count++;
 	});
 
 	auto &data = cmd_list->get_private_data<command_list_data>();
@@ -1423,7 +1423,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
 	auto on_exit = sg::make_scope_guard([&]() {
-		s_draw_count++;
+		s_frame_state.draw_count++;
 		s_frame_state.bindings.clear();
 	});
 
@@ -1552,11 +1552,7 @@ static void on_present(effect_runtime *runtime)
 	doDeferredDeletes();
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
-	s_frame_state.got_viewproj = false;
-	s_frame_state.null_shader_has_been_bound = false;
-	s_frame_state.blend_enable = false;
-	s_frame_state.alpha_test_enable = false;
-	s_draw_count = 0;
+	s_frame_state.draw_count = 0;
 	s_bvh_manager.update();
 	s_frame_state.reset();
 
@@ -1629,7 +1625,7 @@ void updateCamera(effect_runtime *runtime)
 	{
 		s_frame_id = 0;
 		s_camera.rotate(deltaX, deltaY);
-	}	
+	}
 
 	if (runtime->is_key_down('W'))
 	{
@@ -1803,7 +1799,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.frameIndex = s_frame_id;
 	cb.bounceBoost = s_ui_bounce_boost;
 
-	auto get_srv = [&](scopedresourceview& srv)
+	auto get_srv = [&](scopedresourceview &srv)
 	{
 		return srv.handle().handle ? srv.handle() : s_empty_srv.handle();
 	};
@@ -1856,11 +1852,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	uint32_t param_index = 0;
 	for (param_index = 0; param_index < ARRAYSIZE(updates); param_index++)
 	{
-		if(((uint64_t*)updates[param_index].descriptors)[0] != 0)
+		if (((uint64_t *)updates[param_index].descriptors)[0] != 0)
 			s_d3d12cmdlist->push_descriptors(shader_stage::compute, s_pipeline_layout, param_index, updates[param_index]);
 	}
-		
-	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(RtConstants)/sizeof(int), &cb);
+
+	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(RtConstants) / sizeof(int), &cb);
 
 	// dispatch
 	const uint32_t groupX = (width + 7) / 8;
@@ -1913,7 +1909,7 @@ void on_tech_render(effect_runtime *runtime, effect_technique technique, command
 {
 	//const auto tech = reinterpret_cast<const technique *>(technique.handle);
 
-	
+
 
 	// check name, grab resources, submit commandlist
 }
@@ -2007,8 +2003,8 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::Checkbox("Show Rt result", &s_ui_show_rt);
 	ImGui::Checkbox("Render Before UI", &s_ui_render_before_ui);
 
-	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_draw_count);
-	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_draw_count);
+	ImGui::SliderInt("DrawCallBegin: ", &s_ui_drawCallBegin, 0, s_frame_state.draw_count);
+	ImGui::SliderInt("DrawCallEnd: ", &s_ui_drawCallEnd, 0, s_frame_state.draw_count);
 
 	// debug view elements
 	{
