@@ -52,7 +52,7 @@ enum InstanceMask : uint
 
 enum MaterialType : uint
 {
-	Material_Standard,
+	Material_Standard = 0,
 	Material_Coat,
 	Material_Glass,
 	Material_Headlight,

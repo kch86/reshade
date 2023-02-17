@@ -354,7 +354,7 @@ MaterialType get_material_type(FrameState frame)
 	};
 
 	const uint64_t vshash = s_vs_hash_map[frame.vs.handle];
-	const uint64_t pshash = s_vs_hash_map[frame.ps.handle];
+	const uint64_t pshash = s_ps_hash_map[frame.ps.handle];
 
 	auto is_in_hash = [](std::span<const uint64_t> s, uint64_t hash)
 	{

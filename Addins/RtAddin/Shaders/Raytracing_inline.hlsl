@@ -4,6 +4,11 @@
 #include "Sampling.h"
 #include "Raytracing.h"
 
+#define EXTRACT_PRIMARY 1
+#define SAMPLE_SPEUCULAR_GGX 1
+#define INTEGRATED_GLASS 1
+#define OPAQUE_TRANSPARENCY 1
+
 struct Shade
 {
 	float3 diffuse_radiance;
@@ -305,16 +310,82 @@ float3 get_ray_origin_offset(RayDesc ray, Surface surface)
 	return get_ray_origin_offset(ray, surface.pos, surface.geom_normal);
 }
 
+uint get_ray_mask()
+{
+	#if INTEGRATED_GLASS || OPAQUE_TRANSPARENCY
+		return InstanceMask_all;
+	#else
+		return InstanceMask_opaque_alphatest;
+	#endif
+}
+
 struct Visitor
 {
+	static uint2 rng;
 	static bool visit(RayDesc ray, RayHit hit)
 	{
 		// adding this is a repro
 		/*if (g_constants.debugView != DebugView_None)
 			return true;*/
+
+#if INTEGRATED_GLASS == 0 && OPAQUE_TRANSPARENCY == 0
 		if (g_constants.transparentEnable == false)
 			return true;
+#endif
 
+		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
+
+#if OPAQUE_TRANSPARENCY
+		const bool opaque = instance_is_opaque(data);
+#else
+		const bool opaque = true;
+#endif
+
+		Material mtrl;
+		Surface surface;
+		fetchMaterialAndSurface(ray, hit, mtrl, surface);
+		surface = (Surface)0; //we won't use this so hint to the compiler to discard
+
+		const float opacity = mtrl.opacity;
+
+		if (opaque)
+		{
+			if (opacity > 0.0)
+			{
+				return true;
+			}
+		}
+		else
+		{
+#if INTEGRATED_GLASS
+			// if glass or headlight just make sure we're not 100% transparent
+			if (data.mtrl == Material_Glass || data.mtrl == Material_Headlight)
+			{
+				if (opacity > 0.0)
+				{
+					return true;
+				}
+			}
+			else
+#endif
+			{
+				// else treat as opaque and roll the dice
+				if (opacity > pcg2d_rng(rng).x)
+				{
+					return true;
+				}
+			}
+		}		
+
+		return false;
+	}
+};
+uint2 Visitor::rng;
+
+struct VisitorShadow
+{
+	static bool visit(RayDesc ray, RayHit hit)
+	{
 		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
 
 		Material mtrl;
@@ -393,7 +464,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 		ray.Direction = normalize(sunDirection);
 		ray.Origin = get_ray_origin_offset(ray, surface);
 
-		hit = trace_ray_occlusion_any<Visitor>(g_rtScene, ray, InstanceMask_opaque_alphatest);
+		hit = trace_ray_occlusion_any<VisitorShadow>(g_rtScene, ray, InstanceMask_opaque_alphatest);
 
 		if (hit.hitT >= 0.0)
 		{
@@ -427,7 +498,6 @@ float3 get_sky(float3 dir)
 	return lerp(low, high, saturate(dir.z)) * 1.0;
 }
 
-#define SAMPLE_SPEUCULAR_GGX 1
 float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, inout float3 throughput, inout uint2 rng)
 {
 	// do multiple importance sampling
@@ -479,7 +549,29 @@ float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, i
 	return ray_dir;
 }
 
-#define EXTRACT_PRIMARY 1
+RayDesc get_refraction_ray(RayDesc ray, Surface surface, Material mtrl, float3 V, inout float3 throughput, inout uint2 rng)
+{
+	const float ior_air = 1.00029;
+	const float ior_glass = 1.55;
+	const float eta = ior_air / ior_glass;
+	const float glass_thickness = 0.003;
+	const float3 glass_tint = saturate(mtrl.tint * 2.0 + 0.2);
+
+	// glass is a single, double sided surface
+	ray.Direction = refract(-V, surface.shading_normal, eta);
+
+	float cosa = abs(dot(ray.Direction, surface.shading_normal));
+	//float d = min(0.01, glass_thickness / max(cosa, 0.05));
+	float d = glass_thickness / max(cosa, 0.05);
+
+	// for glass close to a surface, this could go under the beneath surface
+	ray.Origin += ray.Direction * d;
+
+	ray.Direction = refract(ray.Direction, surface.shading_normal, 1.0 / eta);
+
+	return ray;
+}
+
 float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 {
 #if EXTRACT_PRIMARY
@@ -490,15 +582,47 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	ShadeRayResult shade = primaryShade;
 
+	bool is_reflector = false;
+
 	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
 		const float3 V = -ray.Direction;
 
-		ray.Origin = get_ray_origin_offset(ray, shade.surface);
-		ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
+		bool refraction = false;
+		float reflect_prob = 1.0;
+#if INTEGRATED_GLASS
+		if (shade.mtrl.type == Material_Glass || shade.mtrl.type == Material_Headlight)
+		{
+			const float ior_air = 1.00029;
+			const float ior_glass = 1.55;
+			const float eta = ior_air / ior_glass;
 
-		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
+			float NoV = abs(dot(shade.surface.shading_normal, V));
+			reflect_prob = f_dialectric(eta, NoV);
+			const bool is_reflection = pcg2d_rng(rng).x < reflect_prob;
+			refraction = !is_reflection;
+		}
+
+		if (refraction)
+		{
+			float3 N = -shade.surface.shading_normal;
+			ray.Origin = get_ray_origin_offset(ray, shade.surface.pos, N);
+			ray = get_refraction_ray(ray, shade.surface, shade.mtrl, V, throughput, rng);
+			throughput *= 1.0 - reflect_prob;
+
+			//is_reflector = shade.mtrl.type == Material_Headlight;
+		}
+		else
+#endif
+		{
+			ray.Origin = get_ray_origin_offset(ray, shade.surface);
+			ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
+			is_reflector = false;
+			throughput *= reflect_prob;
+		}
+
+		Visitor::rng = rng;
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, get_ray_mask());
 
 		if (hit.hitT < 0.0)
 		{
@@ -507,7 +631,15 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			break;
 		}
 
-		shade = shade_ray(ray, hit, rng);
+		fetchMaterialAndSurface(ray, hit, shade.mtrl, shade.surface);
+		//if (is_reflector)
+		//{
+		//	//WIP... good? bad?
+		//	shade.mtrl.metalness = 1.0;
+		//}
+		shade = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
+
+		//shade = shade_ray(ray, hit, rng);
 		total_radiance += throughput * shade.mtrl.emissive;
 
 		bounce_boost += g_constants.bounceBoost * vertex;
@@ -691,8 +823,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		float3 radiance = 0.0;
 
 		// send a primary ray, ignoring transparent geo, but include alpha-tested geo
-		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
+		Visitor::rng = seed;
+		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, get_ray_mask());
 
 		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
@@ -717,7 +849,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 
 		//trace transparent
-#if 1
+#if INTEGRATED_GLASS == 0 && OPAQUE_TRANSPARENCY == 0
 		if(g_constants.transparentEnable)
 		{
 			RayHit primaryHit = hit;
@@ -792,17 +924,22 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		float weight = reset ? 0.0 : velocityConfidenceFactor * prevRadiance.a;
 		radiance = lerp(radiance, prevRadiance.rgb, weight);
 		weight = saturate(1.0 / 2.0 - weight);
-#else
+#else // !variance clamping
 		const float prevHitT = g_hitHistory[tid.xy];
 
+#if INTEGRATED_GLASS || OPAQUE_TRANSPARENCY
+		const bool hitInvalidate = false;
+#else
 		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;
+#endif
+
 		const bool motionInvalidate = dot(mv, mv) > 0.1;
 		const bool reset = g_constants.frameIndex == 0 || motionInvalidate || hitInvalidate;
 
 		float4 prevRadiance = g_rtOutput[tid.xy];
 		float weight = reset ? 1.0f : 1.0f / (1.0f + (1.0f / prevRadiance.a));
 		radiance = lerp(prevRadiance.rgb, radiance, weight);
-#endif
+#endif // variance clamping
 
 		g_rtOutput[tid.xy] = float4(radiance, weight);
 		g_hitHistory[tid.xy] = hit.hitT;
