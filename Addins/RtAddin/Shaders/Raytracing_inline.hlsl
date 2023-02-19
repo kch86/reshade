@@ -190,24 +190,24 @@ float4 fetchTexture(RtInstanceAttachments att, float2 uv)
 	return texcolor;
 }
 
-float3 fetchVertexColor(RtInstanceAttachments att, uint3 indices, float2 baries)
+float4 fetchVertexColor(RtInstanceAttachments att, uint3 indices, float2 baries)
 {
 	if (att.col.id == 0x7FFFFFFF)
 	{
-		return 0.0.xxx;
+		return 0.0.xxxx;
 	}
 
 	// since vb streams are interleaved, this needs to be a byte address buffer
 	ByteAddressBuffer vb = ResourceDescriptorHeap[NonUniformResourceIndex(att.col.id)];
 
-	float3 c = 0.0;
+	float4 c = 1.0;
 
 	uint stride = att.col.stride;
 	if (att.col.format == 87)
 	{
-		float3 c0 = bgra_unorm_to_float(vb.Load(indices.x * stride + att.col.offset));
-		float3 c1 = bgra_unorm_to_float(vb.Load(indices.y * stride + att.col.offset));
-		float3 c2 = bgra_unorm_to_float(vb.Load(indices.z * stride + att.col.offset));
+		float4 c0 = bgra_unorm_to_float(vb.Load(indices.x * stride + att.col.offset));
+		float4 c1 = bgra_unorm_to_float(vb.Load(indices.y * stride + att.col.offset));
+		float4 c2 = bgra_unorm_to_float(vb.Load(indices.z * stride + att.col.offset));
 
 		c = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
 	}
@@ -217,7 +217,7 @@ float3 fetchVertexColor(RtInstanceAttachments att, uint3 indices, float2 baries)
 		float3 c1 = vb.Load<float3>(indices.y * stride + att.col.offset);
 		float3 c2 = vb.Load<float3>(indices.z * stride + att.col.offset);
 
-		c = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
+		c.rgb = saturate(c0 * (1.0 - baries.y - baries.x) + c1 * baries.x + c2 * baries.y);
 	}
 	
 	return c;
@@ -234,7 +234,6 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 
 	// not sure what to do with this yet
 	// they seem to use this for baked gi
-	//float3 emissive = fetchVertexColor(instance_id, indices, baries);
 
 	const float3 baseColorTint = to_linear_from_srgb(data.diffuse.rgb);
 
@@ -249,6 +248,8 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 
 	float3 combined_base = textureAlbedo.rgb * baseColorTint;
 
+	float opacity = data.diffuse.a * textureAlbedo.a;
+
 	// some textures have zero color as their color which is not physically accurate
 	//combined_base = max(0.05, combined_base);
 
@@ -257,7 +258,7 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	mtrl.base_color = combined_base;
 	mtrl.emissive = 0.0;// emissive;
 	mtrl.metalness = 0.0;
-	mtrl.opacity = data.diffuse.a * textureAlbedo.a;
+	mtrl.opacity = opacity;
 	mtrl.opaque = instance_is_opaque(data);
 	mtrl.type = data.mtrl;
 
@@ -582,8 +583,6 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 
 	ShadeRayResult shade = primaryShade;
 
-	bool is_reflector = false;
-
 	for (uint vertex = 1; vertex < g_constants.pathCount; vertex++)
 	{
 		const float3 V = -ray.Direction;
@@ -591,7 +590,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		bool refraction = false;
 		float reflect_prob = 1.0;
 #if INTEGRATED_GLASS
-		if (shade.mtrl.type == Material_Glass || shade.mtrl.type == Material_Headlight)
+		if (shade.mtrl.type == Material_Glass || shade.mtrl.type == Material_Headlight || shade.mtrl.type == Material_Standard_Additive)
 		{
 			const float ior_air = 1.00029;
 			const float ior_glass = 1.55;
@@ -602,6 +601,11 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			const bool is_reflection = pcg2d_rng(rng).x < reflect_prob;
 			refraction = !is_reflection;
 		}
+		else if (shade.mtrl.type == Material_Standard_Additive)
+		{
+			reflect_prob = get_luminance(shade.mtrl.base_color);
+			refraction = pcg2d_rng(rng).x > reflect_prob;
+		}
 
 		if (refraction)
 		{
@@ -609,15 +613,12 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			ray.Origin = get_ray_origin_offset(ray, shade.surface.pos, N);
 			ray = get_refraction_ray(ray, shade.surface, shade.mtrl, V, throughput, rng);
 			throughput *= 1.0 - reflect_prob;
-
-			//is_reflector = shade.mtrl.type == Material_Headlight;
 		}
 		else
 #endif
 		{
 			ray.Origin = get_ray_origin_offset(ray, shade.surface);
 			ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
-			is_reflector = false;
 			throughput *= reflect_prob;
 		}
 
@@ -632,11 +633,6 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		}
 
 		fetchMaterialAndSurface(ray, hit, shade.mtrl, shade.surface);
-		//if (is_reflector)
-		//{
-		//	//WIP... good? bad?
-		//	shade.mtrl.metalness = 1.0;
-		//}
 		shade = shade_ray(ray, hit, shade.mtrl, shade.surface, rng);
 
 		//shade = shade_ray(ray, hit, rng);
@@ -946,8 +942,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	}
 	else
 	{
-		const uint mask = g_constants.transparentEnable ? InstanceMask_opaque_alphatest : InstanceMask_all;
-		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, mask);
+		RayHit hit = trace_ray_closest_opaque(g_rtScene, ray);
 
 		float4 value = float4(0.0, 0.0, 0.0, 1.0);
 
@@ -980,24 +975,14 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			{
 				const uint3 indices = fetchIndices(att, primitiveIndex);
 				float2 uvs = fetchUvs(att, indices, baries);
-
 				float4 texcolor = fetchTexture(att, uvs);
-				if (g_constants.debugChannel == 0)
-					value.rgb = texcolor.rrr;
-				else if (g_constants.debugChannel == 1)
-					value.rgb = texcolor.ggg;
-				else if (g_constants.debugChannel == 2)
-					value.rgb = texcolor.bbb;
-				else if (g_constants.debugChannel == 3)
-					value.rgb = texcolor.aaa;
-				else
-					value.rgb = texcolor.rgb;
+				value = texcolor;
 			}
 			else if (g_constants.debugView == DebugView_Color)
 			{
 				const uint3 indices = fetchIndices(att, primitiveIndex);
 
-				value.rgb = fetchVertexColor(att, indices, baries);
+				value = fetchVertexColor(att, indices, baries);
 			}
 			else if (g_constants.debugView == DebugView_Motion)
 			{
@@ -1013,9 +998,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			{
 				value.rgb = 0;
 			}
+
+			if (g_constants.debugChannel == 0)
+				value.rgb = value.rrr;
+			else if (g_constants.debugChannel == 1)
+				value.rgb = value.ggg;
+			else if (g_constants.debugChannel == 2)
+				value.rgb = value.bbb;
+			else if (g_constants.debugChannel == 3)
+				value.rgb = value.aaa;
 		}
 
-		g_rtOutput[tid.xy] = value;
+		g_rtOutput[tid.xy] = float4(value.rgb, 1.0);
 	}
 	
 }

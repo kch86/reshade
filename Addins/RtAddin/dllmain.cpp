@@ -378,6 +378,13 @@ MaterialType get_material_type(FrameState frame)
 			type = Material_Glass;
 		}
 	}
+	else if(frame.blend_enable)
+	{
+		if (frame.dst_blend == blend_factor::one)
+		{
+			type = Material_Standard_Additive;
+		}
+	}
 
 	return type;
 }

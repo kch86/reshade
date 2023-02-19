@@ -12,7 +12,7 @@ struct RayHit
 
 RayHit trace_ray_closest_opaque(RaytracingAccelerationStructure tlas, RayDesc ray)
 {
-	RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
+	RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
 
 	const uint ray_flags = 0;
 	const uint ray_instance_mask = 0xffffffff;
