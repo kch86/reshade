@@ -322,6 +322,10 @@ namespace reshade::api
 				/// Structure stride for structured buffers (in bytes), otherwise zero.
 				/// </summary>
 				uint32_t stride = 0;
+				/// <summary>
+				/// Data format of each texel in the texture.
+				/// </summary>
+				format   format = format::unknown;
 			} buffer;
 
 			/// <summary>
