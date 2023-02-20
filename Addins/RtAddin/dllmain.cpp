@@ -111,16 +111,20 @@ namespace
 	struct DynamicResource
 	{
 		scopedresource res[2];
+		scopedresourceview view[2];
 		resource_desc desc;
+		resource_view_desc view_desc;
 		device *dev;
 		uint32_t map_index = 0;
 
 		DynamicResource() = default;
 
-		DynamicResource(device* _dev, resource _res, const resource_desc& _desc)
+		DynamicResource(device* _dev, resource _res, const resource_desc& _desc, resource_view _view, const resource_view_desc& _view_desc)
 		{
 			res[0] = std::move(scopedresource(_dev, _res));
+			view[0] = std::move(scopedresourceview(_dev, _view));
 			desc = _desc;
+			view_desc = _view_desc;
 			dev = _dev;
 		}
 
@@ -136,6 +140,11 @@ namespace
 					nullptr, resource_usage::cpu_access, &d3d12res);
 
 				res[1] = std::move(scopedresource(dev, d3d12res));
+
+				resource_view srv{};
+				dev->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+				view[1] = std::move(scopedresourceview(dev, srv));
 			}
 		}
 
@@ -143,9 +152,9 @@ namespace
 		{
 			if (res[1].handle().handle)
 			{
-				map_index++;
 				uint32_t index = map_index & 1;
 				assert(index == 0 || index == 1);
+				map_index++;
 				return res[index].handle();
 			}
 
@@ -162,6 +171,18 @@ namespace
 			}
 
 			return res[0].handle();
+		}
+
+		resource_view srv()
+		{
+			if (view[1].handle().handle)
+			{
+				uint32_t index = map_index & 1;
+				assert(index == 0 || index == 1);
+				return view[1 - index].handle();
+			}
+
+			return view[0].handle();
 		}
 	};
 
@@ -300,14 +321,13 @@ struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_dat
 
 bvh_manager::AttachmentDesc get_attach_desc(const StreamData::stream &stream, uint32_t count, uint32_t offset, bool is_raw)
 {
-	const uint64_t handle = stream.res.handle == 0 ? 0 : s_shadow_resources[stream.res.handle].handle().handle;
+	const resource_view srv = stream.res.handle == 0 ? resource_view{} : s_shadow_resources[stream.res.handle].srv();
 	return
 	{
-		.res = handle,
+		.srv = srv,
 		.type = resource_type::buffer,
-		.offset = handle == 0 ? 0 : (stream.offset + (offset * stream.stride)) / stream.stride,
+		.offset = srv == 0 ? 0 : (stream.offset + (offset * stream.stride)) / stream.stride,
 		.elem_offset = stream.elem_offset,
-		.count = count,
 		.stride = stream.stride,
 		.fmt = stream.fmt,
 		.view_as_raw = is_raw,
@@ -1003,7 +1023,32 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 			new_desc,
 			nullptr, resource_usage::cpu_access, &d3d12res));
 
-		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc);
+		const bool view_as_raw = desc.usage == resource_usage::vertex_buffer;
+		format fmt = desc.buffer.format;
+		uint32_t offset = 0;
+		uint32_t count = 0;
+		resource_view_flags flags = resource_view_flags::shader_visible;
+		if (view_as_raw)
+		{
+			fmt = format::r32_uint;
+			flags |= resource_view_flags::raw;
+			assert((desc.buffer.size % sizeof(uint32_t)) == 0);
+			count = uint32_t(desc.buffer.size) / sizeof(uint32_t);
+		}
+		else
+		{
+			const uint32_t stride = desc.buffer.format == format::r16_uint ? 2 : 4;
+			assert((desc.buffer.size % stride) == 0);
+			count = uint32_t(desc.buffer.size) / stride;
+		}
+
+		resource_view_desc view_desc(fmt, 0, count);
+		view_desc.flags = flags;
+
+		resource_view srv{};
+		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc, srv, view_desc);
 	}
 	else if (texture)
 	{
@@ -1021,7 +1066,13 @@ static void on_init_resource(device *device, const resource_desc &desc, const su
 			new_desc,
 			nullptr, resource_usage::shader_resource, &d3d12res);
 
-		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc);
+		resource_view_desc view_desc(new_desc.texture.format);
+		view_desc.flags = resource_view_flags::shader_visible;
+
+		resource_view srv{};
+		s_d3d12device->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+		s_shadow_resources[handle.handle] = DynamicResource(s_d3d12device, d3d12res, new_desc, srv, view_desc);
 	}
 }
 static void on_destroy_resource(device *device, resource handle)
@@ -1087,7 +1138,7 @@ void on_unmap_buffer_region(device *device, resource handle)
 			memcpy(ptr, region.buffer.data, (size_t)desc.buffer.size);
 			s_d3d12device->unmap_buffer_region(d3d12res);
 
-			s_bvh_manager.on_geo_updated(s_shadow_resources[handle.handle].handle());
+			s_bvh_manager.on_geo_updated(iter->second.handle());
 		}
 
 		s_mapped_resources.erase(handle.handle);
@@ -1514,7 +1565,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 		get_attach_desc(s_frame_state.stream_data.color, vertex_count, vertex_offset, true),
 		// texture 0 (only if the texcoord is valid)
 		{
-			.res = has_uvs && texhandle != 0 ? s_shadow_resources[texhandle].handle() : resource{0},
+			.srv = has_uvs && texhandle != 0 ? s_shadow_resources[texhandle].srv() : resource_view{0},
 			.type = resource_type::texture_2d,
 			.fmt = format::unknown,
 		},

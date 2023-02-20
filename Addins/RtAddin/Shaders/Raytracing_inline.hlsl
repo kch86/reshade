@@ -98,9 +98,9 @@ uint3 fetchIndices(RtInstanceAttachments att, uint primitive_id)
 	Buffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(att.ib.id)];
 
 	uint3 indices = uint3(
-		ib[primitive_id * 3 + 0],
-		ib[primitive_id * 3 + 1],
-		ib[primitive_id * 3 + 2]);
+		ib[primitive_id * 3 + 0 + att.ib.offset], //offset for the ib is in elements
+		ib[primitive_id * 3 + 1 + att.ib.offset],
+		ib[primitive_id * 3 + 2 + att.ib.offset]);
 
 	return indices;
 }

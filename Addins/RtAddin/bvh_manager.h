@@ -23,14 +23,30 @@ class bvh_manager
 public:
 	struct AttachmentDesc
 	{
-		reshade::api::resource res;
-		reshade::api::resource_type type;
+		reshade::api::resource_view srv = {};
+		reshade::api::resource_type type = {};
 		uint32_t offset = 0; // in elements
-		uint32_t elem_offset = 0; // offset inside the stride
-		uint32_t count = 0;  // in elements
+		uint32_t elem_offset = 0; // offset in bytes inside the stride
 		uint32_t stride = 0; // in bytes
-		reshade::api::format fmt;
+		reshade::api::format fmt = reshade::api::format::unknown;
 		bool view_as_raw = false;
+
+		bool operator==(const AttachmentDesc &other) const
+		{
+			return
+				srv == other.srv &&
+				type == other.type &&
+				offset == other.offset &&
+				elem_offset == other.elem_offset &&
+				stride == other.stride &&
+				fmt == other.fmt &&
+				view_as_raw == other.view_as_raw;
+		}
+
+		bool operator!=(const AttachmentDesc &other) const
+		{
+			return !(*this == other);
+		}
 	};
 
 	struct DrawDesc
@@ -60,17 +76,31 @@ public:
 
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
-private:
+public:
 	template<typename T>
 	struct AttachmentT
 	{
 		struct Elem
 		{
 			T srv;
-			reshade::api::resource orig_res;
 			uint32_t offset; // in elements
 			uint32_t stride; // in bytes
 			uint32_t fmt;
+
+			bool operator == (const Elem& other) const
+			{
+				return
+					//srv == other.srv &&
+					//orig_res.handle == other.orig_res.handle &&
+					offset == other.offset &&
+					stride == other.stride &&
+					fmt == other.fmt;
+			}
+
+			bool operator != (const Elem & other) const
+			{
+				return !(*this == other);
+			}
 		};
 		std::vector<Elem> data;
 	};
@@ -90,12 +120,12 @@ private:
 		bool dynamic;
 	};
 
-	using ScopedAttachment = AttachmentT<scopedresourceview>;
+	using ScopedAttachment = AttachmentT<reshade::api::resource_view>;
 	using Attachment = AttachmentT<reshade::api::resource_view>;
 	using GpuAttachment = AttachmentT<uint32_t>;
 
 	void prune_stale_geo();
-	ScopedAttachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments);
+	ScopedAttachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments, bool create_srv = true);
 	bool attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments);
 
 	std::vector<GeometryState> m_geo_state;
