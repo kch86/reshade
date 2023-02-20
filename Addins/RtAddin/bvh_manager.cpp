@@ -18,9 +18,9 @@ uint32_t get_instance_mask(const BlasBuildDesc &desc)
 	return InstanceMask_opaque;
 }
 
-bvh_manager::ScopedAttachment bvh_manager::build_attachment(command_list* cmd_list, std::span<bvh_manager::AttachmentDesc> attachments, bool create_srv)
+bvh_manager::Attachment bvh_manager::build_attachment(command_list *cmd_list, std::span<bvh_manager::AttachmentDesc> attachments, bool create_srv)
 {
-	ScopedAttachment gpuattach;
+	Attachment gpuattach;
 	for (const AttachmentDesc &attachment : attachments)
 	{
 		resource_view_flags flags = resource_view_flags::shader_visible;
@@ -38,7 +38,7 @@ bvh_manager::ScopedAttachment bvh_manager::build_attachment(command_list* cmd_li
 				offset *= stride;
 			}
 
-			ScopedAttachment::Elem data;
+			Attachment::Elem data;
 			data.srv = attachment.srv;
 			data.offset = offset + attachment.elem_offset;
 			data.stride = stride;
@@ -47,7 +47,7 @@ bvh_manager::ScopedAttachment bvh_manager::build_attachment(command_list* cmd_li
 		}
 		else if (attachment.type == resource_type::texture_2d)
 		{
-			ScopedAttachment::Elem data;
+			Attachment::Elem data;
 			data.srv = attachment.srv;
 			data.offset = 0;
 			data.stride = 0;
@@ -58,15 +58,15 @@ bvh_manager::ScopedAttachment bvh_manager::build_attachment(command_list* cmd_li
 	return gpuattach;
 }
 
-bool bvh_manager::attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments)
+bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<AttachmentDesc> attachments)
 {
 	if (stored.data.size() != attachments.size())
 		return true;
 
-	ScopedAttachment new_att = build_attachment(nullptr, attachments, false);
+	Attachment new_att = build_attachment(nullptr, attachments, false);
 
 	int i = 0;
-	for (const ScopedAttachment::Elem &elem : new_att.data)
+	for (const Attachment::Elem &elem : new_att.data)
 	{
 		if(elem != stored.data[i])
 			return true;
@@ -209,7 +209,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		});
 
 		//TODO: add attachments to instance data
-		ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
+		Attachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 		m_attachments.push_back(std::move(gpuattach));
 	}
 	else
@@ -220,10 +220,10 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		geostate.last_visible = m_frame_id;
 
 		//update the attachments in case they've changed
-		ScopedAttachment &attachment = m_attachments[index];
+		Attachment &attachment = m_attachments[index];
 		if (attachment_is_dirty(attachment, desc.attachments) && instanceIndex == 0)
 		{
-			ScopedAttachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
+			Attachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 			attachment.data.clear();
 			attachment = std::move(gpuattach);
 		}
@@ -283,7 +283,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			instance.flags = rt_instance_flags::none;
 
 			Attachment attachment;
-			for (ScopedAttachment::Elem &elem : m_attachments[i].data)
+			for (Attachment::Elem &elem : m_attachments[i].data)
 			{
 				attachment.data.push_back(Attachment::Elem{
 					.srv = elem.srv,
@@ -337,9 +337,9 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			}
 		}
 
-		m_instances_flat = instances;
-		m_attachments_flat = attachments;
-		m_instance_data_flat = instance_data;
+		m_instances_flat = std::move(instances);
+		m_attachments_flat = std::move(attachments);
+		m_instance_data_flat = std::move(instance_data);
 
 		TlasBuildDesc desc = {
 			.instances = {m_instances_flat.data(), m_instances_flat.size() }

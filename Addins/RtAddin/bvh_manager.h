@@ -120,19 +120,18 @@ public:
 		bool dynamic;
 	};
 
-	using ScopedAttachment = AttachmentT<reshade::api::resource_view>;
 	using Attachment = AttachmentT<reshade::api::resource_view>;
 	using GpuAttachment = AttachmentT<uint32_t>;
 
 	void prune_stale_geo();
-	ScopedAttachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments, bool create_srv = true);
-	bool attachment_is_dirty(const ScopedAttachment &stored, std::span<AttachmentDesc> attachments);
+	Attachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments, bool create_srv = true);
+	bool attachment_is_dirty(const Attachment &stored, std::span<AttachmentDesc> attachments);
 
 	std::vector<GeometryState> m_geo_state;
 	std::vector<BlasBuildDesc> m_geometry;
 	std::vector<scopedresource> m_bvhs;
 	std::vector<std::vector<RtInstance>> m_instances;
-	std::vector<ScopedAttachment> m_attachments;
+	std::vector<Attachment> m_attachments;
 
 	std::vector<reshade::api::rt_instance_desc> m_instances_flat;
 	std::vector<Attachment> m_attachments_flat;
