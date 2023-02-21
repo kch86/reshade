@@ -4,6 +4,7 @@
 struct RayHit
 {
 	float hitT;
+	float minT;
 	uint instanceId;
 	uint primitiveId;
 	float2 barycentrics;
@@ -57,6 +58,20 @@ RayHit trace_ray_closest_opaque_mask(RaytracingAccelerationStructure tlas, RayDe
 	return hit;
 }
 
+struct RayCandidate
+{
+	bool hit;
+	float opacity;
+
+	static RayCandidate init(bool hit, float opacity)
+	{
+		RayCandidate c;
+		c.hit = hit;
+		c.opacity = opacity;
+		return c;
+	}
+};
+
 template<typename T>
 RayHit trace_ray_closest_transparent(RaytracingAccelerationStructure tlas, RayDesc ray, uint ray_instance_mask)
 {
@@ -74,7 +89,8 @@ RayHit trace_ray_closest_transparent(RaytracingAccelerationStructure tlas, RayDe
 		hit.barycentrics = query.CandidateTriangleBarycentrics();
 		hit.transform = query.CandidateObjectToWorld3x4();
 
-		if (T::visit(ray, hit))
+		RayCandidate c = T::visit(ray, hit);
+		if (c.hit)
 		{
 			query.CommitNonOpaqueTriangleHit();
 		}
@@ -103,6 +119,8 @@ RayHit trace_ray_closest_any(RaytracingAccelerationStructure tlas, RayDesc ray, 
 	const uint ray_flags = 0;
 	query.TraceRayInline(tlas, ray_flags, ray_instance_mask, ray);
 
+	float minT = ray.TMax;
+
 	while (query.Proceed())
 	{
 		RayHit hit;
@@ -112,14 +130,19 @@ RayHit trace_ray_closest_any(RaytracingAccelerationStructure tlas, RayDesc ray, 
 		hit.barycentrics = query.CandidateTriangleBarycentrics();
 		hit.transform = query.CandidateObjectToWorld3x4();
 
-		if (T::visit(ray, hit))
+		RayCandidate c = T::visit(ray, hit);
+		if (c.hit)
 		{
 			query.CommitNonOpaqueTriangleHit();
 		}
+
+		if(c.opacity > 0.0)
+			minT = min(minT, hit.hitT);
 	}
 
 	RayHit hit = (RayHit)0;
 	hit.hitT = -1.0;
+	hit.minT = -1.0;
 
 	if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 	{
@@ -128,6 +151,7 @@ RayHit trace_ray_closest_any(RaytracingAccelerationStructure tlas, RayDesc ray, 
 		hit.primitiveId = query.CommittedPrimitiveIndex();
 		hit.barycentrics = query.CommittedTriangleBarycentrics();
 		hit.transform = query.CommittedObjectToWorld3x4();
+		hit.minT = min(minT, hit.hitT);
 	}
 
 	return hit;
@@ -174,7 +198,8 @@ RayHit trace_ray_occlusion_any(RaytracingAccelerationStructure tlas, RayDesc ray
 		hit.barycentrics = query.CandidateTriangleBarycentrics();
 		hit.transform = query.CandidateObjectToWorld3x4();
 
-		if (T::visit(ray, hit))
+		RayCandidate c = T::visit(ray, hit);
+		if (c.hit)
 		{
 			query.CommitNonOpaqueTriangleHit();
 		}

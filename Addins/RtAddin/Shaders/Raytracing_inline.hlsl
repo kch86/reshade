@@ -323,7 +323,7 @@ uint get_ray_mask()
 struct Visitor
 {
 	static uint2 rng;
-	static bool visit(RayDesc ray, RayHit hit)
+	static RayCandidate visit(RayDesc ray, RayHit hit)
 	{
 		// adding this is a repro
 		/*if (g_constants.debugView != DebugView_None)
@@ -331,7 +331,7 @@ struct Visitor
 
 #if INTEGRATED_TRANSMISSION == 0 && OPAQUE_TRANSPARENCY == 0
 		if (g_constants.transparentEnable == false)
-			return true;
+			return RayCandidate::init( true, 1.0 );
 #endif
 
 		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
@@ -353,7 +353,7 @@ struct Visitor
 		{
 			if (opacity > 0.0)
 			{
-				return true;
+				return RayCandidate::init( true, 1.0 );
 			}
 		}
 		else
@@ -364,7 +364,7 @@ struct Visitor
 			{
 				if (opacity > 0.0)
 				{
-					return true;
+					return RayCandidate::init( true, 1.0 );
 				}
 			}
 			else
@@ -373,19 +373,19 @@ struct Visitor
 				// else treat as opaque and roll the dice
 				if (opacity > pcg2d_rng(rng).x)
 				{
-					return true;
+					return RayCandidate::init( true, opacity );
 				}
 			}
 		}		
 
-		return false;
+		return RayCandidate::init( false, opacity );
 	}
 };
 uint2 Visitor::rng;
 
 struct VisitorShadow
 {
-	static bool visit(RayDesc ray, RayHit hit)
+	static RayCandidate visit(RayDesc ray, RayHit hit)
 	{
 		RtInstanceData data = g_instance_data_buffer[hit.instanceId];
 
@@ -398,10 +398,10 @@ struct VisitorShadow
 
 		if (opacity > 0.0)
 		{
-			return true;
+			return RayCandidate::init( true, 1.0 );
 		}
 
-		return false;
+		return RayCandidate::init( false, 1.0 );
 	}
 };
 
@@ -932,21 +932,33 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		const float prevHitT = g_hitHistory[tid.xy];
 
 #if INTEGRATED_TRANSMISSION || OPAQUE_TRANSPARENCY
-		const bool hitInvalidate = false;
+		const float hitT = hit.minT;
 #else
-		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;
+		const float hitT = hit.hitT;
 #endif
+		const float hit_diff = abs(hit.minT - hit.hitT);
+		const float hit_thresh = hit_diff > 0.5 ? 100.0 : 2.1;
+		// subtract .1 to account for loss of precision in the storage
+		const float hit_weight = saturate((abs(hitT - prevHitT) - .1) / hit_thresh);
 
-		const bool motionInvalidate = dot(mv, mv) > 0.1;
-		const bool reset = g_constants.frameIndex == 0 || motionInvalidate || hitInvalidate;
+		// divide by maximum accepted mv length (10 cm)
+		const float motion_weight = saturate(dot(mv, mv) / 0.1);
 
 		float4 prevRadiance = g_rtOutput[tid.xy];
-		float weight = reset ? 1.0f : 1.0f / (1.0f + (1.0f / prevRadiance.a));
+		const float time_weight = 1.0f / (1.0f + (1.0f / prevRadiance.a));
+
+		float weight = 0.0;
+		weight = time_weight;
+		weight = lerp(weight, 1.0, hit_weight);
+		weight = lerp(weight, 1.0, motion_weight);
+
+		const bool reset = g_constants.frameIndex == 0;
+		weight = reset ? 1.0 : saturate(weight);
 		radiance = lerp(prevRadiance.rgb, radiance, weight);
 #endif // variance clamping
 
 		g_rtOutput[tid.xy] = float4(radiance, weight);
-		g_hitHistory[tid.xy] = hit.hitT;
+		g_hitHistory[tid.xy] = hitT;
 	}
 	else
 	{
