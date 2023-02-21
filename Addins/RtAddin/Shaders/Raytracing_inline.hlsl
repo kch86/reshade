@@ -6,7 +6,7 @@
 
 #define EXTRACT_PRIMARY 1
 #define SAMPLE_SPEUCULAR_GGX 1
-#define INTEGRATED_GLASS 1
+#define INTEGRATED_TRANSMISSION 1
 #define OPAQUE_TRANSPARENCY 1
 
 struct Shade
@@ -313,7 +313,7 @@ float3 get_ray_origin_offset(RayDesc ray, Surface surface)
 
 uint get_ray_mask()
 {
-	#if INTEGRATED_GLASS || OPAQUE_TRANSPARENCY
+	#if INTEGRATED_TRANSMISSION || OPAQUE_TRANSPARENCY
 		return InstanceMask_all;
 	#else
 		return InstanceMask_opaque_alphatest;
@@ -329,7 +329,7 @@ struct Visitor
 		/*if (g_constants.debugView != DebugView_None)
 			return true;*/
 
-#if INTEGRATED_GLASS == 0 && OPAQUE_TRANSPARENCY == 0
+#if INTEGRATED_TRANSMISSION == 0 && OPAQUE_TRANSPARENCY == 0
 		if (g_constants.transparentEnable == false)
 			return true;
 #endif
@@ -358,7 +358,7 @@ struct Visitor
 		}
 		else
 		{
-#if INTEGRATED_GLASS
+#if INTEGRATED_TRANSMISSION
 			// if glass or headlight just make sure we're not 100% transparent
 			if (data.mtrl == Material_Glass || data.mtrl == Material_Headlight)
 			{
@@ -587,39 +587,47 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	{
 		const float3 V = -ray.Direction;
 
-		bool refraction = false;
-		float reflect_prob = 1.0;
-#if INTEGRATED_GLASS
-		if (shade.mtrl.type == Material_Glass || shade.mtrl.type == Material_Headlight || shade.mtrl.type == Material_Standard_Additive)
+#if INTEGRATED_TRANSMISSION
+		bool is_transmission = false;
+		float reflect_pdf = 1.0;
+		float3 transmission = 1.0;
+		if (shade.mtrl.type == Material_Glass || shade.mtrl.type == Material_Headlight)
 		{
 			const float ior_air = 1.00029;
 			const float ior_glass = 1.55;
 			const float eta = ior_air / ior_glass;
 
-			float NoV = abs(dot(shade.surface.shading_normal, V));
-			reflect_prob = f_dialectric(eta, NoV);
-			const bool is_reflection = pcg2d_rng(rng).x < reflect_prob;
-			refraction = !is_reflection;
+			const float NoV = abs(dot(normalize(shade.surface.shading_normal), V));
+			const float Rp = f_dialectric(eta, NoV); // reflectance prob
+			const float Tp = 1.0 - Rp; // transmission prob
+
+			reflect_pdf = Rp / (Rp + Tp);
+			const bool is_reflection = pcg2d_rng(rng).x < reflect_pdf;
+			is_transmission = !is_reflection;
+
+			const float3 glass_tint = saturate(shade.mtrl.tint * 2.0 + 0.2);
+			transmission = glass_tint;
 		}
 		else if (shade.mtrl.type == Material_Standard_Additive)
 		{
-			reflect_prob = get_luminance(shade.mtrl.base_color);
-			refraction = pcg2d_rng(rng).x > reflect_prob;
+			reflect_pdf = get_luminance(shade.mtrl.base_color);
+			is_transmission = pcg2d_rng(rng).x > reflect_pdf;
 		}
 
-		if (refraction)
+		if (is_transmission)
 		{
 			float3 N = -shade.surface.shading_normal;
 			ray.Origin = get_ray_origin_offset(ray, shade.surface.pos, N);
 			ray = get_refraction_ray(ray, shade.surface, shade.mtrl, V, throughput, rng);
-			throughput *= 1.0 - reflect_prob;
+			throughput *= rcp(1.0 - reflect_pdf);
+			throughput *= transmission;
 		}
 		else
 #endif
 		{
 			ray.Origin = get_ray_origin_offset(ray, shade.surface);
 			ray.Direction = get_indirect_ray(shade.surface, shade.mtrl, shade.shade, V, throughput, rng);
-			throughput *= reflect_prob;
+			throughput *= rcp(reflect_pdf);
 		}
 
 		Visitor::rng = rng;
@@ -845,7 +853,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		}
 
 		//trace transparent
-#if INTEGRATED_GLASS == 0 && OPAQUE_TRANSPARENCY == 0
+#if INTEGRATED_TRANSMISSION == 0 && OPAQUE_TRANSPARENCY == 0
 		if(g_constants.transparentEnable)
 		{
 			RayHit primaryHit = hit;
@@ -923,7 +931,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 #else // !variance clamping
 		const float prevHitT = g_hitHistory[tid.xy];
 
-#if INTEGRATED_GLASS || OPAQUE_TRANSPARENCY
+#if INTEGRATED_TRANSMISSION || OPAQUE_TRANSPARENCY
 		const bool hitInvalidate = false;
 #else
 		const bool hitInvalidate = abs(hit.hitT - prevHitT) > 0.1;

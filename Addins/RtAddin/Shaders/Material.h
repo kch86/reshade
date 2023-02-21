@@ -113,6 +113,7 @@ float3 f_schlick(float3 F0, float VoX)
 // eta - relative index of refraction "from" / "to"
 float f_dialectric(float eta, float VoN)
 {
+#if 1
 	float saSq = eta * eta * (1.0 - VoN * VoN);
 
 	// Cosine of angle between negative normal and transmitted direction ( 0 for total internal reflection )
@@ -122,6 +123,28 @@ float f_dialectric(float eta, float VoN)
 	float Rp = (eta * ca - VoN) * rcp_safe(eta * ca + VoN);
 
 	return 0.5 * (Rs * Rs + Rp * Rp);
+#else
+	// pbrt reference
+	float cosTheta_i = VoN;
+
+	if (cosTheta_i < 0)
+	{
+		eta = 1 / eta;
+		cosTheta_i = -cosTheta_i;
+	}
+
+	float sin2Theta_i = 1 - sqr(cosTheta_i);
+	float sin2Theta_t = sin2Theta_i / sqr(eta);
+
+	if (sin2Theta_t >= 1)
+		return 1.0;
+
+	float cosTheta_t = sqrt_safe(1 - sin2Theta_t);
+
+	float r_parl = (eta * cosTheta_i - cosTheta_t) / (eta * cosTheta_i + cosTheta_t);
+	float r_perp = (cosTheta_i - eta * cosTheta_t) / (cosTheta_i + eta * cosTheta_t);
+	return (sqr(r_parl) + sqr(r_perp)) / 2;
+#endif
 }
 
 float d_ggx(Brdf brdf)

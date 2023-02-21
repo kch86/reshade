@@ -6,7 +6,9 @@
 #define M_INV_PI 0.318309886183790671537768
 
 #define sqrt_sat(x) sqrt(saturate(x))
+#define sqrt_safe(x) sqrt(max(0.0, x))
 #define rcp_safe(x) rcp(max(x, 1e-15))
+#define sqr(x) (x * x)
 
 float3x3 create_basis(in float3 N)
 {
