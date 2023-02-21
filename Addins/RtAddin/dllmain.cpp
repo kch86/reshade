@@ -27,12 +27,16 @@ extern "C" { __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\
 //ray tracing includes
 #include "raytracing.h"
 #include "bvh_manager.h"
-#include "CompiledShaders/Raytracing_inline.hlsl.h"
-#include "CompiledShaders/Raytracing_blit_vs.hlsl.h"
-#include "CompiledShaders/Raytracing_blit_ps.hlsl.h"
 #include "Shaders/RtShared.h"
 #include "hash.h"
 #include "camera.h"
+
+#define INCLUDE_RT_SHADERS 0
+#if INCLUDE_RT_SHADERS
+#include "CompiledShaders/Raytracing_inline.hlsl.h"
+#endif
+#include "CompiledShaders/Raytracing_blit_vs.hlsl.h"
+#include "CompiledShaders/Raytracing_blit_ps.hlsl.h"
 
 using namespace reshade::api;
 using namespace DirectX;
@@ -509,7 +513,7 @@ static void on_init_swapchain(swapchain *swapchain)
 
 static void load_rt_pipeline()
 {
-#if 1
+#if INCLUDE_RT_SHADERS == 0
 	const char *file_name = "Shaders/Raytracing_inline.cso";
 	std::ifstream t(file_name, std::ios::binary);
 
