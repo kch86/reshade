@@ -1783,7 +1783,7 @@ bool create_trace_resources(uint32_t width, uint32_t height, resource_desc src_d
 			resource_desc desc = src_desc;
 			desc.usage = resource_usage::unordered_access | resource_usage::shader_resource;
 			desc.heap = memory_heap::gpu_only;
-			desc.texture.format = format::r16_float;
+			desc.texture.format = format::r16g16_float;
 
 			resource res;
 			s_d3d12device->create_resource(desc, nullptr, resource_usage::unordered_access, &res);

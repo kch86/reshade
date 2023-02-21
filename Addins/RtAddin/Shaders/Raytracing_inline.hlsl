@@ -34,7 +34,7 @@ StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
 TextureCube<float3> g_spec_cube : register(t2, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
-RWTexture2D<float> g_hitHistory : register(u1);
+RWTexture2D<float2> g_hitHistory : register(u1);
 
 cbuffer constants : register(b0)
 {
@@ -929,7 +929,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		radiance = lerp(radiance, prevRadiance.rgb, weight);
 		weight = saturate(1.0 / 2.0 - weight);
 #else // !variance clamping
-		const float prevHitT = g_hitHistory[tid.xy];
+		const float prevHitT = g_hitHistory[tid.xy].x;
+		const float prevMv = g_hitHistory[tid.xy].y;
 
 #if INTEGRATED_TRANSMISSION || OPAQUE_TRANSPARENCY
 		const float hitT = hit.minT;
@@ -941,15 +942,18 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		// subtract .1 to account for loss of precision in the storage
 		const float hit_weight = saturate((abs(hitT - prevHitT) - .1) / hit_thresh);
 
-		// divide by maximum accepted mv length (10 cm)
-		const float motion_weight = saturate(dot(mv, mv) / 0.1);
+		// divide by maximum accepted mv length (8 cm)
+		const float motion_len2 = dot(mv, mv);
+		const float motion_weight = saturate(motion_len2 / 0.08);
+
+		const float hit_lerp = (motion_len2 + prevMv ) > 0.0 ? 1.0 : 0.5;
 
 		float4 prevRadiance = g_rtOutput[tid.xy];
 		const float time_weight = 1.0f / (1.0f + (1.0f / prevRadiance.a));
 
 		float weight = 0.0;
 		weight = time_weight;
-		weight = lerp(weight, 1.0, hit_weight);
+		weight = lerp(weight, hit_lerp, hit_weight);
 		weight = lerp(weight, 1.0, motion_weight);
 
 		const bool reset = g_constants.frameIndex == 0;
@@ -958,7 +962,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 #endif // variance clamping
 
 		g_rtOutput[tid.xy] = float4(radiance, weight);
-		g_hitHistory[tid.xy] = hitT;
+		g_hitHistory[tid.xy] = float2(hitT, motion_len2);
 	}
 	else
 	{
