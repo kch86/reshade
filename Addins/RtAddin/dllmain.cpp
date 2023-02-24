@@ -30,6 +30,7 @@ extern "C" { __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\
 #include "Shaders/RtShared.h"
 #include "hash.h"
 #include "camera.h"
+#include "timing.h"
 
 #define INCLUDE_RT_SHADERS 0
 #if INCLUDE_RT_SHADERS
@@ -303,6 +304,7 @@ namespace
 	GameCamera s_game_camera;
 	FpsCamera s_camera;
 	uint32_t s_frame_id = 0;
+	uint32_t s_rt_timer = 0;
 
 	bool s_d3d_debug_enabled = false;
 }
@@ -683,8 +685,12 @@ static void on_init_command_queue(command_queue *cmd_queue)
 {
 	if (cmd_queue->get_device()->get_api() == device_api::d3d12)
 	{
-		if ((cmd_queue->get_type() & command_queue_type::graphics) != 0)
+		if (!s_d3d12cmdqueue && (cmd_queue->get_type() & command_queue_type::graphics) != 0)
+		{
 			s_d3d12cmdqueue = cmd_queue;
+			timing::init(s_d3d12cmdqueue, 64);
+			s_rt_timer = timing::alloc_timer_handle();
+		}
 	}
 }
 static void on_destroy_command_queue(command_queue *cmd_list)
@@ -1612,6 +1618,7 @@ static void on_present(effect_runtime *runtime)
 	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
+	timing::flush(s_d3d12device);
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_frame_state.draw_count = 0;
@@ -1920,10 +1927,15 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	s_d3d12cmdlist->push_constants(shader_stage::compute, s_pipeline_layout, param_index, 0, sizeof(RtConstants) / sizeof(int), &cb);
 
-	// dispatch
-	const uint32_t groupX = (width + 7) / 8;
-	const uint32_t groupY = (height + 7) / 8;
-	s_d3d12cmdlist->dispatch(groupX, groupY, 1);
+	timing::start_timer(s_d3d12cmdlist, s_rt_timer);
+	{
+
+		// dispatch
+		const uint32_t groupX = (width + 7) / 8;
+		const uint32_t groupY = (height + 7) / 8;
+		s_d3d12cmdlist->dispatch(groupX, groupY, 1);
+	}
+	timing::stop_timer(s_d3d12cmdlist, s_rt_timer);
 
 	s_d3d12cmdlist->barrier(s_output.handle(), resource_usage::unordered_access, resource_usage::shader_resource);
 }
@@ -2049,6 +2061,8 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	ID3D12Fence *fence12 = reinterpret_cast<ID3D12Fence *>(fence);
 	unlock_resource(runtime->get_device(), signal, fence12, output_target);
 
+	timing::set_fence(fence, signal);
+
 	//return true to skip the reshade runtime from drawing the pass
 	return true;
 }
@@ -2140,6 +2154,9 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("Pathtrace iter count: ", &s_ui_pathtrace_iter_count, 1, 10);
 	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
 
+	float timer = timing::get_timer_value(s_rt_timer);
+	ImGui::Text("trace: %.2fms", timer);
+
 	if (path_count != s_ui_pathtrace_path_count || use_game_camera != s_ui_use_game_camera)
 	{
 		s_frame_id = 0;
@@ -2190,6 +2207,8 @@ static void do_shutdown()
 
 	s_dynamic_resources.clear();
 	s_shadow_resources.clear();
+
+	timing::destroy(s_d3d12device);
 
 	// all resource frees must happen before this as they will add to the deferred delete list
 	// otherwise the delete order doesn't matter (resources vs srvs)
