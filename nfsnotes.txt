@@ -10,7 +10,6 @@ todo:
 -- copy the device_imple update_texture_region (create temp texture ondemand)
 - convert to list of barriers for bvhs built the current frame
 - make warning disable list configurable through the .ini
-- go through reshade for wrap/unwrap commands
 - crash with execute command list goes away when using my own render target :-/
 -- this occurs when i have the debug layer enabled... :-|
 -- repro with dx9 sample and send to ms
@@ -29,26 +28,19 @@ todo:
 - add smarter way to free blases that haven't been seen or built in a while
 -- linkedlist, deque?
 - decode all the texcoord stream elements
--- missing the albedo color as well....
 - only do 3+ bounces if you've hit a mirror surface
-- city background is broken with glass support addition
--- it's actual "transparency", same as the smoke so I need a solution for both of these things
--- the city background should just be emissive
 - alpha-test support is expensive...
 -- is there a better way here?
-- car paint:
--- no alphatest/transparency
--- has cubemap
--- specific shader (not unique)
 - add instance color data debug mode
-- add timing queries
 - pass my camera to the game
-- glass doesn't show in the reflections
--- sample last frame's glass on glass hit?
--- treat as opaque and continue path inside the glass?
 - blinking hazard lights are done by changing the texture every frame
 -- make an emmissive material for this
 - better material for head lights?
+- put translucents (like particles) in a separate pass and do a separate reflection trace against them
+-- this needs its own history buffer
+- add json loading/storing for the light scene
+- add obj loading for emissive light shapes
+- add diffuse/specular split for future denoising
 
 //car vs layout
 //   HarmonicCoeff c0      10
