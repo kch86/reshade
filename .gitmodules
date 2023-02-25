@@ -35,3 +35,6 @@
 [submodule "deps/rapidobj"]
 	path = deps/rapidobj
 	url = https://github.com/guybrush77/rapidobj
+[submodule "deps/rapidjson"]
+	path = deps/rapidjson
+	url = https://github.com/Tencent/rapidjson
