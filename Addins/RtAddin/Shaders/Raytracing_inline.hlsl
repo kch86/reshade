@@ -322,7 +322,7 @@ uint get_ray_mask()
 
 struct Visitor
 {
-	static uint2 rng;
+	static Rng rng;
 	static RayCandidate visit(RayDesc ray, RayHit hit)
 	{
 		// adding this is a repro
@@ -371,7 +371,7 @@ struct Visitor
 #endif
 			{
 				// else treat as opaque and roll the dice
-				if (opacity > pcg2d_rng(rng).x)
+				if (opacity > rng.gen().x)
 				{
 					return RayCandidate::init( true, opacity );
 				}
@@ -381,7 +381,7 @@ struct Visitor
 		return RayCandidate::init( false, opacity );
 	}
 };
-uint2 Visitor::rng;
+Rng Visitor::rng;
 
 struct VisitorShadow
 {
@@ -446,7 +446,7 @@ Shade shadeSurface(Surface surface, Material mtrl, float3 V)
 	return shade;
 }
 
-ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface, inout uint2 rng, bool shadow = true)
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface, inout Rng rng, bool shadow = true)
 {
 	const float3 to_view = normalize(ray.Origin - surface.pos);
 
@@ -459,7 +459,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 	if(shade.attenuation > 0.0 && shadow)
 	{
 		float3x3 basis = create_basis_fast(g_constants.sunDirection); // TODO: move to CB
-		const float2 xy = pcg2d_rng(rng) * g_constants.sunRadius;
+		const float2 xy = rng.gen() * g_constants.sunRadius;
 		float3 sunDirection = normalize(basis[0] * xy.x + basis[1] * xy.y + basis[2]);
 
 		ray.Direction = normalize(sunDirection);
@@ -482,7 +482,7 @@ ShadeRayResult shade_ray(RayDesc ray, RayHit hit, Material mtrl, Surface surface
 	return result;
 }
 
-ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout uint2 rng)
+ShadeRayResult shade_ray(RayDesc ray, RayHit hit, inout Rng rng)
 {
 	// fetch data
 	Material mtrl;
@@ -499,7 +499,7 @@ float3 get_sky(float3 dir)
 	return lerp(low, high, saturate(dir.z)) * 1.0;
 }
 
-float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, inout float3 throughput, inout uint2 rng)
+float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, inout float3 throughput, inout Rng rng)
 {
 	// do multiple importance sampling
 	// choose spec or diffuse ray based on estimated specular strength
@@ -508,13 +508,13 @@ float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, i
 #if SAMPLE_SPEUCULAR_GGX
 	const float brdf_prob = estimate_specular_probability_ross(mtrl, surface.shading_normal, V);
 
-	if (pcg2d_rng(rng).x < brdf_prob)
+	if (rng.gen().x < brdf_prob)
 	{
 		//specular ray
 		throughput *= rcp(brdf_prob);
 
 		// do anisotropic ray generation
-		SpecularRay spec_ray = get_specular_ray_vndf_ggx(pcg2d_rng(rng), mtrl, surface.shading_normal, V);
+		SpecularRay spec_ray = get_specular_ray_vndf_ggx(rng.gen(), mtrl, surface.shading_normal, V);
 		throughput *= spec_ray.weight;
 		ray_dir = spec_ray.dir;
 	}
@@ -523,13 +523,13 @@ float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, i
 		//diffuse ray
 		throughput *= rcp(1.0 - brdf_prob);
 		throughput *= shade.diffuse_reflectance; //weight by NoL and 1-F?
-		ray_dir = get_diffuse_ray(pcg2d_rng(rng), surface.geom_normal);
+		ray_dir = get_diffuse_ray(rng.gen(), surface.geom_normal);
 	}
 #else
 	const float brdf_prob = estimate_specular_probability_simple(mtrl);
 
-	ray_dir = get_diffuse_ray(pcg2d_rng(rng), surface.geom_normal);
-	if (pcg2d_rng(rng).x < brdf_prob)
+	ray_dir = get_diffuse_ray(rng.gen(), surface.geom_normal);
+	if (rng.gen().x < brdf_prob)
 	{
 		//specular ray
 		throughput *= rcp(brdf_prob);
@@ -550,7 +550,7 @@ float3 get_indirect_ray(Surface surface, Material mtrl, Shade shade, float3 V, i
 	return ray_dir;
 }
 
-RayDesc get_refraction_ray(RayDesc ray, Surface surface, Material mtrl, float3 V, inout float3 throughput, inout uint2 rng)
+RayDesc get_refraction_ray(RayDesc ray, Surface surface, Material mtrl, float3 V, inout float3 throughput, inout Rng rng)
 {
 	const float ior_air = 1.00029;
 	const float ior_glass = 1.55;
@@ -573,7 +573,7 @@ RayDesc get_refraction_ray(RayDesc ray, Surface surface, Material mtrl, float3 V
 	return ray;
 }
 
-float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
+float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout Rng rng)
 {
 #if EXTRACT_PRIMARY
 	float3 total_radiance = primaryShade.radiance + primaryShade.mtrl.emissive;
@@ -602,7 +602,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 			const float Tp = 1.0 - Rp; // transmission prob
 
 			reflect_pdf = Rp / (Rp + Tp);
-			const bool is_reflection = pcg2d_rng(rng).x < reflect_pdf;
+			const bool is_reflection = rng.gen().x < reflect_pdf;
 			is_transmission = !is_reflection;
 
 			const float3 glass_tint = saturate(shade.mtrl.tint * 2.0 + 0.2);
@@ -611,7 +611,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		else if (shade.mtrl.type == Material_Standard_Additive)
 		{
 			reflect_pdf = get_luminance(shade.mtrl.base_color);
-			is_transmission = pcg2d_rng(rng).x > reflect_pdf;
+			is_transmission = rng.gen().x > reflect_pdf;
 		}
 
 		if (is_transmission)
@@ -653,7 +653,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		// even though not all paths take this, it does help perf
 		{
 			const float kill = get_luminance(throughput);
-			if (pcg2d_rng(rng).x > kill)
+			if (rng.gen().x > kill)
 				break;
 
 			// mul throughput by the pdf of the decision
@@ -685,7 +685,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 		if (vertex > 1)
 		{
 			const float kill = get_luminance(throughput);
-			if (pcg2d_rng(rng).x > kill)
+			if (rng.gen().x > kill)
 				break;
 
 			// throughput by the pdf of the decision
@@ -701,7 +701,7 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout uint2 rng)
 	return total_radiance;
 }
 
-float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout uint2 rng)
+float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_reflection, uint additional_bounces, inout Rng rng)
 {
 	float3 total_radiance = 0.0;
 	float3 transmittance = 1.0;
@@ -727,7 +727,7 @@ float3 trace_transparent(RayDesc ray, ShadeRayResult primaryShade, bool is_refle
 		if (vertex == 0)
 			transmittance *= is_reflection ? F : 1.0 - F;
 		else
-			is_reflection = pcg2d_rng(rng).x < F;
+			is_reflection = rng.gen().x < F;
 
 		float3 N = is_reflection ? shade.surface.shading_normal : -shade.surface.shading_normal;
 		ray.Origin = get_ray_origin_offset(ray, shade.surface.pos, N);
@@ -824,20 +824,23 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 	if (g_constants.debugView == DebugView_None)
 	{
 		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
+		Rng rng;
+		rng.init(seed, RngType::Pcg2d);
+
 		float3 radiance = 0.0;
 
 		// send a primary ray, ignoring transparent geo, but include alpha-tested geo
-		Visitor::rng = seed;
+		Visitor::rng = rng;
 		RayHit hit = trace_ray_closest_any<Visitor>(g_rtScene, ray, get_ray_mask());
 
 		float3 mv = 0.0;
 		if (hit.hitT >= 0.0)
 		{
-			ShadeRayResult shade = shade_ray(ray, hit, seed);
+			ShadeRayResult shade = shade_ray(ray, hit, rng);
 
 			for (int i = 0; i < g_constants.iterCount; i++)
 			{
-				radiance += path_trace(ray, shade, seed);
+				radiance += path_trace(ray, shade, rng);
 			}
 			radiance /= float(g_constants.iterCount);
 
@@ -874,10 +877,10 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				float3 transparent = 0.0;
 
-				shade = shade_ray(trans_ray, trans_hit, shade.mtrl, shade.surface, seed);
+				shade = shade_ray(trans_ray, trans_hit, shade.mtrl, shade.surface, rng);
 				transparent += shade.radiance;
-				transparent += trace_transparent(trans_ray, shade, true, 2, seed);
-				transparent += trace_transparent(trans_ray, shade, false, 2, seed);
+				transparent += trace_transparent(trans_ray, shade, true, 2, rng);
+				transparent += trace_transparent(trans_ray, shade, false, 2, rng);
 
 				// replace the radiance with our radiance
 				radiance = transparent;

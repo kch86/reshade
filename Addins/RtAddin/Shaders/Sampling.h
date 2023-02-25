@@ -18,6 +18,31 @@ float2 pcg2d_rng(inout uint2 seed)
 	return float2(seed) * 2.32830643654e-10;
 }
 
+enum RngType
+{
+	Pcg2d
+};
+
+struct Rng
+{
+	uint2 _seed;
+	RngType _type;
+
+	void init(uint2 s, RngType type)
+	{
+		_seed = s;
+		_type = type;
+	}
+	float2 gen()
+	{
+		if (_type == RngType::Pcg2d)
+		{
+			return pcg2d_rng(_seed);
+		}
+		return 0.0.xx;
+	}
+};
+
 float3 sample_sphere(float2 u)
 {
 	float z = 2.0 * u[1] - 1.0;
