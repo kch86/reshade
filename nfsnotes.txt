@@ -41,6 +41,8 @@ todo:
 - add json loading/storing for the light scene
 - add obj loading for emissive light shapes
 - add diffuse/specular split for future denoising
+- add better rng.
+-- strat sobol + bluenoise?
 
 //car vs layout
 //   HarmonicCoeff c0      10
