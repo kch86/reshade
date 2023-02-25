@@ -48,12 +48,12 @@ namespace timing
 
 	void start_timer(command_list* cmd_list, uint32_t timer)
 	{
-		cmd_list->end_query(s_timer_pool, query_type::timestamp, timer * 2 + 0);
+		cmd_list->end_query(s_timer_pool, query_type::timestamp, timer * 2 + 0, query_flags::none);
 	}
 
 	void stop_timer(command_list *cmd_list, uint32_t timer)
 	{
-		cmd_list->end_query(s_timer_pool, query_type::timestamp, timer * 2 + 1);
+		cmd_list->end_query(s_timer_pool, query_type::timestamp, timer * 2 + 1, query_flags::none);
 	}
 
 	float get_timer_value(uint32_t timer)
@@ -71,7 +71,7 @@ namespace timing
 		return ms;
 	}
 
-	void flush(reshade::api::device* device)
+	void flush(command_list *cmd_list)
 	{
 		if (s_fence1)
 		{
@@ -85,7 +85,8 @@ namespace timing
 			}
 		}		
 
-		device->get_query_pool_results(s_timer_pool, 0, s_timer_count * 2, s_read_back_data.data(), sizeof(uint64_t));
+		cmd_list->get_device()->get_query_pool_results(s_timer_pool, 0, s_timer_count * 2, s_read_back_data.data(), sizeof(uint64_t));
+		cmd_list->copy_query_pool_results(s_timer_pool, query_type::timestamp, 0, s_timer_count * 2, resource{ 0 }, 0, sizeof(uint64_t));
 	}
 
 	void set_fence(uint64_t fence, uint64_t signal)

@@ -1618,7 +1618,7 @@ static void on_present(effect_runtime *runtime)
 	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
-	timing::flush(s_d3d12device);
+	timing::flush(s_d3d12cmdlist);
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
 	s_frame_state.draw_count = 0;

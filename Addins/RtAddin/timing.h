@@ -17,6 +17,6 @@ namespace timing
 	void start_timer(reshade::api::command_list* cmd_list, uint32_t timer);
 	void stop_timer(reshade::api::command_list* cmd_list, uint32_t timer);
 	float get_timer_value(uint32_t timer);
-	void flush(reshade::api::device* device);
+	void flush(reshade::api::command_list* cmd_list);
 	void set_fence(uint64_t fence, uint64_t signal);
 }
