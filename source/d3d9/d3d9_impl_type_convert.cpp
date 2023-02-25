@@ -356,15 +356,15 @@ auto reshade::d3d9::convert_sampler_substate(D3DSAMPLERSTATETYPE type, DWORD val
 			break;
 		case D3DSAMP_MIPMAPLODBIAS:
 			state.type = api::sampler_substate_type::mipmaplodbias;
-			state.mip_lod_bias = value;
+			state.mip_lod_bias = (float)value;
 			break;
 		case D3DSAMP_MAXMIPLEVEL:
 			state.type = api::sampler_substate_type::maxmiplevel;
-			state.max_lod = value;
+			state.max_lod = (float)value;
 			break;
 		case D3DSAMP_MAXANISOTROPY:
 			state.type = api::sampler_substate_type::maxanisotropy;
-			state.max_anisotropy = value;
+			state.max_anisotropy = (float)value;
 			break;
 		case D3DSAMP_SRGBTEXTURE:
 			break;

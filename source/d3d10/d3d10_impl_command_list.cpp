@@ -504,7 +504,7 @@ void reshade::d3d10::device_impl::begin_query(api::query_pool pool, api::query_t
 
 	reinterpret_cast<query_pool_impl *>(pool.handle)->queries[index]->Begin();
 }
-void reshade::d3d10::device_impl::end_query(api::query_pool pool, api::query_type, uint32_t index)
+void reshade::d3d10::device_impl::end_query(api::query_pool pool, api::query_type, uint32_t index, api::query_flags)
 {
 	assert(pool.handle != 0);
 

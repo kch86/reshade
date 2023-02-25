@@ -958,7 +958,7 @@ void reshade::d3d12::command_list_impl::begin_query(api::query_pool pool, api::q
 
 	_orig->BeginQuery(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), index);
 }
-void reshade::d3d12::command_list_impl::end_query(api::query_pool pool, api::query_type type, uint32_t index)
+void reshade::d3d12::command_list_impl::end_query(api::query_pool pool, api::query_type type, uint32_t index, api::query_flags flags)
 {
 	_has_commands = true;
 
@@ -968,12 +968,16 @@ void reshade::d3d12::command_list_impl::end_query(api::query_pool pool, api::que
 	const auto d3d_query_type = convert_query_type(type);
 	_orig->EndQuery(heap_object, d3d_query_type, index);
 
-	com_ptr<ID3D12Resource> readback_resource;
-	UINT extra_data_size = sizeof(ID3D12Resource *);
-	if (SUCCEEDED(heap_object->GetPrivateData(extra_data_guid, &extra_data_size, &readback_resource)))
+	if ((flags & api::query_flags::auto_resolve) != 0)
 	{
-		_orig->ResolveQueryData(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), index, 1, readback_resource.get(), index * sizeof(uint64_t));
+		com_ptr<ID3D12Resource> readback_resource;
+		UINT extra_data_size = sizeof(ID3D12Resource *);
+		if (SUCCEEDED(heap_object->GetPrivateData(extra_data_guid, &extra_data_size, &readback_resource)))
+		{
+			_orig->ResolveQueryData(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), index, 1, readback_resource.get(), index * sizeof(uint64_t));
+		}
 	}
+	
 }
 void reshade::d3d12::command_list_impl::copy_query_pool_results(api::query_pool pool, api::query_type type, uint32_t first, uint32_t count, api::resource dst, uint64_t dst_offset, uint32_t stride)
 {
@@ -981,8 +985,19 @@ void reshade::d3d12::command_list_impl::copy_query_pool_results(api::query_pool 
 
 	assert(pool.handle != 0);
 	assert(stride == sizeof(uint64_t));
+	const auto heap_object = reinterpret_cast<ID3D12QueryHeap *>(pool.handle);
 
-	_orig->ResolveQueryData(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), first, count, reinterpret_cast<ID3D12Resource *>(dst.handle), dst_offset);
+	com_ptr<ID3D12Resource> readback_resource;
+	UINT extra_data_size = sizeof(ID3D12Resource *);
+	if (dst.handle == 0 && SUCCEEDED(heap_object->GetPrivateData(extra_data_guid, &extra_data_size, &readback_resource)))
+	{
+		_orig->ResolveQueryData(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), first, count, readback_resource.get(), dst_offset);
+	}
+	else
+	{
+		assert(dst.handle != 0);
+		_orig->ResolveQueryData(reinterpret_cast<ID3D12QueryHeap *>(pool.handle), convert_query_type(type), first, count, reinterpret_cast<ID3D12Resource *>(dst.handle), dst_offset);
+	}	
 }
 
 void reshade::d3d12::command_list_impl::begin_debug_event(const char *label, const float color[4])

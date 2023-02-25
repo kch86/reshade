@@ -949,6 +949,16 @@ namespace reshade::api
 	};
 
 	/// <summary>
+	/// The available query flags.
+	/// </summary>
+	enum class query_flags
+	{
+		none = 0,
+		auto_resolve = 1 << 0, //auto resolves on end query if the internal readback buffer is not null
+	};
+	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(query_flags);
+
+	/// <summary>
 	/// An opaque handle to a query pool.
 	/// <para>In D3D12 this is a pointer to a 'ID3D12QueryHeap' object, in Vulkan a 'VkQueryPool' handle.</para>
 	/// </summary>

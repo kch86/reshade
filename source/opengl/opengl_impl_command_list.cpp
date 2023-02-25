@@ -1482,7 +1482,7 @@ void reshade::opengl::render_context_impl::begin_query(api::query_pool pool, api
 		break;
 	}
 }
-void reshade::opengl::render_context_impl::end_query(api::query_pool pool, api::query_type type, uint32_t index)
+void reshade::opengl::render_context_impl::end_query(api::query_pool pool, api::query_type type, uint32_t index, api::query_flags)
 {
 	assert(pool.handle != 0);
 

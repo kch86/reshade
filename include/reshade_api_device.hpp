@@ -891,7 +891,7 @@ namespace reshade::api
 		/// <param name="pool">Query pool that will manage the results of the query.</param>
 		/// <param name="type">Type of the query end.</param>
 		/// <param name="index">Index of the query in the pool.</param>
-		virtual void end_query(query_pool pool, query_type type, uint32_t index) = 0;
+		virtual void end_query(query_pool pool, query_type type, uint32_t index, query_flags flags = query_flags::auto_resolve) = 0;
 		/// <summary>
 		/// Copies the results of queries in a query pool to a buffer resource.
 		/// </summary>

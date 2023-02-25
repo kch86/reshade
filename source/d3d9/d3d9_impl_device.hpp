@@ -120,7 +120,7 @@ namespace reshade::d3d9
 		void generate_mipmaps(api::resource_view srv) final;
 
 		void begin_query(api::query_pool pool, api::query_type type, uint32_t index) final;
-		void end_query(api::query_pool pool, api::query_type type, uint32_t index) final;
+		void end_query(api::query_pool pool, api::query_type type, uint32_t index, api::query_flags flags) final;
 		void copy_query_pool_results(api::query_pool pool, api::query_type type, uint32_t first, uint32_t count, api::resource dest, uint64_t dest_offset, uint32_t stride) final;
 
 		void begin_debug_event(const char *label, const float color[4]) final;
