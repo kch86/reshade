@@ -32,3 +32,6 @@
 [submodule "deps/xxhash"]
 	path = deps/xxhash
 	url = https://github.com/Cyan4973/xxHash
+[submodule "deps/rapidobj"]
+	path = deps/rapidobj
+	url = https://github.com/guybrush77/rapidobj
