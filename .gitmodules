@@ -29,3 +29,6 @@
 [submodule "d3d12"]
 	path = deps/d3d12
 	url = https://github.com/microsoft/DirectX-Headers.git
+[submodule "deps/xxhash"]
+	path = deps/xxhash
+	url = https://github.com/Cyan4973/xxHash
