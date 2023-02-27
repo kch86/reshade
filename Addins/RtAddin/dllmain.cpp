@@ -396,16 +396,20 @@ MaterialType get_material_type(FrameState frame)
 
 	MaterialType type = Material_Standard;
 
-	if (is_car_shader && frame.blend_enable)
+	if (is_car_shader)
 	{
-		if (frame.dst_blend == blend_factor::one)
+		type = Material_Coat;
+		if (frame.blend_enable)
 		{
-			type = Material_Headlight;
-		}
-		else
-		{
-			type = Material_Glass;
-		}
+			if (frame.dst_blend == blend_factor::one)
+			{
+				type = Material_Headlight;
+			}
+			else
+			{
+				type = Material_Glass;
+			}
+		}		
 	}
 	else if(frame.blend_enable)
 	{

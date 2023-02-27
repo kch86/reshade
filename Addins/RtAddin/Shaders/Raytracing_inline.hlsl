@@ -269,11 +269,15 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	{
 		// this usually helps roughness
 		// the ground uses alpha for puddles, but the cars seem to benefit too
-		roughness *= textureAlbedo.a;
+
+		// don't let the stard enviro get too glossy
+		float roughness_scale = textureAlbedo.a;
+		roughness_scale = data.mtrl == Material_Standard ? max(roughness_scale, 0.1) : roughness_scale;
+		roughness *= roughness_scale;
 	}
 	else
 	{
-		// only do this for glass
+		// only do this for glass?
 		roughness = lerp(roughness, 1.0, mtrl.opacity);
 	}
 
