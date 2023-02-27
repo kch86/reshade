@@ -732,7 +732,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 			{
 				const input_element &elem = reinterpret_cast<input_element *>(object.data)[elemIdx];
 
-				stream_count = max(elem.buffer_binding + 1u, stream_count);
+				stream_count = std::max(elem.buffer_binding + 1u, stream_count);
 
 				if (strstr(elem.semantic, "POSITION") != nullptr)
 				{
@@ -1366,7 +1366,7 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				auto get_roughness2 = [=](float spec_power, float spec_min, float env_power) {
 					float s = spec_power;
 					//float e = max(0.4f, env_power);
-					float e = max(0.0f, min(1.0f, 1.0f - env_power));
+					float e = std::max(0.0f, std::min(1.0f, 1.0f - env_power));
 					float m = spec_min == 0.0f ? 1.0f : spec_min;
 					s = (s * m) / e;
 					float roughness = sqrtf(2.0f / (s + 2.0f));

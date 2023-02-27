@@ -84,7 +84,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;RTADDIN_EXPORTS;_WINDOWS;_USRDLL;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;RTADDIN_EXPORTS;_WINDOWS;_USRDLL;ImTextureID=ImU64;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -164,6 +164,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hash.cpp" />
     <ClCompile Include="raytracing.cpp" />
+    <ClCompile Include="sample_gen.cpp" />
     <ClCompile Include="state_tracking.cpp" />
     <ClCompile Include="timing.cpp" />
   </ItemGroup>
@@ -174,6 +175,7 @@
     <ClInclude Include="dxhelpers.h" />
     <ClInclude Include="hash.h" />
     <ClInclude Include="raytracing.h" />
+    <ClInclude Include="sample_gen.h" />
     <ClInclude Include="Shaders\Color.h" />
     <ClInclude Include="Shaders\Math.h" />
     <ClInclude Include="Shaders\HlslCompat.h" />

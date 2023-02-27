@@ -42,6 +42,9 @@
     <ClCompile Include="timing.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sample_gen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="state_tracking.hpp">
@@ -90,6 +93,9 @@
       <Filter>Shaders</Filter>
     </ClInclude>
     <ClInclude Include="timing.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sample_gen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
