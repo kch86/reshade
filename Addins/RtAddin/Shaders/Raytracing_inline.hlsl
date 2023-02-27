@@ -32,6 +32,7 @@ RaytracingAccelerationStructure g_rtScene : register(t0, space0);
 StructuredBuffer<RtInstanceAttachments> g_attachments_buffer : register(t0, space1);
 StructuredBuffer<RtInstanceData> g_instance_data_buffer : register(t1, space1);
 TextureCube<float3> g_spec_cube : register(t2, space1);
+Buffer<float> g_sample_buffer : register(t3, space1);
 
 RWTexture2D<float4> g_rtOutput : register(u0);
 RWTexture2D<float2> g_hitHistory : register(u1);
@@ -587,6 +588,8 @@ float3 path_trace(RayDesc ray, ShadeRayResult primaryShade, inout Rng rng)
 	{
 		const float3 V = -ray.Direction;
 
+		rng.set_dim(vertex);
+
 #if INTEGRATED_TRANSMISSION
 		bool is_transmission = false;
 		float reflect_pdf = 1.0;
@@ -823,9 +826,17 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	if (g_constants.debugView == DebugView_None)
 	{
-		uint2 seed = uint2(tid.xy) ^ uint2(g_constants.frameIndex.xx << 16);
 		Rng rng;
-		rng.init(seed, RngType::Pcg2d);
+		rng.init(tid.xy, g_constants.frameIndex, RngType::Pcg);
+		rng.set_sample_offset(g_constants.frameIndex * 32);
+
+		if (tid.x > (width / 2))
+		{
+			rng.init(tid.xy, g_constants.frameIndex, RngType::Halton);
+			rng.set_dim(0);
+			rng.set_sample_offset(g_constants.frameIndex * 32);
+			rng.set_buffer(g_sample_buffer);
+		}		
 
 		float3 radiance = 0.0;
 

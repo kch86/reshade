@@ -31,6 +31,7 @@ extern "C" { __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\
 #include "hash.h"
 #include "camera.h"
 #include "timing.h"
+#include "sample_gen.h"
 
 #define INCLUDE_RT_SHADERS 0
 #if INCLUDE_RT_SHADERS
@@ -242,6 +243,8 @@ namespace
 	scopedresourceview s_attachments_srv;
 	scopedresource s_instance_data_buffer;
 	scopedresourceview s_instance_data_srv;
+	scopedresource s_samples_buffer;
+	scopedresourceview s_samples_srv;
 	pipeline_layout s_pipeline_layout;
 	pipeline s_pipeline;
 
@@ -555,7 +558,7 @@ static void load_rt_pipeline()
 	pipeline_layout_param params[] = {
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::sampler}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 0, .count = 1, .visibility = shader_stage::compute, .type = descriptor_type::acceleration_structure}),
-			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 3, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
+			pipeline_layout_param(descriptor_range{.binding = 0, .dx_register_space = 1, .count = 4, .visibility = shader_stage::compute, .type = descriptor_type::shader_resource_view}),
 			pipeline_layout_param(descriptor_range{.binding = 0, .count = 2, .visibility = shader_stage::compute, .type = descriptor_type::unordered_access_view}),
 			pipeline_layout_param(constant_range{.binding = 0, .count = sizeof(RtConstants) / sizeof(int), .visibility = shader_stage::compute}),
 	};
@@ -642,6 +645,11 @@ static void init_default_resources()
 
 	sampler_desc s_desc{};
 	s_d3d12device->create_sampler(s_desc, &s_spec_cube_sampler);
+
+	// 8 for max path count
+	auto [res, view] = sample_gen::gen_sobol_sequence(s_d3d12device, 8, 2048);
+	s_samples_buffer = scopedresource(s_d3d12device, res);
+	s_samples_srv = scopedresourceview(s_d3d12device, view);
 }
 
 static void on_init_device(device *device)
@@ -657,9 +665,6 @@ static void on_init_device(device *device)
 	else if (device->get_api() == device_api::d3d12)
 	{
 		s_d3d12device = device;
-
-		init_pipeline();
-		init_default_resources();
 	}
 }
 static void on_destroy_device(device *device)
@@ -674,6 +679,9 @@ static void on_init_command_list(command_list *cmd_list)
 	if (cmd_list->get_device()->get_api() == device_api::d3d12)
 	{
 		s_d3d12cmdlist = cmd_list;
+
+		init_pipeline();
+		init_default_resources();
 	}
 }
 static void on_destroy_command_list(command_list *cmd_list)
@@ -1885,6 +1893,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		get_srv(s_attachments_srv),
 		get_srv(s_instance_data_srv),
 		get_srv2(spec_srv),
+		get_srv(s_samples_srv)
 	};
 
 	resource_view uavs[] = {
