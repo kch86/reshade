@@ -83,10 +83,10 @@ namespace timing
 			{
 				return;
 			}
-		}		
 
-		cmd_list->get_device()->get_query_pool_results(s_timer_pool, 0, s_timer_count * 2, s_read_back_data.data(), sizeof(uint64_t));
-		cmd_list->copy_query_pool_results(s_timer_pool, query_type::timestamp, 0, s_timer_count * 2, resource{ 0 }, 0, sizeof(uint64_t));
+			cmd_list->get_device()->get_query_pool_results(s_timer_pool, 0, s_timer_alloc_index * 2, s_read_back_data.data(), sizeof(uint64_t));
+			cmd_list->copy_query_pool_results(s_timer_pool, query_type::timestamp, 0, s_timer_alloc_index * 2, resource{ 0 }, 0, sizeof(uint64_t));
+		}		
 	}
 
 	void set_fence(uint64_t fence, uint64_t signal)
