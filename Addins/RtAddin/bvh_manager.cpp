@@ -80,6 +80,7 @@ bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<Attach
 void bvh_manager::update()
 {
 	m_per_frame_instance_counts.clear();
+	prune_stale_geo();
 	m_frame_id++;
 }
 
@@ -102,12 +103,21 @@ void bvh_manager::update_vbs(std::span<const resource> buffers)
 
 void bvh_manager::prune_stale_geo()
 {
-	// currently unused, leaving here for future use if I need it
+	constexpr uint32_t PruneCount = 10;
+
 	// erase from our geometry and bvh list
 	uint32_t count = m_geometry.size();
-	for (uint32_t i = 0; i < count; i++)
+	uint32_t end = std::min(count, m_prune_iter + PruneCount);
+	uint32_t pruned = 0;
+
+	for (uint32_t i = m_prune_iter; i < end; i++)
 	{
-		if (m_geo_state[i].needs_rebuild && (m_frame_id - m_geo_state[i].last_rebuild) > 100)
+		const uint32_t build_delta = m_frame_id - m_geo_state[i].last_rebuild;
+		const uint32_t visible_delta = m_frame_id - m_geo_state[i].last_visible;
+
+		const bool prune = (m_geo_state[i].needs_rebuild && visible_delta > 100) ||
+						   (visible_delta > 100);
+		if (prune)
 		{
 			m_geometry[i] = m_geometry[count - 1];
 
@@ -126,19 +136,29 @@ void bvh_manager::prune_stale_geo()
 
 			// decrement count to match erasing 1 element
 			--count;
+
+			++pruned;
 		}
+
+		++m_prune_iter;
 	}
+
 	m_geometry.resize(count);
 	m_bvhs.resize(count);
 	m_instances.resize(count);
 	m_attachments.resize(count);
 	m_geo_state.resize(count);
+
+	if (m_prune_iter >= count)
+	{
+		m_prune_iter = 0;
+	}
 }
 
 void bvh_manager::on_geo_updated(resource res)
 {
 	// schedule a rebuild when geo is updated
-	uint32_t count = m_geometry.size();
+	const uint32_t count = m_geometry.size();
 	for (uint32_t i = 0; i < count; i++)
 	{
 		if (m_geometry[i].vb.res == res.handle)
@@ -211,6 +231,9 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		//TODO: add attachments to instance data
 		Attachment gpuattach = build_attachment(desc.cmd_list, desc.attachments);
 		m_attachments.push_back(std::move(gpuattach));
+
+		//reset prune iter since the data may have changed
+		m_prune_iter = 0;
 	}
 	else
 	{

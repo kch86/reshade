@@ -140,4 +140,5 @@ public:
 
 	uint64_t m_current_draw_stream_hash = 0;
 	uint32_t m_frame_id = 0;
+	uint32_t m_prune_iter = 0;
 };
