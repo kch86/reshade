@@ -79,6 +79,8 @@ bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<Attach
 
 void bvh_manager::update()
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	m_per_frame_instance_counts.clear();
 	prune_stale_geo();
 	m_frame_id++;
@@ -106,11 +108,13 @@ void bvh_manager::prune_stale_geo()
 	constexpr uint32_t PruneCount = 10;
 
 	// erase from our geometry and bvh list
-	uint32_t count = m_geometry.size();
+	uint32_t orig_count = m_geometry.size();
+	uint32_t count = orig_count;
 	uint32_t end = std::min(count, m_prune_iter + PruneCount);
 	uint32_t pruned = 0;
+	uint32_t prune_iter = m_prune_iter;
 
-	for (uint32_t i = m_prune_iter; i < end; i++)
+	for (uint32_t i = prune_iter; i < end; i++)
 	{
 		const uint32_t build_delta = m_frame_id - m_geo_state[i].last_rebuild;
 		const uint32_t visible_delta = m_frame_id - m_geo_state[i].last_visible;
@@ -136,12 +140,19 @@ void bvh_manager::prune_stale_geo()
 
 			// decrement count to match erasing 1 element
 			--count;
+			--end;
 
 			++pruned;
 		}
 
 		++m_prune_iter;
+
+		if (i == 0 || i < prune_iter)
+		{
+			break;
+		}
 	}
+	m_prune_iter += pruned;
 
 	m_geometry.resize(count);
 	m_bvhs.resize(count);
@@ -157,6 +168,8 @@ void bvh_manager::prune_stale_geo()
 
 void bvh_manager::on_geo_updated(resource res)
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	// schedule a rebuild when geo is updated
 	const uint32_t count = m_geometry.size();
 	for (uint32_t i = 0; i < count; i++)
@@ -170,6 +183,8 @@ void bvh_manager::on_geo_updated(resource res)
 
 void bvh_manager::on_geo_draw(DrawDesc& desc)
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	struct
 	{
 		BlasBuildDesc desc;
@@ -276,6 +291,8 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 
 scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* cmd_list, command_queue* cmd_queue)
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	if (m_bvhs.size() > 0)
 	{
 		std::vector<rt_instance_desc> instances;
@@ -375,6 +392,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 
 std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(reshade::api::command_list *cmd_list)
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	if (m_attachments_flat.size() > 0)
 	{
 		device *d = cmd_list->get_device();
@@ -441,6 +460,8 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 
 std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(reshade::api::command_list *cmd_list)
 {
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+
 	if (m_instance_data_flat.size() > 0)
 	{
 		device *d = cmd_list->get_device();

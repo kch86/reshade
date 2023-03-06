@@ -1169,6 +1169,8 @@ void on_unmap_buffer_region(device *device, resource handle)
 
 static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
 {
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
 	if (s_resources.find(resource.handle) != s_resources.end())
 	{
 		if (s_shadow_resources.contains(resource.handle))

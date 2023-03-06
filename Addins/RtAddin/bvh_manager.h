@@ -3,6 +3,7 @@
 #include <span>
 #include <vector>
 #include <unordered_map>
+#include <shared_mutex>
 #include <DirectXMath.h>
 #include "raytracing.h"
 #include "Shaders/RtShared.h"
@@ -137,6 +138,8 @@ public:
 	std::vector<Attachment> m_attachments_flat;
 	std::vector<RtInstanceData> m_instance_data_flat;
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
+
+	std::shared_mutex m_mutex;
 
 	uint64_t m_current_draw_stream_hash = 0;
 	uint32_t m_frame_id = 0;
