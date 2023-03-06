@@ -276,7 +276,7 @@ namespace
 	float s_ui_bounce_boost = 1.0f;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
-	int s_ui_pathtrace_path_count = 4;
+	int s_ui_pathtrace_path_count = 3;
 	int s_ui_pathtrace_iter_count = 2;
 	int s_ui_show_debug = 0;
 	int s_ui_debug_channel = 4;
