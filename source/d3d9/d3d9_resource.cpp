@@ -383,6 +383,29 @@ HRESULT STDMETHODCALLTYPE IDirect3DCubeTexture9_UnlockRect(IDirect3DCubeTexture9
 
 HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Lock(IDirect3DVertexBuffer9 *pVertexBuffer, UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags)
 {
+#if 1
+	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pVertexBuffer))
+	{
+		const HRESULT hr = reshade::hooks::call(IDirect3DVertexBuffer9_Lock, vtable_from_instance(pVertexBuffer) + 11)(pVertexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
+		assert(SUCCEEDED(hr));
+
+		assert(ppbData != nullptr);
+		reshade::invoke_addon_event<reshade::addon_event::map_buffer_region>(
+			device_proxy,
+			to_handle(pVertexBuffer),
+			OffsetToLock,
+			SizeToLock != 0 ? SizeToLock : UINT64_MAX,
+			reshade::d3d9::convert_access_flags(Flags),
+			ppbData);
+		return hr;
+	}
+	else
+	{
+		const HRESULT hr = reshade::hooks::call(IDirect3DVertexBuffer9_Lock, vtable_from_instance(pVertexBuffer) + 11)(pVertexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
+		assert(SUCCEEDED(hr));
+		return hr;
+	}
+#else
 	const HRESULT hr = reshade::hooks::call(IDirect3DVertexBuffer9_Lock, vtable_from_instance(pVertexBuffer) + 11)(pVertexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
 	if (SUCCEEDED(hr))
 	{
@@ -401,42 +424,61 @@ HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Lock(IDirect3DVertexBuffer9 *pV
 	}
 
 	return hr;
+#endif
 }
 HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_Unlock(IDirect3DVertexBuffer9 *pVertexBuffer)
 {
+#if 1
+	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pVertexBuffer))
+	{
+		reshade::api::map_range desc = reshade::invoke_addon_event<reshade::addon_event::unmap_buffer_region>(device_proxy, to_handle(pVertexBuffer));
+		if (desc.data)
+		{
+			memcpy(desc.dst_data, desc.data, (size_t)desc.size);
+		}
+	}
+	
+	return reshade::hooks::call(IDirect3DVertexBuffer9_Unlock, vtable_from_instance(pVertexBuffer) + 12)(pVertexBuffer);
+#else
 	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pVertexBuffer))
 	{
 		reshade::invoke_addon_event<reshade::addon_event::unmap_buffer_region>(device_proxy, to_handle(pVertexBuffer));
 	}
 
 	return reshade::hooks::call(IDirect3DVertexBuffer9_Unlock, vtable_from_instance(pVertexBuffer) + 12)(pVertexBuffer);
+#endif
 }
 
 HRESULT STDMETHODCALLTYPE IDirect3DVertexBuffer9_SetPrivateData(IDirect3DVertexBuffer9 *pVertexBuffer, REFGUID refguid, const void *pData, DWORD SizeOfData, DWORD Flags)
 {
-	static GUID filter[] = {
-		{4043337370, 7249, 19188, {172, 239, 54, 5, 210, 212, 200, 238} },
-		{3606990736, 29111, 18236, {190, 131, 234, 33, 9, 122, 163, 235} },
-	};
-	bool filter_guid = false;
-	for (auto &guid : filter)
-	{
-		if (guid == refguid)
-		{
-			filter_guid = true;
-			break;
-		}
-	}
-
-	if (!filter_guid)
-	{
-		printf("help");
-	}
 	return reshade::hooks::call(IDirect3DVertexBuffer9_SetPrivateData, vtable_from_instance(pVertexBuffer) + 4)(pVertexBuffer, refguid, pData, SizeOfData, Flags);
 }
 
 HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Lock(IDirect3DIndexBuffer9 *pIndexBuffer, UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags)
 {
+#if 1
+	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pIndexBuffer))
+	{
+		const HRESULT hr = reshade::hooks::call(IDirect3DIndexBuffer9_Lock, vtable_from_instance(pIndexBuffer) + 11)(pIndexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
+		assert(SUCCEEDED(hr));
+
+		reshade::invoke_addon_event<reshade::addon_event::map_buffer_region>(
+				device_proxy,
+				to_handle(pIndexBuffer),
+				OffsetToLock,
+				SizeToLock != 0 ? SizeToLock : UINT64_MAX,
+				reshade::d3d9::convert_access_flags(Flags),
+				ppbData);
+
+		return hr;
+	}
+	else
+	{
+		const HRESULT hr = reshade::hooks::call(IDirect3DIndexBuffer9_Lock, vtable_from_instance(pIndexBuffer) + 11)(pIndexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
+		assert(SUCCEEDED(hr));
+		return hr;
+	}
+#else
 	const HRESULT hr = reshade::hooks::call(IDirect3DIndexBuffer9_Lock, vtable_from_instance(pIndexBuffer) + 11)(pIndexBuffer, OffsetToLock, SizeToLock, ppbData, Flags);
 	if (SUCCEEDED(hr))
 	{
@@ -455,37 +497,34 @@ HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Lock(IDirect3DIndexBuffer9 *pInd
 	}
 
 	return hr;
+#endif
 }
 HRESULT STDMETHODCALLTYPE IDirect3DIndexBuffer9_Unlock(IDirect3DIndexBuffer9 *pIndexBuffer)
 {
+#if 1
+	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pIndexBuffer))
+	{
+		reshade::api::map_range desc = reshade::invoke_addon_event<reshade::addon_event::unmap_buffer_region>(device_proxy, to_handle(pIndexBuffer));
+
+		if (desc.data)
+		{
+			memcpy(desc.dst_data, desc.data, (size_t)desc.size);
+		}
+	}
+
+	return reshade::hooks::call(IDirect3DIndexBuffer9_Unlock, vtable_from_instance(pIndexBuffer) + 12)(pIndexBuffer);
+#else
 	if (const auto device_proxy = get_private_pointer_d3d9<Direct3DDevice9>(pIndexBuffer))
 	{
 		reshade::invoke_addon_event<reshade::addon_event::unmap_buffer_region>(device_proxy, to_handle(pIndexBuffer));
 	}
 
 	return reshade::hooks::call(IDirect3DIndexBuffer9_Unlock, vtable_from_instance(pIndexBuffer) + 12)(pIndexBuffer);
+#endif
 }
 
 HRESULT __stdcall IDirect3DResource9_SetPrivateData(IDirect3DResource9 *pResource, REFGUID refguid, const void *pData, DWORD SizeOfData, DWORD Flags)
 {
-	static GUID filter[] = {
-		{4043337370, 7249, 19188, {172, 239, 54, 5, 210, 212, 200, 238} },
-		{3606990736, 29111, 18236, {190, 131, 234, 33, 9, 122, 163, 235} },
-	};
-	bool filter_guid = false;
-	for (auto &guid : filter)
-	{
-		if (guid == refguid)
-		{
-			filter_guid = true;
-			break;
-		}
-	}
-
-	if (!filter_guid)
-	{
-		printf("help");
-	}
 	return reshade::hooks::call(IDirect3DResource9_SetPrivateData, vtable_from_instance(pResource) + 4)(pResource, refguid, pData, SizeOfData, Flags);
 }
 

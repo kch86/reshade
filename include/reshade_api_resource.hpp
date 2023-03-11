@@ -208,6 +208,29 @@ namespace reshade::api
 	};
 
 	/// <summary>
+	/// A map description
+	/// </summary>
+	struct map_range
+	{
+		/// <summary>
+		/// Constant buffer resource.
+		/// </summary>
+		void* data = nullptr;
+		void *dst_data = nullptr;
+		/// <summary>
+		/// Offset from the start of the buffer resource (in bytes).
+		/// </summary>
+		uint64_t offset = 0;
+		/// <summary>
+		/// Number of elements this range covers in the buffer resource (in bytes).
+		/// Set to -1 (UINT64_MAX) to indicate that the whole buffer should be used.
+		/// </summary>
+		uint64_t size = UINT64_MAX;
+
+		map_access access_flags = map_access::write_discard;
+	};
+
+	/// <summary>
 	/// The available memory heap types, which give a hint as to where to place the memory allocation for a resource.
 	/// </summary>
 	enum class memory_heap : uint32_t

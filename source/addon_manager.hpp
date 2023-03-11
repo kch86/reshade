@@ -145,6 +145,27 @@ namespace reshade
 				return true;
 		return false;
 	}
+	/// <summary>
+	/// Invokes registered callbacks for the specified <typeparamref name="ev"/>ent until a callback reports back as having handled this event by returning <see langword="true"/>.
+	/// </summary>
+	template <addon_event ev, typename... Args>
+	__forceinline std::enable_if_t<std::is_same_v<typename addon_event_traits<ev>::type, reshade::api::map_range>, reshade::api::map_range> invoke_addon_event(Args &&... args)
+	{
+#  if RESHADE_ADDON_LITE
+		if (!addon_enabled)
+			return reshade::api::map_range{};
+#  endif
+		std::vector<void *> &event_list = addon_event_list[static_cast<uint32_t>(ev)];
+		for (size_t cb = 0, count = event_list.size(); cb < count; ++cb)
+		{
+			reshade::api::map_range desc = reinterpret_cast<typename addon_event_traits<ev>::decl>(event_list[cb])(std::forward<Args>(args)...);
+			if (desc.data)
+			{
+				return desc;
+			}
+		}
+		return reshade::api::map_range{};
+	}
 }
 
 #endif
