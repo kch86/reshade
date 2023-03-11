@@ -43,6 +43,10 @@ todo:
 - add diffuse/specular split for future denoising
 - add better rng.
 -- strat sobol + bluenoise?
+- use profiler to see where cpu frame time is going
+-- debug is ~20ms on top of the game
+-- release is ~10ms on top of the game
+-- much higher in the actual game. probably all the buffer updates
 
 //car vs layout
 //   HarmonicCoeff c0      10
