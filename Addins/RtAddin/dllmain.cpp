@@ -55,6 +55,10 @@ namespace
 	{
 		struct Buffer {
 			void *data;
+			void *dst_data;
+			uint64_t offset;
+			uint64_t size;
+			map_access flags;
 		};
 
 		struct Texture {
@@ -1105,9 +1109,14 @@ static void on_destroy_resource(device *device, resource handle)
 	s_resources.erase(handle.handle);
 }
 
-void on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
+bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (!s_ui_enable)
+	{
+		return false;
+	}
 
 	resource_desc desc = device->get_resource_desc(handle);
 
@@ -1115,20 +1124,88 @@ void on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 	{
 		if (s_resources.find(handle.handle) != s_resources.end())
 		{
-			s_mapped_resources[handle.handle] = MapRegion{
+			resource_desc desc = device->get_resource_desc(handle);
+
+			uint64_t map_size = size == UINT64_MAX ? desc.buffer.size : size;
+
+			MapRegion region = MapRegion{
 				.buffer = MapRegion::Buffer{
-					.data = *data
+					.data = malloc((size_t)map_size),
+					.dst_data = *data,
+					.offset = offset,
+					.size = map_size,
+					.flags = access
 				}
 			};
+
+			*data = region.buffer.data;
+
+			s_mapped_resources[handle.handle] = region;
 			if (access == map_access::write_discard)
 			{
 				s_dynamic_resources.insert(handle.handle);
 				s_shadow_resources[handle.handle].set_dynamic();
 			}
 		}
+
+		return true;
 	}
+
+	return false;
 }
-void on_unmap_buffer_region(device *device, resource handle)
+map_range on_unmap_buffer_region(device *device, resource handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (!s_ui_enable)
+	{
+		return map_range{};
+	}
+
+	//create shadow copy
+	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
+	{
+		const MapRegion &region = s_mapped_resources[handle.handle];
+		if (!s_ui_pause)
+		{
+			const resource_desc &desc = s_resources[handle.handle];
+			assert(region.buffer.size <= desc.buffer.size);
+			assert((region.buffer.offset + region.buffer.size) <= desc.buffer.size);
+
+			auto iter = s_shadow_resources.find(handle.handle);
+			assert(iter != s_shadow_resources.end());
+			resource d3d12res = iter->second.get_map_resource();
+
+			void *ptr;
+			s_d3d12device->map_buffer_region(d3d12res, region.buffer.offset, region.buffer.size, map_access::write_only, &ptr);
+			memcpy(ptr, region.buffer.data, (size_t)region.buffer.size);
+			s_d3d12device->unmap_buffer_region(d3d12res);
+
+			s_bvh_manager.on_geo_updated(iter->second.handle());
+
+			//defer free the malloc so the ptr is valid by the caller
+			reshade::api::alloc handle = { (uint64_t)region.buffer.data };
+			scopedalloc alloc(s_d3d12device, handle);
+		}
+
+		// copy the range data as the erase will clear out this data
+		map_range range = map_range{
+			.data = region.buffer.data,
+			.dst_data = region.buffer.dst_data,
+			.offset = region.buffer.offset,
+			.size = region.buffer.size,
+			.access_flags = region.buffer.flags
+		};
+
+		s_mapped_resources.erase(handle.handle);
+
+		return range;
+	}
+
+	return map_range{};
+}
+
+static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
 {
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
@@ -1136,40 +1213,6 @@ void on_unmap_buffer_region(device *device, resource handle)
 	{
 		return;
 	}
-
-	//create shadow copy
-	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
-	{
-		if (!s_ui_pause)
-		{
-			const MapRegion &region = s_mapped_resources[handle.handle];
-
-			const resource_desc &desc = s_resources[handle.handle];
-
-			auto iter = s_shadow_resources.find(handle.handle);
-			assert(iter != s_shadow_resources.end());
-			resource d3d12res = iter->second.get_map_resource();
-
-			// TODO/HACK:
-			// this is kind of bad what we're doing here. you should never read from a mapped pointer
-			// and this is exactly what we're doing (data). but how else to get to the d3d9 data?
-			// we could instead allocate cpu memory in the map and return to the calling app
-			// then do a real map/unmap here
-			void *ptr;
-			s_d3d12device->map_buffer_region(d3d12res, 0, desc.buffer.size, map_access::write_only, &ptr);
-			memcpy(ptr, region.buffer.data, (size_t)desc.buffer.size);
-			s_d3d12device->unmap_buffer_region(d3d12res);
-
-			s_bvh_manager.on_geo_updated(iter->second.handle());
-		}
-
-		s_mapped_resources.erase(handle.handle);
-	}
-}
-
-static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
-{
-	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	if (s_resources.find(resource.handle) != s_resources.end())
 	{
@@ -1459,6 +1502,9 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_frame_state.draw_count++;
 	});
+
+	if (filter_command())
+		return false;
 
 	auto &data = cmd_list->get_private_data<command_list_data>();
 

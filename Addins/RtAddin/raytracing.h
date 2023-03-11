@@ -14,8 +14,14 @@ namespace reshade::api
 	enum class format : uint32_t;
 }
 
+namespace reshade::api
+{
+	RESHADE_DEFINE_HANDLE(alloc);
+}
+
 void doDeferredDeletes();
 void doDeferredDeletesAll();
+void deferDestroyHandle(reshade::api::device *device, reshade::api::alloc alloc);
 void deferDestroyHandle(reshade::api::device *device, reshade::api::resource res);
 void deferDestroyHandle(reshade::api::device *device, reshade::api::resource_view view);
 
@@ -72,6 +78,7 @@ private:
 	reshade::api::device *_device = nullptr;
 };
 
+using scopedalloc = delayFreedHandle<reshade::api::alloc>;
 using scopedresource = delayFreedHandle<reshade::api::resource>;
 using scopedresourceview = delayFreedHandle<reshade::api::resource_view>;
 

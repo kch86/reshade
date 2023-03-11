@@ -17,7 +17,7 @@ struct DeferDeleteData
 };
 
 constexpr uint32_t MaxDeferredFrames = 4;
-constexpr uint32_t HandleTypeCount = 2;
+constexpr uint32_t HandleTypeCount = 3;
 static DeferDeleteData s_frameDeleteData[MaxDeferredFrames][HandleTypeCount];
 static uint32_t s_frameIndex = 0;
 static std::shared_mutex s_mutex;
@@ -35,6 +35,10 @@ void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
 		else if (i == 1)
 		{
 			device->destroy_resource((resource)pair.second);
+		}
+		else if (i == 2)
+		{
+			free((void *)pair.second);
 		}
 		else
 		{
@@ -54,6 +58,7 @@ void doDeferredDeletes()
 
 	doDeferredDeletes(deleteIndex, 0);
 	doDeferredDeletes(deleteIndex, 1);
+	doDeferredDeletes(deleteIndex, 2);
 
 	s_frameIndex++;
 }
@@ -67,6 +72,27 @@ void doDeferredDeletesAll()
 
 	for (uint32_t index = 0; index < MaxDeferredFrames; index++)
 		doDeferredDeletes(index, 1);
+
+	for (uint32_t index = 0; index < MaxDeferredFrames; index++)
+		doDeferredDeletes(index, 2);
+}
+
+void deferDestroyHandle(reshade::api::device* device, reshade::api::alloc alloc)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	const uint32_t index = s_frameIndex % MaxDeferredFrames;
+
+	auto iter = std::find_if(
+		s_frameDeleteData[index][2].todelete.begin(),
+		s_frameDeleteData[index][2].todelete.end(), [&](auto &handle) {
+			return handle.second == alloc.handle;
+	});
+
+	if (iter == s_frameDeleteData[index][2].todelete.end())
+	{
+		s_frameDeleteData[index][2].todelete.push_back({ device,alloc.handle });
+	}
 }
 
 void deferDestroyHandle(device* device, resource res)
