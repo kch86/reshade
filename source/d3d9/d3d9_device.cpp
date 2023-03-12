@@ -1418,6 +1418,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::GetDepthStencilSurface(IDirect3DSurfa
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::BeginScene()
 {
+#if RESHADE_ADDON
+	reshade::invoke_addon_event<reshade::addon_event::reset_command_list>(this);
+#endif
 	return _orig->BeginScene();
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::EndScene()
