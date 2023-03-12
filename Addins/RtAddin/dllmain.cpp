@@ -1720,6 +1720,7 @@ static void on_present(effect_runtime *runtime)
 	}
 
 	s_frame_id++;
+	PROFILE_END_FRAME();
 }
 
 static void on_reset_cmd_list(command_list *cmd_list)

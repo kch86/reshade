@@ -54,8 +54,6 @@ void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
 			}
 		}
 	}
-
-	PROFILE_SCOPE("doDeferredDeletes_clear");
 	s_frameDeleteData[deleteIndex][i].todelete.clear();
 }
 
