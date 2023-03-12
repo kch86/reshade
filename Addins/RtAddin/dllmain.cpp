@@ -218,9 +218,12 @@ namespace
 		pipeline ps = {};
 		pipeline il = {};
 		resource_view rtv = {};
+		resource_desc rtv_desc = {};
 		resource reflection_texture = {};
 
 		uint32_t draw_count = 0;
+		uint32_t width;
+		uint32_t height;
 
 		blend_factor dst_blend = blend_factor::zero;
 		bool blend_enable = false;
@@ -228,6 +231,7 @@ namespace
 		bool null_shader_has_been_bound = false;
 		bool static_geo_shader_is_bound = false;
 		bool got_viewproj = false;
+		bool rtv_is_main_backbuffer = false;
 
 		void reset()
 		{
@@ -324,13 +328,6 @@ struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
 	uint32_t last_render_pass_count = 1;
 	uint32_t current_render_pass_count = 0;
 	bool hasRenderedThisFrame = false;
-};
-struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_data
-{
-	bool has_multiple_rtvs = false;
-	resource_view current_main_rtv = { 0 };
-	resource_view current_dsv = { 0 };
-	uint32_t current_render_pass_index = 0;
 };
 
 bvh_manager::AttachmentDesc get_attach_desc(const StreamData::stream &stream, uint32_t count, uint32_t offset, bool is_raw)
@@ -683,8 +680,6 @@ static void on_destroy_device(device *device)
 
 static void on_init_command_list(command_list *cmd_list)
 {
-	cmd_list->create_private_data<command_list_data>();
-
 	if (cmd_list->get_device()->get_api() == device_api::d3d12)
 	{
 		s_d3d12cmdlist = cmd_list;
@@ -695,7 +690,6 @@ static void on_init_command_list(command_list *cmd_list)
 }
 static void on_destroy_command_list(command_list *cmd_list)
 {
-	cmd_list->destroy_private_data<command_list_data>();
 }
 
 static void on_init_command_queue(command_queue *cmd_queue)
@@ -1273,27 +1267,25 @@ static void on_unmap_texture_region(device *device, resource handle, uint32_t su
 
 static void on_bind_render_targets_and_depth_stencil(command_list *cmd_list, uint32_t count, const resource_view *rtvs, resource_view dsv)
 {
-	auto &data = cmd_list->get_private_data<command_list_data>();
-
 	const resource_view new_main_rtv = (count != 0) ? rtvs[0] : resource_view{ 0 };
-	/*if (new_main_rtv != data.current_main_rtv)
-		on_end_render_pass(cmd_list);*/
-
-	data.has_multiple_rtvs = count > 1;
-	data.current_main_rtv = new_main_rtv;
-	data.current_dsv = dsv;
 
 	// the scene draws straight to the backbuffer.
 	// any other target is for secondary effects
 	if (s_backbuffers.contains(new_main_rtv.handle))
 	{
 		s_frame_state.rtv = new_main_rtv;
+		device *d = cmd_list->get_device();
+		s_frame_state.rtv_desc = d->get_resource_desc(d->get_resource_from_view(new_main_rtv));
+
+		s_frame_state.rtv_is_main_backbuffer =
+			s_frame_state.rtv_desc.texture.width == s_frame_state.width &&
+			s_frame_state.rtv_desc.texture.height == s_frame_state.height;
 	}
 	else
 	{
 		s_frame_state.rtv.handle = 0;
-
 		s_frame_state.reflection_texture = cmd_list->get_device()->get_resource_from_view(new_main_rtv);
+		s_frame_state.rtv_is_main_backbuffer = false;
 	}
 }
 static void on_bind_index_buffer(command_list *cmd_list, resource buffer, uint64_t offset, uint32_t index_size)
@@ -1512,38 +1504,29 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 	if (filter_command())
 		return false;
 
-	auto &data = cmd_list->get_private_data<command_list_data>();
-
 	// null pipelines are bound and a draw occurs right before the ui is drawn
 	if (s_frame_state.vs.handle == 0 && s_frame_state.ps.handle == 0)
 	{
 		s_frame_state.null_shader_has_been_bound = true;
 	}
 
-	if (s_frame_state.rtv.handle == 0)
+	// we filtered out this rtv at some point
+	if (s_frame_state.rtv_is_main_backbuffer)
 	{
 		return false;
 	}
-
-	device *const device = cmd_list->get_device();
-	auto &dev_data = device->get_private_data<device_data>();
-
-	uint32_t width, height;
-	dev_data.main_runtime->get_screenshot_width_and_height(&width, &height);
-
-	const resource_desc render_target_desc = device->get_resource_desc(device->get_resource_from_view(data.current_main_rtv));
-
-	if (render_target_desc.texture.width != width || render_target_desc.texture.height != height)
-		return false; // Ignore render targets that do not match the effect runtime back buffer dimensions
 
 	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
 	// This is not perfect, since there may be multiple command lists and this will try and render effects in every single one ...
 	if (s_ui_render_before_ui && s_frame_state.null_shader_has_been_bound && s_ui_pipelines.contains(s_frame_state.vs.handle) && s_ui_pipelines.contains(s_frame_state.ps.handle))
 	{
+		device *const device = cmd_list->get_device();
+		auto &dev_data = device->get_private_data<device_data>();
+
 		// TODO: find last valid 3d render target and apply that before drawing
 		const auto &current_state = cmd_list->get_private_data<state_block>();
 
-		dev_data.main_runtime->render_effects(cmd_list, data.current_main_rtv);
+		dev_data.main_runtime->render_effects(cmd_list, s_frame_state.rtv);
 
 		// Re-apply state to the command-list, as it may have been modified by the call to 'render_effects'
 		current_state.apply(cmd_list);
