@@ -19,6 +19,9 @@
     <Filter Include="Config">
       <UniqueIdentifier>{2f524aee-7629-4034-b79b-cd968246f4e9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Deps">
+      <UniqueIdentifier>{a0b22b5c-abfe-4427-a5b5-e797bad1b9ed}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -98,6 +101,9 @@
     <ClInclude Include="sample_gen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="profiling.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Raytracing_blit_vs.hlsl">
@@ -113,6 +119,9 @@
     </CopyFileToFolders>
     <CopyFileToFolders Include="Config\Reshade.ini">
       <Filter>Config</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\..\deps\superluminal\bin\PerformanceAPI.dll">
+      <Filter>Deps</Filter>
     </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>

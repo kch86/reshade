@@ -99,6 +99,8 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalLibraryDirectories>..\..\deps\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>superluminal\lib\PerformanceAPI_MDd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>%DTOOLS%\DTCommandLine.exe -m -l "D" --ro -p "C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\SPEED2.zip"  || set errorlevel=0</Command>
@@ -126,6 +128,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalLibraryDirectories>..\..\deps\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>superluminal\lib\PerformanceAPI_MD.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>%DTOOLS%\DTCommandLine.exe -m -l "D" --ro -p "C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\SPEED2.zip"  || set errorlevel=0</Command>
@@ -184,6 +188,7 @@
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="dxhelpers.h" />
     <ClInclude Include="hash.h" />
+    <ClInclude Include="profiling.h" />
     <ClInclude Include="raytracing.h" />
     <ClInclude Include="sample_gen.h" />
     <ClInclude Include="Shaders\Color.h" />
@@ -266,6 +271,9 @@
     </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
+    <CopyFileToFolders Include="..\..\deps\superluminal\bin\PerformanceAPI.dll">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -32,6 +32,7 @@ extern "C" { __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\
 #include "camera.h"
 #include "timing.h"
 #include "sample_gen.h"
+#include "profiling.h"
 
 #define INCLUDE_RT_SHADERS 0
 #if INCLUDE_RT_SHADERS
@@ -1111,6 +1112,7 @@ static void on_destroy_resource(device *device, resource handle)
 
 bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
 {
+	PROFILE_SCOPE("on_map_buffer");
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	if (!s_ui_enable)
@@ -1155,6 +1157,8 @@ bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 }
 map_range on_unmap_buffer_region(device *device, resource handle)
 {
+	PROFILE_SCOPE("on_unmap_buffer");
+
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	if (!s_ui_enable)
@@ -1499,6 +1503,8 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 
 static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
+	PROFILE_SCOPE("on_draw");
+
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_frame_state.draw_count++;
 	});
@@ -1550,6 +1556,8 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
+	PROFILE_SCOPE("on_draw_indexed");
+
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_frame_state.draw_count++;
 		s_frame_state.bindings.clear();
@@ -1672,12 +1680,15 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 
 static void on_present(effect_runtime *runtime)
 {
+	PROFILE_SCOPE("on_present");
+
 	device *const device = runtime->get_device();
 	auto &dev_data = device->get_private_data<device_data>();
 
 	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
+	
 	timing::flush(s_d3d12cmdlist);
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
@@ -1709,6 +1720,16 @@ static void on_present(effect_runtime *runtime)
 	}
 
 	s_frame_id++;
+}
+
+static void on_reset_cmd_list(command_list *cmd_list)
+{
+	PROFILE_BEGIN("RtAddin::Frame");
+}
+
+static void on_execute_cmd_list(command_queue* cmd_queue, command_list *cmd_list)
+{
+	PROFILE_END();
 }
 
 static void update_rt()
@@ -2051,6 +2072,8 @@ void on_tech_render(effect_runtime *runtime, effect_technique technique, command
 
 bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, size_t pass_index)
 {
+	PROFILE_SCOPE("on_tech_pass_render");
+
 	if (!s_ui_enable)
 	{
 		return false;
@@ -2315,6 +2338,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::reshade_present>(on_present);
 		reshade::register_event<reshade::addon_event::reshade_render_technique_pass>(on_tech_pass_render);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(on_init_runtime);
+		reshade::register_event<reshade::addon_event::reset_command_list>(on_reset_cmd_list);
+		reshade::register_event<reshade::addon_event::execute_command_list>(on_execute_cmd_list);
 
 		reshade::register_overlay(nullptr, draw_ui);
 

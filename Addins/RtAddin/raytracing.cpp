@@ -8,6 +8,7 @@
 #include "Shaders\RaytracingHlslCompat.h"
 #include "CompiledShaders\Raytracing.hlsl.h"
 #include "raytracing.h"
+#include "profiling.h"
 
 using namespace reshade::api;
 
@@ -24,27 +25,37 @@ static std::shared_mutex s_mutex;
 
 void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
 {
+	PROFILE_SCOPE("doDeferredDeletes");
+
 	const int i = type_index;
-	for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
 	{
-		device *device = pair.first;
-		if (i == 0)
+		static char buff[32];
+		sprintf_s(buff, "delete_count=%d", (int)s_frameDeleteData[deleteIndex][i].todelete.size());
+		PROFILE_SCOPE_DATA("doDeferredDeletes_loop", buff);
+
+		for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
 		{
-			device->destroy_resource_view((resource_view)pair.second);
-		}
-		else if (i == 1)
-		{
-			device->destroy_resource((resource)pair.second);
-		}
-		else if (i == 2)
-		{
-			free((void *)pair.second);
-		}
-		else
-		{
-			assert(false);
+			device *device = pair.first;
+			if (i == 0)
+			{
+				device->destroy_resource_view((resource_view)pair.second);
+			}
+			else if (i == 1)
+			{
+				device->destroy_resource((resource)pair.second);
+			}
+			else if (i == 2)
+			{
+				free((void *)pair.second);
+			}
+			else
+			{
+				assert(false);
+			}
 		}
 	}
+
+	PROFILE_SCOPE("doDeferredDeletes_clear");
 	s_frameDeleteData[deleteIndex][i].todelete.clear();
 }
 
@@ -380,13 +391,13 @@ scopedresource buildTlas(reshade::api::command_list *cmdlist, reshade::api::comm
 
 resource lock_resource(reshade::api::device *device9, reshade::api::command_queue *cmdqueue12, reshade::api::resource d3d9resource)
 {
-	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;// ->_orig;
+	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;
 	return getd3d12resource(d3d9on12, cmdqueue12, d3d9resource);
 }
 
 void unlock_resource(reshade::api::device *device9, uint64_t signal, ID3D12Fence *fence, reshade::api::resource d3d9resource)
 {
-	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;// ->_orig;
+	Direct3DDevice9On12 *d3d9on12 = ((Direct3DDevice9 *)device9)->_d3d9on12_device;
 	returnd3d12resource(d3d9on12, signal, fence, d3d9resource);
 }
 

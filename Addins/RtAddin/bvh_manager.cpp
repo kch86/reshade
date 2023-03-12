@@ -4,6 +4,7 @@
 
 #include <reshade.hpp>
 #include "hash.h"
+#include "profiling.h"
 
 using namespace reshade::api;
 using namespace DirectX;
@@ -79,6 +80,7 @@ bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<Attach
 
 void bvh_manager::update()
 {
+	PROFILE_SCOPE("bvh_manager::update");
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	m_per_frame_instance_counts.clear();
@@ -100,11 +102,14 @@ void bvh_manager::destroy()
 
 void bvh_manager::update_vbs(std::span<const resource> buffers)
 {
+	PROFILE_SCOPE("vh_manager::update_vbs");
 	m_current_draw_stream_hash = XXH3_64bits(buffers.data(), buffers.size_bytes());
 }
 
 void bvh_manager::prune_stale_geo()
 {
+	PROFILE_SCOPE("bvh_manager::prune_stale_geo");
+
 	constexpr uint32_t PruneCount = 10;
 
 	// erase from our geometry and bvh list
@@ -168,6 +173,8 @@ void bvh_manager::prune_stale_geo()
 
 void bvh_manager::on_geo_updated(resource res)
 {
+	PROFILE_SCOPE("bvh_manager::on_geo_updated");
+
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	// schedule a rebuild when geo is updated
@@ -183,6 +190,8 @@ void bvh_manager::on_geo_updated(resource res)
 
 void bvh_manager::on_geo_draw(DrawDesc& desc)
 {
+	PROFILE_SCOPE("bvh_manager::on_geo_draw");
+
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	struct
@@ -291,6 +300,8 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 
 scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* cmd_list, command_queue* cmd_queue)
 {
+	PROFILE_SCOPE("bvh_manager::build_tlas");
+
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	if (m_bvhs.size() > 0)
@@ -392,6 +403,8 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 
 std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(reshade::api::command_list *cmd_list)
 {
+	PROFILE_SCOPE("bvh_manager::build_attachments");
+
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	if (m_attachments_flat.size() > 0)
@@ -460,6 +473,8 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 
 std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(reshade::api::command_list *cmd_list)
 {
+	PROFILE_SCOPE("bvh_manager::build_instance_data");
+
 	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
 	if (m_instance_data_flat.size() > 0)
