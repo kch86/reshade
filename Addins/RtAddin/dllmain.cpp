@@ -1112,7 +1112,7 @@ static void on_destroy_resource(device *device, resource handle)
 
 bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
 {
-	PROFILE_SCOPE("on_map_buffer");
+	PROFILE_SCOPE("rtAddon::on_map_buffer");
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	if (!s_ui_enable)
@@ -1157,7 +1157,7 @@ bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 }
 map_range on_unmap_buffer_region(device *device, resource handle)
 {
-	PROFILE_SCOPE("on_unmap_buffer");
+	PROFILE_SCOPE("rtAddon::on_unmap_buffer");
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
@@ -1503,7 +1503,7 @@ static void on_push_descriptors(command_list *cmd_list, shader_stage stages, pip
 
 static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
-	PROFILE_SCOPE("on_draw");
+	PROFILE_SCOPE("rtAddon::on_draw");
 
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_frame_state.draw_count++;
@@ -1556,7 +1556,7 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32_t instances, uint32_t first_index, int32_t vertex_offset,
 	/*uint32_t first_instance hack: interp instance offset as vertex count*/ uint32_t vertex_count)
 {
-	PROFILE_SCOPE("on_draw_indexed");
+	PROFILE_SCOPE("rtAddon::on_draw_indexed");
 
 	auto on_exit = sg::make_scope_guard([&]() {
 		s_frame_state.draw_count++;
@@ -1680,7 +1680,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 
 static void on_present(effect_runtime *runtime)
 {
-	PROFILE_SCOPE("on_present");
+	PROFILE_SCOPE("rtAddon::on_present");
 
 	device *const device = runtime->get_device();
 	auto &dev_data = device->get_private_data<device_data>();
@@ -1688,7 +1688,7 @@ static void on_present(effect_runtime *runtime)
 	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
-	
+
 	timing::flush(s_d3d12cmdlist);
 
 	s_ctrl_down = runtime->is_key_down(VK_CONTROL) || runtime->is_key_down(VK_LCONTROL);
@@ -1724,12 +1724,12 @@ static void on_present(effect_runtime *runtime)
 
 static void on_reset_cmd_list(command_list *cmd_list)
 {
-	PROFILE_BEGIN("RtAddin::Frame");
+	//PROFILE_BEGIN("RtAddin::Frame");
 }
 
 static void on_execute_cmd_list(command_queue* cmd_queue, command_list *cmd_list)
 {
-	PROFILE_END();
+	//PROFILE_END();
 }
 
 static void update_rt()
@@ -2072,7 +2072,7 @@ void on_tech_render(effect_runtime *runtime, effect_technique technique, command
 
 bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, command_list *cmd_list, size_t pass_index)
 {
-	PROFILE_SCOPE("on_tech_pass_render");
+	PROFILE_SCOPE("rtAddon::on_tech_pass_render");
 
 	if (!s_ui_enable)
 	{
