@@ -81,9 +81,15 @@ bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<Attach
 void bvh_manager::update()
 {
 	PROFILE_SCOPE("bvh_manager::update");
-	const std::unique_lock<std::shared_mutex> lock(m_mutex);
 
+	PROFILE_BEGIN(get_lock);
+	const std::unique_lock<std::shared_mutex> lock(m_mutex);
+	PROFILE_END(get_lock);
+
+	PROFILE_BEGIN(clear_instance_data);
 	m_per_frame_instance_counts.clear();
+	PROFILE_END(clear_instance_data);
+
 	prune_stale_geo();
 	m_frame_id++;
 }
