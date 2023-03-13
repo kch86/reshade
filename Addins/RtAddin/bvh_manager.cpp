@@ -235,6 +235,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		m_per_frame_instance_counts[combined_hash] = 1;
 	}
 
+	PROFILE_BEGIN(find_geo);
 	auto result = std::find_if(m_geometry.begin(), m_geometry.end(), [&](const BlasBuildDesc &d) {
 		if (desc.dynamic)
 		{
@@ -248,9 +249,11 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 			d.ib.offset == desc.blas_desc.ib.offset &&
 			d.ib.res == desc.blas_desc.ib.res);
 		});
+	PROFILE_END(find_geo);
 
 	if (result == m_geometry.end())
 	{
+		PROFILE_SCOPE("new_geo");
 		scopedresource bvh = buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc);
 
 		assert(instanceIndex == 0);
@@ -278,6 +281,7 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	}
 	else
 	{
+		PROFILE_SCOPE("update_geo");
 		const uint32_t index = result - m_geometry.begin();
 
 		GeometryState &geostate = m_geo_state[index];
