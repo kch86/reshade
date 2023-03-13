@@ -51,7 +51,9 @@ todo:
 -- build_tlas
 -- on_draw_indexed
 --- usually not bad but can spike when it does something
+--- on_geo_draw
 -- bvh::update, instance data clear can take a looong time (1+ms)
+- tracy may be running out of  memory :-/
 
 //car vs layout
 //   HarmonicCoeff c0      10
