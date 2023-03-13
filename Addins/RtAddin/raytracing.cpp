@@ -1,6 +1,7 @@
 #include "dxhelpers.h"
 
 #include <shared_mutex>
+#include <thread>
 #include <reshade.hpp>
 #include <d3d9/d3d9_device.hpp>
 #include <d3d9/d3d9on12_device.hpp>
@@ -20,20 +21,20 @@ struct DeferDeleteData
 constexpr uint32_t MaxDeferredFrames = 4;
 constexpr uint32_t HandleTypeCount = 3;
 static DeferDeleteData s_frameDeleteData[MaxDeferredFrames][HandleTypeCount];
+static DeferDeleteData s_deleteData[HandleTypeCount];
+static std::thread s_deleteJob;
 static uint32_t s_frameIndex = 0;
 static std::shared_mutex s_mutex;
 
-void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
+void doDeferredDeletes(DeferDeleteData* delete_data, uint32_t type_index)
 {
-	PROFILE_SCOPE("doDeferredDeletes");
-
 	const int i = type_index;
 	{
-		static char buff[32];
-		sprintf_s(buff, "delete_count=%d", (int)s_frameDeleteData[deleteIndex][i].todelete.size());
-		PROFILE_SCOPE_DATA("doDeferredDeletes_loop", buff);
+		//static char buff[32];
+		//sprintf_s(buff, "delete_count=%d", (int)delete_data[i].todelete.size());
+		//PROFILE_SCOPE_DATA("doDeferredDeletes_loop", buff);
 
-		for (auto &pair : s_frameDeleteData[deleteIndex][i].todelete)
+		for (auto &pair : delete_data[i].todelete)
 		{
 			device *device = pair.first;
 			if (i == 0)
@@ -54,20 +55,39 @@ void doDeferredDeletes(uint32_t deleteIndex, uint32_t type_index)
 			}
 		}
 	}
-	s_frameDeleteData[deleteIndex][i].todelete.clear();
+	delete_data[i].todelete.clear();
 }
 
 void doDeferredDeletes()
 {
+	PROFILE_SCOPE("doDeferredDeletes");
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
-	// delete oldest frame
+	if (s_deleteJob.joinable())
+	{
+		PROFILE_SCOPE("doDeferredDeletesWait");
+		s_deleteJob.join();
+	}	
+
 	const uint32_t index = s_frameIndex % MaxDeferredFrames;
 	const uint32_t deleteIndex = (index + 1) % MaxDeferredFrames;
 
-	doDeferredDeletes(deleteIndex, 0);
-	doDeferredDeletes(deleteIndex, 1);
-	doDeferredDeletes(deleteIndex, 2);
+	for (uint32_t i = 0; i < HandleTypeCount; i++)
+	{
+		std::swap(s_frameDeleteData[deleteIndex][i], s_deleteData[i]);
+	}
+
+	// delete oldest frame
+	s_deleteJob = std::thread{
+		[&]()
+		{
+			// bug in tracy does not like this
+			//PROFILE_SCOPE("doDeferredDeletesJob");
+			doDeferredDeletes(s_deleteData, 0);
+			doDeferredDeletes(s_deleteData, 1);
+			doDeferredDeletes(s_deleteData, 2);
+		}
+	};
 
 	s_frameIndex++;
 }
@@ -77,13 +97,13 @@ void doDeferredDeletesAll()
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
 	for(uint32_t index = 0; index < MaxDeferredFrames; index++)
-		doDeferredDeletes(index, 0);
+		doDeferredDeletes(s_frameDeleteData[index], 0);
 
 	for (uint32_t index = 0; index < MaxDeferredFrames; index++)
-		doDeferredDeletes(index, 1);
+		doDeferredDeletes(s_frameDeleteData[index], 1);
 
 	for (uint32_t index = 0; index < MaxDeferredFrames; index++)
-		doDeferredDeletes(index, 2);
+		doDeferredDeletes(s_frameDeleteData[index], 2);
 }
 
 void deferDestroyHandle(reshade::api::device* device, reshade::api::alloc alloc)
