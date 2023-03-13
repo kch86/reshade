@@ -66,6 +66,7 @@ public:
 	bvh_manager() = default;
 	~bvh_manager() = default;
 
+	void init();
 	void update();
 	void destroy();
 	void update_vbs(std::span<const reshade::api::resource> buffers);
@@ -73,7 +74,7 @@ public:
 	void on_geo_draw(DrawDesc& desc);
 	scopedresource build_tlas(DirectX::XMMATRIX *base_transform, reshade::api::command_list *cmd_list, reshade::api::command_queue *cmd_queue);
 	std::pair<scopedresource, scopedresourceview> build_attachments(reshade::api::command_list *cmd_list);
-	std::pair<scopedresource, scopedresourceview> build_instance_data(reshade::api::command_list *cmd_list);
+	reshade::api::resource_view build_instance_data(reshade::api::command_list *cmd_list);
 
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
 	std::span<reshade::api::rt_instance_desc> get_instances() { return m_instances_flat; }
@@ -144,4 +145,8 @@ public:
 	uint64_t m_current_draw_stream_hash = 0;
 	uint32_t m_frame_id = 0;
 	uint32_t m_prune_iter = 0;
+
+	reshade::api::resource_desc m_instance_data_desc{};
+	scopedresource m_instance_data_buffer{};
+	scopedresourceview m_instance_data_srv{};
 };

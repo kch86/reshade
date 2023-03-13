@@ -250,8 +250,7 @@ namespace
 	scopedresource s_tlas;
 	scopedresource s_attachments_buffer;
 	scopedresourceview s_attachments_srv;
-	scopedresource s_instance_data_buffer;
-	scopedresourceview s_instance_data_srv;
+	resource_view s_instance_data_srv;
 	scopedresource s_samples_buffer;
 	scopedresourceview s_samples_srv;
 	pipeline_layout s_pipeline_layout;
@@ -1737,12 +1736,7 @@ static void update_rt()
 
 	// build the per instance data buffer
 	{
-		auto [buffer, srv] = s_bvh_manager.build_instance_data(s_d3d12cmdlist);
-
-		s_instance_data_buffer.free();
-		s_instance_data_srv.free();
-		s_instance_data_buffer = std::move(buffer);
-		s_instance_data_srv = std::move(srv);
+		s_instance_data_srv = s_bvh_manager.build_instance_data(s_d3d12cmdlist);
 	}
 }
 
@@ -1948,7 +1942,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 
 	resource_view srvs[] = {
 		get_srv(s_attachments_srv),
-		get_srv(s_instance_data_srv),
+		get_srv2(s_instance_data_srv),
 		get_srv2(spec_srv),
 		get_srv(s_samples_srv)
 	};
@@ -2250,6 +2244,8 @@ static void do_init()
 {
 	init_vs_mappings();
 	init_ps_mappings();
+
+	s_bvh_manager.init();
 }
 
 static void do_shutdown()
@@ -2266,9 +2262,6 @@ static void do_shutdown()
 
 	s_attachments_buffer.free();
 	s_attachments_srv.free();
-
-	s_instance_data_buffer.free();
-	s_instance_data_srv.free();
 
 	s_empty_buffer.free();
 	s_empty_srv.free();

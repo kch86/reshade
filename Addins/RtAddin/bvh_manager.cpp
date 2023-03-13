@@ -78,6 +78,11 @@ bool bvh_manager::attachment_is_dirty(const Attachment &stored, std::span<Attach
 	return false;
 }
 
+void bvh_manager::init()
+{
+	m_instance_data_desc.buffer.size = 0;
+}
+
 void bvh_manager::update()
 {
 	PROFILE_SCOPE("bvh_manager::update");
@@ -104,6 +109,9 @@ void bvh_manager::destroy()
 	m_instances_flat.clear();
 	m_attachments_flat.clear();
 	m_per_frame_instance_counts.clear();
+
+	m_instance_data_buffer.free();
+	m_instance_data_srv.free();
 }
 
 void bvh_manager::update_vbs(std::span<const resource> buffers)
@@ -477,7 +485,7 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_attachments(res
 	return { scopedresource(), scopedresourceview() };
 }
 
-std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(reshade::api::command_list *cmd_list)
+resource_view bvh_manager::build_instance_data(reshade::api::command_list *cmd_list)
 {
 	PROFILE_SCOPE("bvh_manager::build_instance_data");
 
@@ -497,27 +505,37 @@ std::pair<scopedresource, scopedresourceview> bvh_manager::build_instance_data(r
 		res_desc.buffer.stride = elem_byte_count;
 		res_desc.flags = resource_flags::structured;
 
-		resource d3d12res;
-		d->create_resource(
-			res_desc,
-			nullptr,
-			resource_usage::cpu_access,
-			&d3d12res);
+		if (m_instance_data_desc.buffer.size < res_desc.buffer.size)
+		{
+			resource d3d12res;
+			d->create_resource(
+				res_desc,
+				nullptr,
+				resource_usage::cpu_access,
+				&d3d12res);
+
+			// size in element count not bytes
+			resource_view_desc view_desc(format::unknown, 0, m_attachments_flat.size());
+			view_desc.flags = resource_view_flags::structured;
+			view_desc.buffer.stride = elem_byte_count;
+
+			resource_view srv;
+			d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
+
+			m_instance_data_buffer.free();
+			m_instance_data_srv.free();
+			m_instance_data_buffer = scopedresource(d, d3d12res);
+			m_instance_data_srv = scopedresourceview(d, srv);
+
+			m_instance_data_desc = res_desc;
+		}		
 
 		void *ptr;
-		d->map_buffer_region(d3d12res, 0, total_byte_count, map_access::write_only, &ptr);
+		d->map_buffer_region(m_instance_data_buffer.handle(), 0, total_byte_count, map_access::write_only, &ptr);
 		memcpy(ptr, m_instance_data_flat.data(), total_byte_count);		
-		d->unmap_buffer_region(d3d12res);
+		d->unmap_buffer_region(m_instance_data_buffer.handle());
 
-		// size in element count not bytes
-		resource_view_desc view_desc(format::unknown, 0, m_attachments_flat.size());
-		view_desc.flags = resource_view_flags::structured;
-		view_desc.buffer.stride = elem_byte_count;
-
-		resource_view srv;
-		d->create_resource_view(d3d12res, resource_usage::shader_resource, view_desc, &srv);
-
-		return { scopedresource(d, d3d12res), scopedresourceview(d, srv) };
+		return m_instance_data_srv.handle();
 	}
-	return { scopedresource(), scopedresourceview() };
+	return resource_view{};
 }
