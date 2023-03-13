@@ -232,11 +232,12 @@ namespace
 		bool static_geo_shader_is_bound = false;
 		bool got_viewproj = false;
 		bool rtv_is_main_backbuffer = false;
+		bool have_rendered_this_frame = false;
 
 		void reset()
 		{
-			*this = {};
 			bindings.clear();
+			*this = {};
 		}
 	};
 
@@ -325,7 +326,6 @@ struct __declspec(uuid("7251932A-ADAF-4DFC-B5CB-9A4E8CD5D6EB")) device_data
 	uint32_t offset_from_last_pass = 0;
 	uint32_t last_render_pass_count = 1;
 	uint32_t current_render_pass_count = 0;
-	bool hasRenderedThisFrame = false;
 };
 
 bvh_manager::AttachmentDesc get_attach_desc(const StreamData::stream &stream, uint32_t count, uint32_t offset, bool is_raw)
@@ -1514,6 +1514,11 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 		return false;
 	}
 
+	if (s_frame_state.have_rendered_this_frame)
+	{
+		return false;
+	}
+
 	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
 	// This is not perfect, since there may be multiple command lists and this will try and render effects in every single one ...
 	if (s_ui_render_before_ui && s_frame_state.null_shader_has_been_bound && s_ui_pipelines.contains(s_frame_state.vs.handle) && s_ui_pipelines.contains(s_frame_state.ps.handle))
@@ -1528,7 +1533,7 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 
 		// Re-apply state to the command-list, as it may have been modified by the call to 'render_effects'
 		current_state.apply(cmd_list);
-		dev_data.hasRenderedThisFrame = true;
+		s_frame_state.have_rendered_this_frame = true;
 	}
 
 	return false;
@@ -1665,8 +1670,6 @@ static void on_present(effect_runtime *runtime)
 
 	device *const device = runtime->get_device();
 	auto &dev_data = device->get_private_data<device_data>();
-
-	dev_data.hasRenderedThisFrame = false;
 
 	doDeferredDeletes();
 
