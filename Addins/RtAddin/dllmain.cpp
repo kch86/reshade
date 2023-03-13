@@ -248,8 +248,7 @@ namespace
 	std::unordered_set<uint64_t> s_dynamic_resources;
 	std::unordered_map<uint64_t, StreamInfo> s_inputLayoutPipelines;
 	scopedresource s_tlas;
-	scopedresource s_attachments_buffer;
-	scopedresourceview s_attachments_srv;
+	resource_view s_attachments_srv;
 	resource_view s_instance_data_srv;
 	scopedresource s_samples_buffer;
 	scopedresourceview s_samples_srv;
@@ -1725,19 +1724,10 @@ static void update_rt()
 		s_d3d12cmdqueue);
 
 	// build all the bindless attachments
-	{
-		auto [buffer, srv] = s_bvh_manager.build_attachments(s_d3d12cmdlist);
-
-		s_attachments_buffer.free();
-		s_attachments_srv.free();
-		s_attachments_buffer = std::move(buffer);
-		s_attachments_srv = std::move(srv);
-	}
+	s_attachments_srv = s_bvh_manager.build_attachments(s_d3d12cmdlist);
 
 	// build the per instance data buffer
-	{
-		s_instance_data_srv = s_bvh_manager.build_instance_data(s_d3d12cmdlist);
-	}
+	s_instance_data_srv = s_bvh_manager.build_instance_data(s_d3d12cmdlist);
 }
 
 void updateCamera(effect_runtime *runtime)
@@ -1941,7 +1931,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	};
 
 	resource_view srvs[] = {
-		get_srv(s_attachments_srv),
+		get_srv2(s_attachments_srv),
 		get_srv2(s_instance_data_srv),
 		get_srv2(spec_srv),
 		get_srv(s_samples_srv)
@@ -2259,9 +2249,6 @@ static void do_shutdown()
 	s_history_uav.free();
 
 	s_bvh_manager.destroy();
-
-	s_attachments_buffer.free();
-	s_attachments_srv.free();
 
 	s_empty_buffer.free();
 	s_empty_srv.free();

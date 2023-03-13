@@ -73,7 +73,7 @@ public:
 	void on_geo_updated(reshade::api::resource res);
 	void on_geo_draw(DrawDesc& desc);
 	scopedresource build_tlas(DirectX::XMMATRIX *base_transform, reshade::api::command_list *cmd_list, reshade::api::command_queue *cmd_queue);
-	std::pair<scopedresource, scopedresourceview> build_attachments(reshade::api::command_list *cmd_list);
+	reshade::api::resource_view build_attachments(reshade::api::command_list *cmd_list);
 	reshade::api::resource_view build_instance_data(reshade::api::command_list *cmd_list);
 
 	std::span<scopedresource> get_bvhs() { return m_bvhs; }
@@ -123,7 +123,6 @@ public:
 	};
 
 	using Attachment = AttachmentT<reshade::api::resource_view>;
-	using GpuAttachment = AttachmentT<uint32_t>;
 
 	void prune_stale_geo();
 	Attachment build_attachment(reshade::api::command_list *cmd_list, std::span<AttachmentDesc> attachments, bool create_srv = true);
@@ -136,7 +135,7 @@ public:
 	std::vector<Attachment> m_attachments;
 
 	std::vector<reshade::api::rt_instance_desc> m_instances_flat;
-	std::vector<Attachment> m_attachments_flat;
+	std::vector<RtInstanceAttachElem> m_attachments_flat;
 	std::vector<RtInstanceData> m_instance_data_flat;
 	std::unordered_map<uint64_t, uint32_t> m_per_frame_instance_counts;
 
@@ -149,4 +148,8 @@ public:
 	reshade::api::resource_desc m_instance_data_desc{};
 	scopedresource m_instance_data_buffer{};
 	scopedresourceview m_instance_data_srv{};
+
+	reshade::api::resource_desc m_attachment_data_desc{};
+	scopedresource m_attachment_data_buffer{};
+	scopedresourceview m_attachment_data_srv{};
 };
