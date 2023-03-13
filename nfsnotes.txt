@@ -54,6 +54,7 @@ todo:
 --- fast by itself, but called a lot
 -- on_draw_indexed
 --- usually not bad but can spike when it does something
+-- bvh::update, instance data clear can take a looong time (1+ms)
 
 //car vs layout
 //   HarmonicCoeff c0      10
