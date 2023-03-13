@@ -48,10 +48,7 @@ todo:
 -- release is ~10ms on top of the game
 -- much higher in the actual game. probably all the buffer updates
 - hot functions:
--- build_tlas/attachments
--- doDeferredDeletes
--- on_draw
---- fast by itself, but called a lot
+-- build_tlas
 -- on_draw_indexed
 --- usually not bad but can spike when it does something
 -- bvh::update, instance data clear can take a looong time (1+ms)
