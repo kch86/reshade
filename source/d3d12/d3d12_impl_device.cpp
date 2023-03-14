@@ -12,8 +12,11 @@
 #include "dll_log.hpp"
 #include "dll_resources.hpp"
 #include <algorithm>
+#include <D3D12MemAlloc.h>
 
 extern bool is_windows7();
+
+#define USE_D3D12MA 0
 
 #ifdef _WIN64
 constexpr size_t heap_index_start = 28;
@@ -22,8 +25,25 @@ constexpr size_t heap_index_start = 28;
 constexpr size_t heap_index_start = 24;
 #endif
 
-reshade::d3d12::device_impl::device_impl(ID3D12Device *device) :
+
+inline auto to_handle(D3D12MA::Allocation *ptr)
+{
+	return reshade::api::resource{ reinterpret_cast<uintptr_t>(ptr) };
+}
+
+inline auto to_resource(reshade::api::resource handle)
+{
+#if 0//USE_D3D12MA
+	D3D12MA::Allocation* allocation = reinterpret_cast<D3D12MA::Allocation *>(handle.handle);
+	return allocation->GetResource();
+#else
+	return reinterpret_cast<ID3D12Resource*>(handle.handle);
+#endif
+}
+
+reshade::d3d12::device_impl::device_impl(ID3D12Device *device, IDXGIAdapter *adapter) :
 	api_object_impl(device),
+	_adapter(adapter),
 	_view_heaps {
 		descriptor_heap_cpu(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV),
 		descriptor_heap_cpu(device, D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER),
@@ -111,6 +131,8 @@ reshade::d3d12::device_impl::device_impl(ID3D12Device *device) :
 
 	invoke_addon_event<addon_event::init_device>(this);
 #endif
+
+	init_allocator();
 }
 reshade::d3d12::device_impl::~device_impl()
 {
@@ -132,6 +154,24 @@ reshade::d3d12::device_impl::~device_impl()
 
 	assert(_descriptor_heaps.empty());
 #endif
+}
+
+void reshade::d3d12::device_impl::init_allocator()
+{
+	if (_allocator.get())
+	{
+		return;
+	}
+
+	D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
+	allocatorDesc.pDevice = _orig;
+	allocatorDesc.pAdapter = _adapter.get();
+
+	D3D12MA::Allocator *allocator;
+	HRESULT hr = D3D12MA::CreateAllocator(&allocatorDesc, &allocator);
+	assert(SUCCEEDED(hr));
+
+	_allocator = allocator;
 }
 
 bool reshade::d3d12::device_impl::check_capability(api::device_caps capability) const
@@ -308,21 +348,44 @@ bool reshade::d3d12::device_impl::create_resource(const api::resource_desc &desc
 		default_clear_value.Format = convert_format(api::format_to_depth_stencil_typed(desc.texture.format));
 	else
 		use_default_clear_value = false;
+	
+	D3D12MA::Allocation *allocation;
+#if USE_D3D12MA
+	D3D12MA::ALLOCATION_DESC allocationDesc = {};
+	allocationDesc.HeapType = heap_props.Type;
 
-	if (com_ptr<ID3D12Resource> object;
-		SUCCEEDED(desc.heap == api::memory_heap::unknown ?
-			_orig->CreateReservedResource(&internal_desc, convert_usage_to_resource_states(initial_state), use_default_clear_value ? &default_clear_value : nullptr, IID_PPV_ARGS(&object)) :
-			_orig->CreateCommittedResource(&heap_props, heap_flags, &internal_desc, convert_usage_to_resource_states(initial_state), use_default_clear_value ? &default_clear_value : nullptr, IID_PPV_ARGS(&object))))
+	com_ptr<ID3D12Resource> object;
+	HRESULT hr = _allocator->CreateResource(
+		&allocationDesc,
+		&internal_desc,
+		convert_usage_to_resource_states(initial_state),
+		use_default_clear_value ? &default_clear_value : nullptr,
+		&allocation,
+		IID_NULL, NULL);
+		//IID_PPV_ARGS(&object));
+#else
+	com_ptr<ID3D12Resource> object;
+	HRESULT hr = desc.heap == api::memory_heap::unknown ?
+		_orig->CreateReservedResource(&internal_desc, convert_usage_to_resource_states(initial_state), use_default_clear_value ? &default_clear_value : nullptr, IID_PPV_ARGS(&object)) :
+		_orig->CreateCommittedResource(&heap_props, heap_flags, &internal_desc, convert_usage_to_resource_states(initial_state), use_default_clear_value ? &default_clear_value : nullptr, IID_PPV_ARGS(&object));
+#endif
+
+	if (SUCCEEDED(hr))
 	{
-		if (is_shared && FAILED(_orig->CreateSharedHandle(object.get(), nullptr, GENERIC_ALL, nullptr, shared_handle)))
+		if (is_shared && object.get() && FAILED(_orig->CreateSharedHandle(object.get(), nullptr, GENERIC_ALL, nullptr, shared_handle)))
 			return false;
 
 		if (footprint.Format != DXGI_FORMAT_UNKNOWN)
 			object->SetPrivateData(extra_data_guid, sizeof(footprint), &footprint);
 
+#if USE_D3D12MA
+		register_resource(allocation->GetResource());
+		*out_handle = to_handle(allocation->GetResource());
+		_alloc_map[allocation->GetResource()] = allocation;
+#else
 		register_resource(object.get());
-
 		*out_handle = to_handle(object.release());
+#endif
 
 		if (initial_data != nullptr)
 		{
@@ -363,9 +426,16 @@ void reshade::d3d12::device_impl::destroy_resource(api::resource handle)
 	if (handle.handle == 0)
 		return;
 
+#if USE_D3D12MA
+	ID3D12Resource* resource = to_resource(handle);
+	unregister_resource(resource);
+	D3D12MA::Allocation *allocation = _alloc_map[resource];
+	allocation->Release();
+	_alloc_map.erase(resource);
+#else
 	unregister_resource(reinterpret_cast<ID3D12Resource *>(handle.handle));
-
 	reinterpret_cast<IUnknown *>(handle.handle)->Release();
+#endif
 }
 
 reshade::api::resource_desc reshade::d3d12::device_impl::get_resource_desc(api::resource resource) const
@@ -375,9 +445,9 @@ reshade::api::resource_desc reshade::d3d12::device_impl::get_resource_desc(api::
 	// This will retrieve the heap properties for placed and committed resources, not for reserved resources (which will then be translated to 'memory_heap::unknown')
 	D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
 	D3D12_HEAP_PROPERTIES heap_props = {};
-	reinterpret_cast<ID3D12Resource *>(resource.handle)->GetHeapProperties(&heap_props, &heap_flags);
+	to_resource(resource)->GetHeapProperties(&heap_props, &heap_flags);
 
-	return convert_resource_desc(reinterpret_cast<ID3D12Resource *>(resource.handle)->GetDesc(), heap_props, heap_flags);
+	return convert_resource_desc(to_resource(resource)->GetDesc(), heap_props, heap_flags);
 }
 
 bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, api::resource_usage usage_type, const api::resource_view_desc &desc, api::resource_view *out_handle)
@@ -401,9 +471,9 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			D3D12_DEPTH_STENCIL_VIEW_DESC internal_desc = {};
 			convert_resource_view_desc(desc, internal_desc);
 
-			_orig->CreateDepthStencilView(reinterpret_cast<ID3D12Resource *>(resource.handle), &internal_desc, descriptor_handle);
+			_orig->CreateDepthStencilView(to_resource(resource), &internal_desc, descriptor_handle);
 
-			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			register_resource_view(descriptor_handle, to_resource(resource), desc);
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
@@ -416,9 +486,9 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			D3D12_RENDER_TARGET_VIEW_DESC internal_desc = {};
 			convert_resource_view_desc(desc, internal_desc);
 
-			_orig->CreateRenderTargetView(reinterpret_cast<ID3D12Resource *>(resource.handle), &internal_desc, descriptor_handle);
+			_orig->CreateRenderTargetView(to_resource(resource), &internal_desc, descriptor_handle);
 
-			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			register_resource_view(descriptor_handle, to_resource(resource), desc);
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
@@ -445,9 +515,9 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			internal_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			convert_resource_view_desc(desc, internal_desc);
 
-			_orig->CreateShaderResourceView(reinterpret_cast<ID3D12Resource *>(resource.handle), &internal_desc, descriptor_handle);
+			_orig->CreateShaderResourceView(to_resource(resource), &internal_desc, descriptor_handle);
 
-			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			register_resource_view(descriptor_handle, to_resource(resource), desc);
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
@@ -460,9 +530,9 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 			D3D12_UNORDERED_ACCESS_VIEW_DESC internal_desc = {};
 			convert_resource_view_desc(desc, internal_desc);
 
-			_orig->CreateUnorderedAccessView(reinterpret_cast<ID3D12Resource *>(resource.handle), nullptr, &internal_desc, descriptor_handle);
+			_orig->CreateUnorderedAccessView(to_resource(resource), nullptr, &internal_desc, descriptor_handle);
 
-			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			register_resource_view(descriptor_handle, to_resource(resource), desc);
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
@@ -478,7 +548,7 @@ bool reshade::d3d12::device_impl::create_resource_view(api::resource resource, a
 
 			_orig->CreateShaderResourceView(nullptr, &internal_desc, descriptor_handle);
 
-			register_resource_view(descriptor_handle, reinterpret_cast<ID3D12Resource *>(resource.handle), desc);
+			register_resource_view(descriptor_handle, to_resource(resource), desc);
 			*out_handle = to_handle(descriptor_handle);
 			return true;
 		}
@@ -581,7 +651,7 @@ bool reshade::d3d12::device_impl::map_buffer_region(api::resource resource, uint
 
 	const D3D12_RANGE no_read = { 0, 0 };
 
-	if (SUCCEEDED(ID3D12Resource_Map(reinterpret_cast<ID3D12Resource *>(resource.handle), 0, access == api::map_access::write_only || access == api::map_access::write_discard ? &no_read : nullptr, out_data)))
+	if (SUCCEEDED(ID3D12Resource_Map(to_resource(resource), 0, access == api::map_access::write_only || access == api::map_access::write_discard ? &no_read : nullptr, out_data)))
 	{
 		*out_data = static_cast<uint8_t *>(*out_data) + offset;
 		return true;
@@ -595,7 +665,7 @@ void reshade::d3d12::device_impl::unmap_buffer_region(api::resource resource)
 {
 	assert(resource.handle != 0);
 
-	ID3D12Resource_Unmap(reinterpret_cast<ID3D12Resource *>(resource.handle), 0, nullptr);
+	ID3D12Resource_Unmap(to_resource(resource), 0, nullptr);
 }
 bool reshade::d3d12::device_impl::map_texture_region(api::resource resource, uint32_t subresource, const api::subresource_box *box, api::map_access access, api::subresource_data *out_data)
 {
@@ -614,7 +684,7 @@ bool reshade::d3d12::device_impl::map_texture_region(api::resource resource, uin
 
 	const D3D12_RANGE no_read = { 0, 0 };
 
-	const D3D12_RESOURCE_DESC desc = reinterpret_cast<ID3D12Resource *>(resource.handle)->GetDesc();
+	const D3D12_RESOURCE_DESC desc = to_resource(resource)->GetDesc();
 
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout;
 	if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
@@ -623,7 +693,7 @@ bool reshade::d3d12::device_impl::map_texture_region(api::resource resource, uin
 			return false;
 
 		UINT extra_data_size = sizeof(layout.Footprint);
-		if (FAILED(reinterpret_cast<ID3D12Resource *>(resource.handle)->GetPrivateData(extra_data_guid, &extra_data_size, &layout.Footprint)))
+		if (FAILED(to_resource(resource)->GetPrivateData(extra_data_guid, &extra_data_size, &layout.Footprint)))
 			return false;
 
 		out_data->slice_pitch = layout.Footprint.Height;
@@ -636,14 +706,14 @@ bool reshade::d3d12::device_impl::map_texture_region(api::resource resource, uin
 	out_data->row_pitch = layout.Footprint.RowPitch;
 	out_data->slice_pitch *= layout.Footprint.RowPitch;
 
-	return SUCCEEDED(ID3D12Resource_Map(reinterpret_cast<ID3D12Resource *>(resource.handle),
+	return SUCCEEDED(ID3D12Resource_Map(to_resource(resource),
 		subresource, access == api::map_access::write_only || access == api::map_access::write_discard ? &no_read : nullptr, &out_data->data));
 }
 void reshade::d3d12::device_impl::unmap_texture_region(api::resource resource, uint32_t subresource)
 {
 	assert(resource.handle != 0);
 
-	ID3D12Resource_Unmap(reinterpret_cast<ID3D12Resource *>(resource.handle), subresource, nullptr);
+	ID3D12Resource_Unmap(to_resource(resource), subresource, nullptr);
 }
 
 void reshade::d3d12::device_impl::update_buffer_region(const void *data, api::resource resource, uint64_t offset, uint64_t size)
@@ -692,7 +762,7 @@ void reshade::d3d12::device_impl::update_texture_region(const api::subresource_d
 {
 	assert(resource.handle != 0);
 
-	const D3D12_RESOURCE_DESC desc = reinterpret_cast<ID3D12Resource *>(resource.handle)->GetDesc();
+	const D3D12_RESOURCE_DESC desc = to_resource(resource)->GetDesc();
 	if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
 		if (subresource != 0 || box != nullptr)

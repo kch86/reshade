@@ -9,8 +9,15 @@
 #include "descriptor_heap.hpp"
 #include <unordered_map>
 #include <concurrent_vector.h>
+#include <dxgi.h>
 
 struct D3D12DescriptorHeap;
+
+namespace D3D12MA
+{
+	class Allocator;
+	class Allocation;
+}
 
 namespace reshade::d3d12
 {
@@ -21,7 +28,7 @@ namespace reshade::d3d12
 		friend class command_queue_impl;
 
 	public:
-		explicit device_impl(ID3D12Device *device);
+		explicit device_impl(ID3D12Device *device, IDXGIAdapter* adapter);
 		~device_impl();
 
 		api::device_api get_api() const final { return api::device_api::d3d12; }
@@ -145,6 +152,8 @@ namespace reshade::d3d12
 				assert(false);
 		}
 
+		void init_allocator();
+
 	private:
 		std::vector<command_queue_impl *> _queues;
 
@@ -160,8 +169,12 @@ namespace reshade::d3d12
 		std::vector<std::pair<ID3D12Resource *, D3D12_GPU_VIRTUAL_ADDRESS_RANGE>> _buffer_gpu_addresses; // TODO: Replace with interval tree
 #endif
 		std::unordered_map<SIZE_T, std::pair<ID3D12Resource *, api::resource_view_desc>> _views;
+		std::unordered_map<ID3D12Resource *, D3D12MA::Allocation*> _alloc_map;
 
 		com_ptr<ID3D12PipelineState> _mipmap_pipeline;
 		com_ptr<ID3D12RootSignature> _mipmap_signature;
+
+		com_ptr<IDXGIAdapter> _adapter;
+		com_ptr<D3D12MA::Allocator> _allocator;
 	};
 }

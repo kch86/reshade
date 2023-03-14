@@ -41,7 +41,7 @@ extern "C" HRESULT WINAPI D3D12CreateDevice(IUnknown *pAdapter, D3D_FEATURE_LEVE
 
 	// Direct3D 12 devices are singletons per adapter, so first check if one was already created previously
 	const auto device_proxy_existing = get_private_pointer_d3dx<D3D12Device>(device);
-	const auto device_proxy = (device_proxy_existing != nullptr) ? device_proxy_existing : new D3D12Device(device);
+	const auto device_proxy = (device_proxy_existing != nullptr) ? device_proxy_existing : new D3D12Device(device, static_cast<IDXGIAdapter*>(pAdapter));
 
 	if (device_proxy_existing != nullptr)
 		device_proxy_existing->_ref++;

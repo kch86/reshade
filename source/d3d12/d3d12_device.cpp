@@ -19,8 +19,8 @@ using reshade::d3d12::to_handle;
 
 extern std::shared_mutex g_adapter_mutex;
 
-D3D12Device::D3D12Device(ID3D12Device *original) :
-	device_impl(original)
+D3D12Device::D3D12Device(ID3D12Device *original, IDXGIAdapter *adapter) :
+	device_impl(original, adapter)
 {
 	assert(_orig != nullptr);
 
