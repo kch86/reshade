@@ -56,6 +56,7 @@ todo:
 ---- mostly due to the memory allocation
 -- bvh::update, instance data clear can take a looong time (1+ms)
 - tracy may be running out of  memory :-/
+- look at RtxMu for blas memory management or use gpu open dx12 memory allocator
 
 //car vs layout
 //   HarmonicCoeff c0      10
