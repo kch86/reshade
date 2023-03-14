@@ -4,7 +4,7 @@
 #include <tracy/public/tracy/Tracy.hpp>
 #include <tracy/public/tracy/TracyC.h>
 
-#define USE_TRACY 1
+#define USE_TRACY 0
 #define USE_SL 1
 
 namespace profiling
@@ -34,6 +34,9 @@ namespace profiling
 #define TRACY_FRAME_END FrameMark
 #else
 #define TRACY_SCOPE(name)
+#define TRACY_BEGIN(name) 
+#define TRACY_BEGIN_DATA(name, data) 
+#define TRACY_END(name) 
 #define TRACY_FRAME_END
 #endif
 
