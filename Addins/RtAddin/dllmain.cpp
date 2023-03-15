@@ -1557,6 +1557,8 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 		return false;
 	}
 
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
 	assert(s_shadow_resources.find(s_frame_state.stream_data.pos.res.handle) != s_shadow_resources.end());
 	assert(s_shadow_resources.find(s_frame_state.stream_data.index.res.handle) != s_shadow_resources.end());
 	const bool dynamic_resource = s_dynamic_resources.contains(s_frame_state.stream_data.pos.res.handle);
@@ -1657,7 +1659,6 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 		.is_static = s_frame_state.static_geo_shader_is_bound,
 	};
 
-	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 	if (!s_ui_pause)
 		s_bvh_manager.on_geo_draw(draw_desc);
 
