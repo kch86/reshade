@@ -16,7 +16,7 @@
 
 extern bool is_windows7();
 
-#define USE_D3D12MA 0
+#define USE_D3D12MA 1
 
 #ifdef _WIN64
 constexpr size_t heap_index_start = 28;
@@ -166,6 +166,7 @@ void reshade::d3d12::device_impl::init_allocator()
 	D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
 	allocatorDesc.pDevice = _orig;
 	allocatorDesc.pAdapter = _adapter.get();
+	allocatorDesc.Flags = D3D12MA::ALLOCATOR_FLAG_NONE;
 
 	D3D12MA::Allocator *allocator;
 	HRESULT hr = D3D12MA::CreateAllocator(&allocatorDesc, &allocator);
@@ -353,6 +354,7 @@ bool reshade::d3d12::device_impl::create_resource(const api::resource_desc &desc
 #if USE_D3D12MA
 	D3D12MA::ALLOCATION_DESC allocationDesc = {};
 	allocationDesc.HeapType = heap_props.Type;
+	allocationDesc.Flags = D3D12MA::ALLOCATION_FLAG_NONE;
 
 	com_ptr<ID3D12Resource> object;
 	HRESULT hr = _allocator->CreateResource(
@@ -362,7 +364,6 @@ bool reshade::d3d12::device_impl::create_resource(const api::resource_desc &desc
 		use_default_clear_value ? &default_clear_value : nullptr,
 		&allocation,
 		IID_NULL, NULL);
-		//IID_PPV_ARGS(&object));
 #else
 	com_ptr<ID3D12Resource> object;
 	HRESULT hr = desc.heap == api::memory_heap::unknown ?
