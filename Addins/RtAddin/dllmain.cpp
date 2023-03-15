@@ -1886,6 +1886,11 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		const uint32_t count = ARRAYSIZE(resources);
 		s_d3d12cmdlist->barrier(count, resources, before, after);
 	}
+	else
+	{
+		//1st allocation, reset the frame id to "clear" out the history textures
+		s_frame_id = 0;
+	}
 
 	resource_view tlas_srv;
 	{
