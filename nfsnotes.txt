@@ -56,7 +56,9 @@ todo:
 ---- mostly due to the memory allocation
 -- bvh::update, instance data clear can take a looong time (1+ms)
 - tracy may be running out of  memory :-/
-- look at RtxMu for blas memory management or use gpu open dx12 memory allocator
+- look at RtxMu for blas memory management
+- instances / wheels groups seem to be related to the bad geo when loading/unloading
+-- perhaps as the "root" is not drawn the instances get corrupted
 
 //car vs layout
 //   HarmonicCoeff c0      10
