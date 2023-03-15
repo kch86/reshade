@@ -859,6 +859,8 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			}
 			radiance /= float(g_constants.iterCount);
 
+			radiance = max(0.0, radiance);
+
 			const RtInstanceData data = g_instance_data_buffer[hit.instanceId];
 			const float3 hitpos = get_ray_hitpoint(ray, hit);
 			const float3 prev_hitpos = mul(data.toWorldPrevT, float4(hitpos, 1.0));
@@ -966,7 +968,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 		const float hit_lerp = (motion_len2 + prevMv ) > 0.0 ? 1.0 : 0.5;
 
-		float4 prevRadiance = g_rtOutput[tid.xy];
+		const float4 prevRadiance = g_rtOutput[tid.xy];
 		const float time_weight = 1.0f / (1.0f + (1.0f / prevRadiance.a));
 
 		float weight = 0.0;
