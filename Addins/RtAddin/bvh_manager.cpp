@@ -255,15 +255,18 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	{
 		PROFILE_SCOPE("new_geo");
 		scopedresource bvh = buildBlas(desc.d3d9device, desc.cmd_list, desc.cmd_queue, desc.blas_desc);
-
-		assert(instanceIndex == 0);
 		m_bvhs.push_back(std::move(bvh));
+
+		//keep track of instance visible as well. drawing non-visible instances can result in artifacts
+		assert(instanceIndex == 0);
 		m_instances.push_back({});
 		m_instances.back().push_back({
 			.transform = desc.transform,
 			.prev_transform = desc.transform,
-			.mtrl = desc.material
+			.mtrl = desc.material,
+			.last_visible = m_frame_id,
 		});
+
 		m_geometry.push_back(desc.blas_desc);
 		m_geo_state.push_back({
 			.last_visible = m_frame_id,
@@ -305,15 +308,18 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 		}
 		if (instanceIndex < m_instances[index].size())
 		{
-			m_instances[index][instanceIndex].prev_transform = m_instances[index][instanceIndex].transform;
-			m_instances[index][instanceIndex].transform = desc.transform;
-			m_instances[index][instanceIndex].mtrl = desc.material;
+			RtInstance &instance = m_instances[index][instanceIndex];
+			instance.prev_transform = instance.transform;
+			instance.transform = desc.transform;
+			instance.mtrl = desc.material;
+			instance.last_visible = m_frame_id;
 		}
 		else
 		{
 			m_instances[index].push_back({
 				.transform = desc.transform,
-				.mtrl = desc.material
+				.mtrl = desc.material,
+				.last_visible = m_frame_id,
 			});
 		}
 	}
@@ -384,6 +390,9 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 			auto &instanceDatas = m_instances[i];
 			for (auto &instanceData : instanceDatas)
 			{
+				if (instanceData.last_visible != m_frame_id)
+					continue;
+
 				XMFLOAT3X4 toPrevWorldTransform;
 				XMMATRIX toPrevWorldTransform4x4 = XMMatrixIdentity();
 				if (base_transform)

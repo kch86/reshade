@@ -112,6 +112,7 @@ public:
 		DirectX::XMMATRIX transform;
 		DirectX::XMMATRIX prev_transform;
 		Material mtrl;
+		uint32_t last_visible;
 	};
 
 	struct GeometryState
