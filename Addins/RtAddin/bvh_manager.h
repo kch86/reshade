@@ -72,6 +72,7 @@ public:
 	void update_vbs(std::span<const reshade::api::resource> buffers);
 	void on_geo_updated(reshade::api::resource res);
 	void on_geo_draw(DrawDesc& desc);
+	void on_resource_destroy(reshade::api::resource_view view);
 	scopedresource build_tlas(DirectX::XMMATRIX *base_transform, reshade::api::command_list *cmd_list, reshade::api::command_queue *cmd_queue);
 	reshade::api::resource_view build_attachments(reshade::api::command_list *cmd_list);
 	reshade::api::resource_view build_instance_data(reshade::api::command_list *cmd_list);

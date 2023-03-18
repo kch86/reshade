@@ -195,6 +195,22 @@ namespace
 
 			return view[0].handle();
 		}
+
+		void destroy(bvh_manager& bvh)
+		{
+			if (res[0].handle().handle)
+			{
+				bvh.on_resource_destroy(view[0].handle());
+				res[0].free();
+				view[0].free();
+			}
+			if (res[1].handle().handle)
+			{
+				bvh.on_resource_destroy(view[1].handle());
+				res[1].free();
+				view[1].free();
+			}
+		}
 	};
 
 	struct MaterialMapping
@@ -1101,6 +1117,13 @@ static void on_destroy_resource(device *device, resource handle)
 
 	//assert(s_resources.find(handle.handle) != s_resources.end());
 	s_resources.erase(handle.handle);
+
+	auto iter = s_shadow_resources.find(handle.handle);
+	if (iter != s_shadow_resources.end())
+	{
+		iter->second.destroy(s_bvh_manager);
+		s_shadow_resources.erase(iter);
+	}
 }
 
 bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)

@@ -327,6 +327,23 @@ void bvh_manager::on_geo_draw(DrawDesc& desc)
 	}
 }
 
+void bvh_manager::on_resource_destroy(reshade::api::resource_view view)
+{
+	// todo: make this fast
+	// search our attachments for the srv and remove the entire attachment
+	for (size_t i = 0; i < m_instances.size(); i++)
+	{
+		uint32_t attachment_count = 0;
+		for (Attachment::Elem &elem : m_attachments[i].data)
+		{
+			if (elem.srv.handle == view.handle)
+			{
+				elem.srv.handle = 0;
+			}
+		}
+	}
+}
+
 scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* cmd_list, command_queue* cmd_queue)
 {
 	PROFILE_SCOPE("bvh_manager::build_tlas");
