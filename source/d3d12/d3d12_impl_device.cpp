@@ -25,20 +25,9 @@ constexpr size_t heap_index_start = 28;
 constexpr size_t heap_index_start = 24;
 #endif
 
-
-inline auto to_handle(D3D12MA::Allocation *ptr)
-{
-	return reshade::api::resource{ reinterpret_cast<uintptr_t>(ptr) };
-}
-
 inline auto to_resource(reshade::api::resource handle)
 {
-#if 0//USE_D3D12MA
-	D3D12MA::Allocation* allocation = reinterpret_cast<D3D12MA::Allocation *>(handle.handle);
-	return allocation->GetResource();
-#else
 	return reinterpret_cast<ID3D12Resource*>(handle.handle);
-#endif
 }
 
 reshade::d3d12::device_impl::device_impl(ID3D12Device *device, IDXGIAdapter *adapter) :
@@ -430,6 +419,7 @@ void reshade::d3d12::device_impl::destroy_resource(api::resource handle)
 #if USE_D3D12MA
 	ID3D12Resource* resource = to_resource(handle);
 	unregister_resource(resource);
+	assert(_alloc_map.find(resource) != _alloc_map.end());
 	D3D12MA::Allocation *allocation = _alloc_map[resource];
 	allocation->Release();
 	_alloc_map.erase(resource);
