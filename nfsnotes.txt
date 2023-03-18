@@ -43,20 +43,17 @@ todo:
 - add diffuse/specular split for future denoising
 - add better rng.
 -- strat sobol + bluenoise?
-- use profiler to see where cpu frame time is going
--- debug is ~20ms on top of the game
--- release is ~10ms on top of the game
--- much higher in the actual game. probably all the buffer updates
 - hot functions:
--- build_tlas
--- on_draw_indexed
---- usually not bad but can spike when it does something
---- on_geo_draw
---- blas build is killing me
----- mostly due to the memory allocation
 -- bvh::update, instance data clear can take a looong time (1+ms)
 - tracy may be running out of  memory :-/
 - look at RtxMu for blas memory management
+- full game is actually quite good
+-- lots of flickering
+-- need to keep drawing static things even if they have not been drawn by the view
+--- I think I can determine the transform when adding the static object instead of doing this in the tlas pass
+-- missing some draws
+--- sky
+--- sign
 
 //car vs layout
 //   HarmonicCoeff c0      10
