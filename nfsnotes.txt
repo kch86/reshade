@@ -59,6 +59,7 @@ todo:
 ---- sign/mountain are using some car headlight receiving shader (but I think I can ignore the car part)
 ----- I think I need to take this shader into account actually or it will never get "lit" at night time
 -- something is wrong with texture id somehow, parts of car are picking up wrong textures
+--- perhaps something with destroying textures? my shadow versions never get deleted probably
 -- neon signs need to be emissive!
 - there seems to be constant motion somehow, messing up my motion related rejection
 
