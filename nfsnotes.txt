@@ -47,13 +47,20 @@ todo:
 -- bvh::update, instance data clear can take a looong time (1+ms)
 - tracy may be running out of  memory :-/
 - look at RtxMu for blas memory management
-- full game is actually quite good
+- full game is actually quite good, issues:
 -- lots of flickering
 -- need to keep drawing static things even if they have not been drawn by the view
 --- I think I can determine the transform when adding the static object instead of doing this in the tlas pass
 -- missing some draws
---- sky
+--- sky. this should be added in a separate tlas perhaps....
+---- this is using the normal static vs shader
 --- sign
+--- mountain
+---- sign/mountain are using some car headlight receiving shader (but I think I can ignore the car part)
+----- I think I need to take this shader into account actually or it will never get "lit" at night time
+-- something is wrong with texture id somehow, parts of car are picking up wrong textures
+-- neon signs need to be emissive!
+- there seems to be constant motion somehow, messing up my motion related rejection
 
 //car vs layout
 //   HarmonicCoeff c0      10
