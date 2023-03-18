@@ -5,5 +5,6 @@
 #pragma warning( disable : 4100 ) //unreferenced parameter
 #pragma warning( disable : 4324 ) //padding
 #pragma warning( disable : 4505 ) //unreferenced function
+#pragma warning( disable : 4189 ) //unreferenced variable
 #include <D3D12MemAlloc.cpp>
 #pragma warning( pop )
