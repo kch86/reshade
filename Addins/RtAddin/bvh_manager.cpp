@@ -115,6 +115,8 @@ void bvh_manager::destroy()
 	m_instance_data_srv.free();
 	m_attachment_data_buffer.free();
 	m_attachment_data_srv.free();
+
+	init();
 }
 
 void bvh_manager::update_vbs(std::span<const resource> buffers)
@@ -440,6 +442,11 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 		m_instances_flat = std::move(instances);
 		m_attachments_flat = std::move(attachments);
 		m_instance_data_flat = std::move(instance_data);
+
+		if (m_instances_flat.empty())
+		{
+			return {};
+		}
 
 		TlasBuildDesc desc = {
 			.instances = {m_instances_flat.data(), m_instances_flat.size() }
