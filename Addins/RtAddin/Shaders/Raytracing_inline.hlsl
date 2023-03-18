@@ -824,7 +824,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 	RayDesc ray;
 	ray.TMin = 1e-5;
-	ray.TMax = 1000.0;
+	ray.TMax = g_constants.max_t;
 	ray.Origin = rayorigin;
 	ray.Direction = raydir;
 

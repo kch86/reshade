@@ -282,6 +282,7 @@ namespace
 	float s_ui_sun_intensity = 2.0f;
 	float s_ui_sun_radius = 0.1f;
 	float s_ui_bounce_boost = 1.0f;
+	float s_ui_max_t = 4000.0f;
 	int s_ui_drawCallBegin = 0;
 	int s_ui_drawCallEnd = 4095;
 	int s_ui_pathtrace_path_count = 3;
@@ -1925,6 +1926,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 	cb.iterCount = s_ui_pathtrace_iter_count;
 	cb.frameIndex = s_frame_id;
 	cb.bounceBoost = s_ui_bounce_boost;
+	cb.max_t = s_ui_max_t;
 
 	auto get_srv = [&](scopedresourceview &srv)
 	{
@@ -2214,6 +2216,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	ImGui::SliderInt("Pathtrace path count: ", &s_ui_pathtrace_path_count, 1, 10);
 	ImGui::SliderInt("Pathtrace iter count: ", &s_ui_pathtrace_iter_count, 1, 10);
 	ImGui::InputFloat("Pathtrace bounce boost", &s_ui_bounce_boost, 0.1f, 0.5f);
+	ImGui::InputFloat("Max Ray Distance", &s_ui_max_t, 1.0f, 10.0f);
 
 	float timer = timing::get_timer_value(s_rt_timer);
 	ImGui::Text("trace: %.2fms", timer);

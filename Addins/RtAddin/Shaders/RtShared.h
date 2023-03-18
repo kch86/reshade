@@ -8,7 +8,6 @@
 struct Uint3
 {
 	uint32_t x, y, z;
-
 };
 
 struct Uint2
@@ -110,6 +109,9 @@ struct RtConstants
 	float sunRadius;
 	uint transparentEnable;
 	uint debugChannel;
+
+	float max_t;
+	uint3 pad;
 };
 
 #endif
