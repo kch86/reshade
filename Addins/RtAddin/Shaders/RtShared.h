@@ -51,11 +51,11 @@ enum InstanceMask : uint
 
 enum MaterialType : uint
 {
-	Material_Standard = 0,
-	Material_Standard_Additive,
-	Material_Coat,
-	Material_Glass,
-	Material_Headlight,
+	Material_Standard = 0,		// standard pbr material
+	Material_Standard_Additive, // additive surfaces like particles
+	Material_Coat,				// stubbed for paint
+	Material_Glass,				// non-headlight glass
+	Material_Headlight,			// headlight only
 };
 
 struct RtInstanceAttachElem
