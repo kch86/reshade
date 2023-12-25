@@ -164,9 +164,52 @@ void reshade::load_addons()
 
 	LOG(INFO) << "Searching for add-ons (*.addon) in " << addon_search_path << " ...";
 
+#if 1
+	struct PathData
+	{
+		std::filesystem::path path;
+		int sortIndex = -1;
+	};
+
+	std::vector<PathData> paths;
+
 	std::error_code ec;
 	for (std::filesystem::path path : std::filesystem::directory_iterator(addon_search_path, std::filesystem::directory_options::skip_permission_denied, ec))
 	{
+		if (path.extension() != L".addon")
+			continue;
+
+		int sortOrder = 0xffff;
+		std::string name = path.filename().u8string();
+		config.get("ADDON-ORDER", name, sortOrder);
+
+		paths.push_back(PathData{path, sortOrder });
+	}
+
+	std::sort(paths.begin(), paths.end(), [](PathData& left, PathData& right) {
+		if (left.sortIndex < right.sortIndex)
+		{
+			//return left.sortIndex - right.sortIndex;
+			return -1;
+		}
+		else if (right.sortIndex > left.sortIndex)
+		{
+			//return right.sortIndex - left.sortIndex;
+			return 1;
+		}
+		return 0;
+
+		//return left.path.compare(right.path);
+	});
+
+	for (PathData& pathData : paths)
+	{
+		std::filesystem::path path = pathData.path;
+#else
+	for (std::filesystem::path path : std::filesystem::directory_iterator(addon_search_path, std::filesystem::directory_options::skip_permission_denied, ec))
+	{
+#endif
+
 		if (path.extension() != L".addon")
 			continue;
 
