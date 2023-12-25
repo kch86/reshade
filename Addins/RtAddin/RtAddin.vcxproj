@@ -79,6 +79,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <TargetExt>.addon</TargetExt>
     <OutDir>C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\</OutDir>
+    <CopyFileAfterTargets>PostBuildEvent</CopyFileAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\</OutDir>
@@ -109,6 +110,10 @@
     <PostBuildEvent>
       <Message>Mounting speed2: %DTOOLS%\DTCommandLine.exe -m -l "D" --ro -p "C:\Program Files (x86)\EA GAMES\Need for Speed Underground 2\SPEED2.zip"</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>robocopy "$(OutputPath)\" $(ProjectDir) Reshade.ini /XO</Command>
+      <Message>robocopy "$(OutputPath)\" $(ProjectDir) Reshade.ini /XO /NJH /NJS</Message>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -277,6 +282,11 @@
       <FileType>Document</FileType>
     </CopyFileToFolders>
     <None Include="packages.config" />
+    <CopyFileToFolders Include="Reshade.ini">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</DeploymentContent>
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

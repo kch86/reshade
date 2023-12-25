@@ -126,6 +126,9 @@
     <CopyFileToFolders Include="..\..\deps\superluminal\bin\PerformanceAPI.dll">
       <Filter>Deps</Filter>
     </CopyFileToFolders>
+    <CopyFileToFolders Include="Reshade.ini">
+      <Filter>Resource Files</Filter>
+    </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
