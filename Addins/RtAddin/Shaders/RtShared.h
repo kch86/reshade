@@ -33,8 +33,9 @@ enum DebugViewEnum : uint
 	DebugView_InstanceId,
 	DebugView_Normals,
 	DebugView_Uvs,
-	DebugView_Texture,
 	DebugView_Color,
+	DebugView_Mtrl,
+	DebugView_Texture,
 	DebugView_Motion,
 	DebugView_Count,
 };
@@ -73,6 +74,7 @@ struct RtInstanceAttachments
 	RtInstanceAttachElem uv;
 	RtInstanceAttachElem norm;
 	RtInstanceAttachElem col;
+	RtInstanceAttachElem mtrl;
 	RtInstanceAttachElem tex0;
 };
 

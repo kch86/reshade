@@ -104,6 +104,7 @@ namespace
 		stream pos;
 		stream normal;
 		stream color;
+		stream mtrl;
 		stream uv;
 	};
 
@@ -1335,6 +1336,7 @@ static void on_bind_vertex_buffers(command_list *cmd_list, uint32_t first, uint3
 	s_frame_state.stream_data.normal = get_stream_data(cmd_list, streamInfo.normal, buffers, offsets, strides, first, count);
 	s_frame_state.stream_data.uv = get_stream_data(cmd_list, streamInfo.uv, buffers, offsets, strides, first, count);
 	s_frame_state.stream_data.color = get_stream_data(cmd_list, streamInfo.color, buffers, offsets, strides, first, count);
+	s_frame_state.stream_data.mtrl = {};
 
 	s_bvh_manager.update_vbs(std::span<const resource>(buffers, (size_t)count));
 }
@@ -1653,6 +1655,8 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 		get_attach_desc(s_frame_state.stream_data.normal, vertex_count, vertex_offset, true),
 		// vert color
 		get_attach_desc(s_frame_state.stream_data.color, vertex_count, vertex_offset, true),
+		// material vertex data
+		get_attach_desc(s_frame_state.stream_data.mtrl, vertex_count, vertex_offset, true),
 		// texture 0 (only if the texcoord is valid)
 		{
 			.srv = has_uvs && texhandle != 0 ? s_shadow_resources[texhandle].srv() : resource_view{0},
@@ -1981,7 +1985,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		{
 			.count = ARRAYSIZE(samplers),
 			.type = descriptor_type::sampler,
-			.descriptors = samplers, // bind tlas srv
+			.descriptors = samplers, // bind sampler
 		},
 		{
 			.count = 1,
@@ -1991,7 +1995,7 @@ static void do_trace(uint32_t width, uint32_t height, resource_desc src_desc)
 		{
 			.count = ARRAYSIZE(srvs),
 			.type = descriptor_type::shader_resource_view,
-			.descriptors = srvs, // bind tlas srv
+			.descriptors = srvs, // bind srvs
 		},
 		{
 			.count = ARRAYSIZE(uavs),
@@ -2174,7 +2178,7 @@ static void draw_ui(reshade::api::effect_runtime *)
 	// debug view elements
 	{
 		const char *debug_views[] = {
-		"none", "instanceid", "normals", "uvs", "texture", "color", "motion",
+			"none", "instanceid", "normals", "uvs", "color", "mtrl", "texture", "motion",
 		};
 		static_assert(ARRAYSIZE(debug_views) == DebugView_Count);
 
