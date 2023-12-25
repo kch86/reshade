@@ -2253,8 +2253,11 @@ static void draw_ui(reshade::api::effect_runtime *)
 static void on_init_runtime(effect_runtime *runtime)
 {
 	reshade::config_get_value(runtime, "APP", "EnableGraphicsDebugLayer", s_d3d_debug_enabled);
-	reshade::config_get_value(runtime, "LIGHTING", "SunAzimuth", s_ui_sun_azimuth);
-	reshade::config_get_value(runtime, "LIGHTING", "SunElevation", s_ui_sun_elevation);
+	reshade::config_get_value(runtime, "RT-ADDON", "ShowRtEnable", s_ui_show_rt);
+	reshade::config_get_value(runtime, "RT-ADDON", "SunAzimuth", s_ui_sun_azimuth);
+	reshade::config_get_value(runtime, "RT-ADDON", "SunElevation", s_ui_sun_elevation);
+	reshade::config_get_value(runtime, "RT-ADDON", "PathLength", s_ui_pathtrace_path_count);
+	reshade::config_get_value(runtime, "RT-ADDON", "PathSampleCount", s_ui_pathtrace_iter_count);
 
 	uint32_t width;
 	uint32_t height;
