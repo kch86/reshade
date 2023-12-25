@@ -9,6 +9,7 @@
 #include <sstream>
 #include <shared_mutex>
 #include <unordered_set>
+#include <unordered_map>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 #include <scope_guard/scope_guard.h>
@@ -33,6 +34,8 @@ namespace
 	std::shared_mutex s_mutex;
 	std::unordered_set<uint64_t> s_samplers;
 	std::unordered_set<uint64_t> s_resources;
+	std::unordered_map<uint64_t, XXH64_hash_t> s_resource_hashes;
+	std::unordered_map<uint64_t, map_range> s_mapped_resources;
 	std::unordered_set<uint64_t> s_resource_views;
 	std::unordered_set<uint64_t> s_pipelines;
 
@@ -1176,7 +1179,15 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 
 	std::stringstream s;
 	for (uint32_t i = 0; i < count; ++i)
-		s << "bind_vertex_buffer(" << (first + i) << ", " << (void *)buffers[i].handle << ", " << (offsets != nullptr ? offsets[i] : 0) << ", " << (strides != nullptr ? strides[i] : 0) << ")" << std::endl;
+	{
+		XXH64_hash_t hash = 0;
+		if (s_resource_hashes.contains(buffers[i].handle))
+		{
+			hash = s_resource_hashes[buffers[i].handle];
+		}
+		s << "bind_vertex_buffer(" << (first + i) << ", handle: " << (void *)buffers[i].handle << ", offset: " << (offsets != nullptr ? offsets[i] : 0) << ", stride: " << (strides != nullptr ? strides[i] : 0) << ", hash: " << hash << ")" << std::endl;
+	}
+		
 
 	reshade::log_message(3, s.str().c_str());
 }
@@ -1276,10 +1287,7 @@ static bool on_copy_resource(command_list *, resource src, resource dst)
 	}
 #endif
 
-	std::stringstream s;
-	s << "copy_resource(" << (void *)src.handle << ", " << (void *)dst.handle << ")";
-
-	reshade::log_message(3, s.str().c_str());
+	
 
 	return false;
 }
@@ -1382,6 +1390,46 @@ static bool on_resolve_texture_region(command_list *, resource src, uint32_t src
 	reshade::log_message(3, s.str().c_str());
 
 	return false;
+}
+bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint64_t size, map_access access, void **data)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	if (s_resources.contains(handle.handle))
+	{
+		resource_desc desc = device->get_resource_desc(handle);
+		if (desc.type == resource_type::buffer)
+		{
+			size = size == UINT64_MAX ? desc.buffer.size : size;
+
+			map_range range = map_range{
+				.data = *data,
+				.dst_data = nullptr,
+				.offset = offset,
+				.size = size,
+				.access_flags = access
+			};
+
+			s_mapped_resources[handle.handle] = range;			
+		}		
+	}
+
+	return false;
+}
+map_range on_unmap_buffer_region(device *device, resource handle)
+{
+	const std::unique_lock<std::shared_mutex> lock(s_mutex);
+
+	const auto &iter = s_mapped_resources.find(handle.handle);
+	if (iter != s_mapped_resources.end())
+	{
+		const map_range& range = iter->second;
+		s_resource_hashes[handle.handle] = XXH3_64bits(range.data, (size_t)range.size);
+
+		s_mapped_resources.erase(iter);
+	}
+
+	return map_range{};
 }
 static void on_map_texture_region(device *device, resource resource, uint32_t subresource, const subresource_box *box, map_access access, subresource_data *data)
 {
@@ -1638,6 +1686,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::copy_buffer_to_texture>(on_copy_buffer_to_texture);
 		reshade::register_event<reshade::addon_event::copy_texture_region>(on_copy_texture_region);
 		reshade::register_event<reshade::addon_event::copy_texture_to_buffer>(on_copy_texture_to_buffer);
+		reshade::register_event<reshade::addon_event::map_buffer_region>(on_map_buffer_region);
+		reshade::register_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer_region);
 		reshade::register_event<reshade::addon_event::map_texture_region>(on_map_texture_region);
 		reshade::register_event<reshade::addon_event::resolve_texture_region>(on_resolve_texture_region);
 		reshade::register_event<reshade::addon_event::clear_depth_stencil_view>(on_clear_depth_stencil_view);

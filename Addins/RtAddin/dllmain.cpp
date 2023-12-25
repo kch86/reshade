@@ -322,6 +322,7 @@ namespace
 	std::unordered_map<uint64_t, uint32_t> s_vs_transform_map;
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
+	std::unordered_map<uint64_t, uint64_t> s_vb_hash_map;
 	std::unordered_set<uint64_t> s_ps_texbinding_map;
 	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 
@@ -1141,10 +1142,8 @@ bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 
 	if (desc.usage == resource_usage::vertex_buffer || desc.usage == resource_usage::index_buffer)
 	{
-		if (s_resources.find(handle.handle) != s_resources.end())
+		if (s_resources.contains(handle.handle))
 		{
-			resource_desc desc = device->get_resource_desc(handle);
-
 			uint64_t map_size = size == UINT64_MAX ? desc.buffer.size : size;
 
 			MapRegion region = MapRegion{
@@ -1164,7 +1163,7 @@ bool on_map_buffer_region(device *device, resource handle, uint64_t offset, uint
 			{
 				s_dynamic_resources.insert(handle.handle);
 				s_shadow_resources[handle.handle].set_dynamic();
-			}
+			}		
 		}
 
 		return true;
@@ -1187,9 +1186,9 @@ map_range on_unmap_buffer_region(device *device, resource handle)
 	if (s_mapped_resources.find(handle.handle) != s_mapped_resources.end())
 	{
 		const MapRegion &region = s_mapped_resources[handle.handle];
+		const resource_desc &desc = s_resources[handle.handle];
 		if (!s_ui_pause)
 		{
-			const resource_desc &desc = s_resources[handle.handle];
 			assert(region.buffer.size <= desc.buffer.size);
 			assert((region.buffer.offset + region.buffer.size) <= desc.buffer.size);
 
@@ -1217,6 +1216,12 @@ map_range on_unmap_buffer_region(device *device, resource handle)
 			.size = region.buffer.size,
 			.access_flags = region.buffer.flags
 		};
+
+		const bool shouldHash = desc.type == resource_type::buffer && desc.usage == resource_usage::vertex_buffer && !s_vb_hash_map.contains(handle.handle);
+		if (shouldHash)
+		{
+			s_vb_hash_map[handle.handle] = XXH3_64bits(region.buffer.data, (size_t)region.buffer.size);
+		}
 
 		s_mapped_resources.erase(handle.handle);
 

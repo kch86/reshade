@@ -237,9 +237,13 @@ float4 fetchVertexMtrl(RtInstanceAttachments att, uint3 indices, float2 baries)
 	float4 c = 1.0;
 
 	// don't support vertex material blending for now
+	// verts have 8-bit data packed into 32-bits
+	// so divide vert index by 4 and then shift remainder into the uint
+	// mod 4 * 8 since we want to shift by 8-bit groups
 	uint stride = att.mtrl.stride;
-	const uint c0 = vb.Load<uint>(indices.x * stride + att.mtrl.offset);
-	c.rgb = c0;
+	const uint packedMtrl = vb.Load<uint>((indices.x / 4) * stride + att.mtrl.offset);
+	const uint mtrl = (packedMtrl >> ((indices.x % 4) * 8)) & 0xf;
+	c.rgb = mtrl == 1 ? float3(1, 0, 0) : float3(0, 0, 0);
 
 	return c;
 }
