@@ -834,6 +834,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 		rng.init(tid.xy, g_constants.frameIndex, RngType::Pcg);
 		rng.set_sample_offset(g_constants.frameIndex * 32);
 
+#ifdef COMPARE_RNG
 		if (tid.x > (width / 2))
 		{
 			rng.init(tid.xy, g_constants.frameIndex, RngType::Halton);
@@ -841,6 +842,7 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			rng.set_sample_offset(g_constants.frameIndex * 32);
 			rng.set_buffer(g_sample_buffer);
 		}		
+#endif
 
 		float3 radiance = 0.0;
 
