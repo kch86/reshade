@@ -2100,7 +2100,10 @@ bool on_tech_pass_render(effect_runtime *runtime, effect_technique technique, co
 	{
 		//update the pass uniforms 1st before returning
 		auto full = runtime->find_uniform_variable("Simple.fx", "g_showRtResult");
-		runtime->set_uniform_value_bool(full, &s_ui_show_rt, 1);
+
+		// don't display the rt results if no 3d scene is being rendered or we're not enabled
+		const bool showRtResult = s_frame_state.got_viewproj && s_ui_show_rt && s_ui_enable;
+		runtime->set_uniform_value_bool(full, &showRtResult, 1);
 		return false;
 	}
 
