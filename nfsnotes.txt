@@ -8,45 +8,61 @@ todo:
 -- I could create all the textures as dynamic I think
 -- dynamic works with unwrapping... but it seems the textures aren't swizzled correctly...
 -- copy the device_imple update_texture_region (create temp texture ondemand)
+
 - convert to list of barriers for bvhs built the current frame
+
 - make warning disable list configurable through the .ini
+
 - crash with execute command list goes away when using my own render target :-/
 -- this occurs when i have the debug layer enabled... :-|
 -- repro with dx9 sample and send to ms
 -- this could be because of a mismatched dll d3d12.dll d3d12core.dll or sdklayers.dll
 -- tried upgrading to the agility sdk but this crash still repros.
 -- maybe that means I can repro in a small project
+
 - mapped/updated geometry should do a blas refit, not a full rebuild if possible
+
 - the proxies are not being passed to the d3d9on12 create function
 -- something isn't hooked correctly for d3d12 32-bit
 -- maybe I just need to make this mode more pass through?
 -- could be related to different d3d12 versions?
 --- the version (maybe d3d12.dll and d3d12core.dll) might not match what reshade builds against
-- use amd d3d12 memory allocator
+
 - if i don't mark buffers as dynamic, can I then unwrap them?
 -- hard to do this in advance, I'd only know on map if the buffer needed to be dynamic...
+
 - add smarter way to free blases that haven't been seen or built in a while
 -- linkedlist, deque?
+
 - decode all the texcoord stream elements
+
 - only do 3+ bounces if you've hit a mirror surface
+
 - alpha-test support is expensive...
 -- is there a better way here?
-- add instance color data debug mode
+
 - pass my camera to the game
+
 - blinking hazard lights are done by changing the texture every frame
 -- make an emmissive material for this
+
 - better material for head lights?
+
 - put translucents (like particles) in a separate pass and do a separate reflection trace against them
 -- this needs its own history buffer
+
 - add json loading/storing for the light scene
 - add obj loading for emissive light shapes
 - add diffuse/specular split for future denoising
 - add better rng.
 -- strat sobol + bluenoise?
+
 - hot functions:
 -- bvh::update, instance data clear can take a looong time (1+ms)
+
 - tracy may be running out of  memory :-/
 - look at RtxMu for blas memory management
+
 - full game is actually quite good, issues:
 -- lots of flickering
 -- need to keep drawing static things even if they have not been drawn by the view
@@ -62,6 +78,9 @@ todo:
 --- perhaps something with destroying textures? my shadow versions never get deleted probably
 -- neon signs need to be emissive!
 - there seems to be constant motion somehow, messing up my motion related rejection
+
+- add per vertex material support
+-- this will enable having different materials inside a model, but still 1 blas
 
 //car vs layout
 //   HarmonicCoeff c0      10
