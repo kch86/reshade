@@ -224,11 +224,11 @@ float4 fetchVertexColor(RtInstanceAttachments att, uint3 indices, float2 baries)
 	return c;
 }
 
-float4 fetchVertexMtrl(RtInstanceAttachments att, uint3 indices, float2 baries)
+MaterialType fetchVertexMtrl(RtInstanceAttachments att, uint3 indices, float2 baries)
 {
 	if (att.mtrl.id == 0x7FFFFFFF)
 	{
-		return 0.0.xxxx;
+		return Material_Standard;
 	}
 
 	// since vb streams are interleaved, this needs to be a byte address buffer
@@ -243,9 +243,8 @@ float4 fetchVertexMtrl(RtInstanceAttachments att, uint3 indices, float2 baries)
 	uint stride = att.mtrl.stride;
 	const uint packedMtrl = vb.Load<uint>((indices.x / 4) * stride + att.mtrl.offset);
 	const uint mtrl = (packedMtrl >> ((indices.x % 4) * 8)) & 0xf;
-	c.rgb = mtrl == 1 ? float3(1, 0, 0) : float3(0, 0, 0);
 
-	return c;
+	return (MaterialType)mtrl;
 }
 
 Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries)
@@ -1058,7 +1057,16 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 			{
 				const uint3 indices = fetchIndices(att, primitiveIndex);
 
-				value = fetchVertexMtrl(att, indices, baries);
+				const MaterialType mtrl = fetchVertexMtrl(att, indices, baries);
+
+				if (mtrl == Material_Standard)
+				{
+					value = float3(1, 0, 0);
+				}
+				else
+				{
+					value = float3(0, 1, 0);
+				}
 			}
 			else if (g_constants.debugView == DebugView_Motion)
 			{
