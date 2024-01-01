@@ -1061,11 +1061,11 @@ void ray_gen(uint3 tid : SV_DispatchThreadID)
 
 				if (mtrl == Material_Standard)
 				{
-					value = float3(1, 0, 0);
+					value.rgb = float3(1, 0, 0);
 				}
 				else
 				{
-					value = float3(0, 1, 0);
+					value.rgb = float3(0, 1, 0);
 				}
 			}
 			else if (g_constants.debugView == DebugView_Motion)
