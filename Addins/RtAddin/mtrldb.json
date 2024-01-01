@@ -1,0 +1,18 @@
+[
+	{
+		// todo: tag correct regions
+		"guid" : "13056804180217735911",
+		"submeshes" : [
+			{
+				"start" : "0",
+				"end" : "100",
+				"mtrl" : "0"
+			},
+			{
+				"start" : "101",
+				"end" : "1000",
+				"mtrl" : "1"
+			}
+		]
+	}
+]
