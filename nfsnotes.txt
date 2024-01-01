@@ -1,4 +1,5 @@
 nfs notes:
+- must use admin VS
 todo:
 - do I want to use kickStartRT? 
 -- all i have is final image....
@@ -81,6 +82,11 @@ todo:
 
 - add per vertex material support
 -- this will enable having different materials inside a model, but still 1 blas
+-- steps:
+-- 1. hash vb data, and possibly bound shader
+-- 2. write out per-vertex material data to obj or similar
+-- 3. create material buffer either when the vb is created or the vb is bound (jit)
+-- 4. load material data
 
 //car vs layout
 //   HarmonicCoeff c0      10

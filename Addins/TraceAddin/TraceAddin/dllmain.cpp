@@ -1186,8 +1186,7 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 			hash = s_resource_hashes[buffers[i].handle];
 		}
 		s << "bind_vertex_buffer(" << (first + i) << ", handle: " << (void *)buffers[i].handle << ", offset: " << (offsets != nullptr ? offsets[i] : 0) << ", stride: " << (strides != nullptr ? strides[i] : 0) << ", hash: " << hash << ")" << std::endl;
-	}
-		
+	}		
 
 	reshade::log_message(3, s.str().c_str());
 }
