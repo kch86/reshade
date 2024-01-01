@@ -189,17 +189,14 @@ void reshade::load_addons()
 	std::sort(paths.begin(), paths.end(), [](PathData& left, PathData& right) {
 		if (left.sortIndex < right.sortIndex)
 		{
-			//return left.sortIndex - right.sortIndex;
-			return -1;
+			return true;
 		}
-		else if (right.sortIndex > left.sortIndex)
+		if (left.sortIndex > right.sortIndex)
 		{
-			//return right.sortIndex - left.sortIndex;
-			return 1;
+			return false;
 		}
-		return 0;
 
-		//return left.path.compare(right.path);
+		return left.path.compare(right.path) < 0;
 	});
 
 	for (PathData& pathData : paths)
