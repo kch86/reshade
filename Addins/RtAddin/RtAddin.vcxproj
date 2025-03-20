@@ -94,7 +94,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\..\include;..\..\deps\;..\..\source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\..\deps\;..\..\source;..\..\deps\rapidjson\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
@@ -126,7 +126,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\..\include;..\..\deps\;..\..\source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\..\deps\;..\..\source;..\..\deps\rapidjson\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -183,6 +183,7 @@
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hash.cpp" />
+    <ClCompile Include="materialdb.cpp" />
     <ClCompile Include="profiling.cpp" />
     <ClCompile Include="raytracing.cpp" />
     <ClCompile Include="sample_gen.cpp" />
@@ -195,6 +196,7 @@
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="dxhelpers.h" />
     <ClInclude Include="hash.h" />
+    <ClInclude Include="materialdb.h" />
     <ClInclude Include="profiling.h" />
     <ClInclude Include="raytracing.h" />
     <ClInclude Include="sample_gen.h" />

@@ -1,18 +1,92 @@
+//schema
+// {
+//  vs guid is used to identify vs shader hashed at runtime. used for:
+//  - lookup for wvp in the constant data 
+//  - lookup for material constant data
+//  - lookup for mtrl matching
+// 	"vs_guid" : "5461187419696972836",
+// 
+//  ps guid is used to identify ps shader hashed at runtime. used for:
+//  - lookup for material matching
+// 	"ps_guid" : "7314718503845779620",
+// 
+//  vb guid is used to match models, whose vb is hashed at runtime. used for:
+// 	- material matching. if guid is empty, then the material is applied to the whole mesh
+// 	"vb_guid" : "",
+// 
+// 	specifies the float4 offset of the WVP data into the constant data uploaded for a draw
+// 	"transform_slot" : "",
+// 
+// 	specifies where the albedo texture can be found in the app provided bindings
+// 	"albedo_tex_slot" : "1",
+// 
+// 	these are constant data offsets into the vector of float4s pushed by the app
+// 	"constant_data" : {
+// 		"diffuse_offset" : "18",
+// 		"specular_offset" : "20",
+// 		"specular_power_offset" : "22",
+// 		"env_power_offset" : "23",
+// 		"min_spec_offset" : "20",
+// 	},
+// },
+
 [
+	// I think this was the flashing construction thing
+	// {
+	// 	// todo: tag correct regions
+	// 	"guid" : "13056804180217735911",
+	//  TODO: these regions need to be uploaded as a buffer per vb
+	// 		- the start/end should correspond to triangles/indices
+	// 	"submeshes" : [
+	// 		{
+	// 			"start" : "0",
+	// 			"end" : "100",
+	// 			"mtrl" : "0"
+	// 		},
+	// 		{
+	// 			"start" : "101",
+	// 			"end" : "1000",
+	// 			"mtrl" : "1"
+	// 		}
+	// 	]
+	// }
+	
+	// car setup 0
 	{
-		// todo: tag correct regions
-		"guid" : "13056804180217735911",
-		"submeshes" : [
-			{
-				"start" : "0",
-				"end" : "100",
-				"mtrl" : "0"
-			},
-			{
-				"start" : "101",
-				"end" : "1000",
-				"mtrl" : "1"
-			}
-		]
+		"vs_guid" : 5461187419696972836,
+		"ps_guid" : 7314718503845779620,
+		"vb_guid" : 0,
+		"material" : "coat",
+		"transform_slot" : 10,
+		"albedo_tex_slot" : 1,
+		// these are constant data offsets into the vector of float4s pushed by the app
+		"constant_data" : {
+			"diffuse_offset" : 18,
+			"specular_offset" : 20,
+			"specular_power_offset" : 22,
+			"env_power_offset" : 23,
+			"min_spec_offset" : 20,
+		},
+	},
+	// car setup 1
+	{
+		"vs_guid" : 6550593362979704143,
+		"ps_guid" : 7314718503845779620,
+		"vb_guid" : 0,
+		"material" : "coat",
+		"transform_slot" : 74,
+		"albedo_tex_slot" : 1,
+		// these are constant data offsets into the vector of float4s pushed by the app
+		"constant_data" : {
+			"diffuse_offset" : 82,
+			"specular_offset" : -1,
+			"specular_power_offset" : -1,
+			"env_power_offset" : -1,
+			"min_spec_offset" : -1,
+		},
 	}
 ]
+
+// car
+// vs and ps must match. no geo specific, yet. get implicit data from blend modes (glass, headlights)
+// stores xmvector offset to grab data. returns default otherwise

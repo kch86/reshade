@@ -53,6 +53,8 @@ todo:
 -- this needs its own history buffer
 
 - add json loading/storing for the light scene
+	- map a model (vb hash) to a light stored in a json db
+	- store the local light type, pos, dir, color, bounds etc
 - add obj loading for emissive light shapes
 - add diffuse/specular split for future denoising
 - add better rng.
@@ -86,6 +88,7 @@ todo:
 -- 1. hash vb data, and possibly bound shader
 -- 2. write out per-vertex material data to obj or similar
 -- 3. create material buffer either when the vb is created or the vb is bound (jit)
+	- should this be per triangle?
 -- 4. load material data
 
 //car vs layout

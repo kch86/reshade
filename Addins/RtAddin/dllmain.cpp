@@ -33,6 +33,7 @@ extern "C" { __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\
 #include "timing.h"
 #include "sample_gen.h"
 #include "profiling.h"
+#include "materialdb.h"
 
 #define INCLUDE_RT_SHADERS 0
 #if INCLUDE_RT_SHADERS
@@ -2286,6 +2287,8 @@ static void do_init()
 	init_ps_mappings();
 
 	s_bvh_manager.init();
+
+	mtrldb::load_db("mtrldb.json");
 }
 
 static void do_shutdown()
