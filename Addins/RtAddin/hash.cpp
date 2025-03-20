@@ -6,7 +6,7 @@
 
 namespace hash
 {
-	uint64_t hash(void* data, size_t size)
+	uint64_t hash(const void* data, size_t size)
 	{
 		return XXH3_64bits(data, size);
 	}

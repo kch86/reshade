@@ -933,7 +933,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 		else if (object.type == pipeline_subobject_type::vertex_shader)
 		{
 			shader_desc *shader_data = (shader_desc *)object.data;
-			XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+			XXH64_hash_t hash = hash::hash(shader_data->code, shader_data->code_size);
 
 			s_vs_hash_map[handle.handle] = hash;
 			if (hash == StaticGeoVsHash)
@@ -948,7 +948,7 @@ static void on_init_pipeline(device *device, pipeline_layout, uint32_t subObject
 		else if (object.type == pipeline_subobject_type::pixel_shader)
 		{
 			shader_desc *shader_data = (shader_desc *)object.data;
-			XXH64_hash_t hash = XXH3_64bits(shader_data->code, shader_data->code_size);
+			XXH64_hash_t hash = hash::hash(shader_data->code, shader_data->code_size);
 
 			s_ps_hash_map[handle.handle] = hash;
 
@@ -1221,7 +1221,7 @@ map_range on_unmap_buffer_region(device *device, resource handle)
 		const bool shouldHash = desc.type == resource_type::buffer && desc.usage == resource_usage::vertex_buffer && !s_vb_hash_map.contains(handle.handle);
 		if (shouldHash)
 		{
-			s_vb_hash_map[handle.handle] = XXH3_64bits(region.buffer.data, (size_t)region.buffer.size);
+			s_vb_hash_map[handle.handle] = hash::hash(region.buffer.data, (size_t)region.buffer.size);
 		}
 
 		s_mapped_resources.erase(handle.handle);
