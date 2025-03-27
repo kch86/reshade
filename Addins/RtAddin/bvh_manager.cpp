@@ -448,6 +448,7 @@ scopedresource bvh_manager::build_tlas(XMMATRIX* base_transform, command_list* c
 				RtInstanceData rt_instance_data;
 				rt_instance_data.diffuse = instanceData.mtrl.diffuse;
 				rt_instance_data.specular = instanceData.mtrl.specular;
+				rt_instance_data.emissive = instanceData.mtrl.emissive;
 				rt_instance_data.roughness = instanceData.mtrl.roughness;
 				rt_instance_data.toWorldPrevT = toPrevWorldTransform;
 				rt_instance_data.flags = (instance.instance_mask & InstanceMask_opaque_alphatest) != 0 ? 1 : 0;

@@ -215,16 +215,6 @@ namespace
 		}
 	};
 
-	struct MaterialMapping
-	{
-		// offsets in float4 slots as in the shader disasm
-		int diffuse_offset;
-		int specular_offset;
-		int specular_power_offset;
-		int env_power_offset;
-		int min_spec_offset;
-	};
-
 	struct FrameState
 	{
 		TextureBindings bindings;
@@ -320,12 +310,9 @@ namespace
 
 	const uint64_t StaticGeoVsHash = 18047787432603860385;
 	std::unordered_set<uint64_t> s_static_geo_vs_pipelines;
-	std::unordered_map<uint64_t, uint32_t> s_vs_transform_map;
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_vb_hash_map;
-	std::unordered_set<uint64_t> s_ps_texbinding_map;
-	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
@@ -393,32 +380,15 @@ StreamData::stream get_stream_data(
 
 MaterialType get_material_type(FrameState frame)
 {
-	const uint64_t car_vs_hashes[] = {
-		6550593362979704143,
-		5461187419696972836
-	};
-
-	const uint64_t car_ps_hashes[] = {
-		7314718503845779620
-	};
-
 	const uint64_t vshash = s_vs_hash_map[frame.vs.handle];
 	const uint64_t pshash = s_ps_hash_map[frame.ps.handle];
+	MaterialType type = mtrldb::get_material_type(vshash, pshash);
 
-	auto is_in_hash = [](std::span<const uint64_t> s, uint64_t hash)
+	if (type == Material_Coat)
 	{
-		for (uint64_t h : s)
-			if (h == hash)
-				return true;
-		return false;
-	};
-	const bool is_car_shader = is_in_hash(car_vs_hashes, vshash) && is_in_hash(car_ps_hashes, pshash);
-
-	MaterialType type = Material_Standard;
-
-	if (is_car_shader)
-	{
-		type = Material_Coat;
+		// auto detect headlights and glass based on blend states
+		// this works well for a large portion of cars.
+		// otherwise I'll need to tag every piece of headlight geo
 		if (frame.blend_enable)
 		{
 			if (frame.dst_blend == blend_factor::one)
@@ -440,77 +410,6 @@ MaterialType get_material_type(FrameState frame)
 	}
 
 	return type;
-}
-
-static void init_vs_mappings()
-{
-	// vs transform constants mappings
-	{
-		struct VsTransformMap
-		{
-			uint64_t hash;
-			uint32_t offset; //offset in float4 slots as in the shader disasm
-		};
-
-		static VsTransformMap hashes[] = {
-			{6550593362979704143, 74},
-			{5461187419696972836, 10},
-		};
-
-		for (const VsTransformMap &mapping : hashes)
-		{
-			s_vs_transform_map[mapping.hash] = mapping.offset;
-		}
-	}
-
-	// car constants mapping
-	{
-		struct VsMaterialMap
-		{
-			uint64_t hash;
-			MaterialMapping mtrl;
-		};
-
-		static VsMaterialMap hashes[] = {
-			{
-				5461187419696972836,
-				{
-					.diffuse_offset = 18,
-					.specular_offset = 20,
-					.specular_power_offset = 22,
-					.env_power_offset = 23,
-					.min_spec_offset = 20,
-				}
-			},
-			{
-				6550593362979704143,
-				{
-					.diffuse_offset = 82,
-					.specular_offset = -1,
-					.specular_power_offset = -1,
-					.env_power_offset = -1,
-					.min_spec_offset = -1,
-				}
-			}
-		};
-
-		for (const VsMaterialMap &mapping : hashes)
-		{
-			s_vs_material_map[mapping.hash] = mapping.mtrl;
-		}
-	}
-}
-
-static void init_ps_mappings()
-{
-	static uint64_t hashes[] = {
-		7314718503845779620,
-	};
-
-	for (uint64_t mapping : hashes)
-	{
-		s_ps_texbinding_map.insert(mapping);
-	}
 }
 
 static void clear_bvhs()
@@ -1376,12 +1275,12 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		{
 			assert(s_vs_hash_map.contains(s_frame_state.vs.handle));
 			const uint64_t hash = s_vs_hash_map[s_frame_state.vs.handle];
-			if (auto offset = s_vs_transform_map.find(hash); offset != s_vs_transform_map.end())
+			if(int offset = mtrldb::get_wvp_offset(hash); offset != mtrldb::InvalidOffset)
 			{
 				//found a mapping, index by vector4 slot
 				XMVECTOR *vectors = (XMVECTOR *)values;
 
-				s_frame_state.wvp = *((XMMATRIX *)&vectors[offset->second]);
+				s_frame_state.wvp = *((XMMATRIX *)&vectors[offset]);
 			}
 			else
 			{
@@ -1392,10 +1291,13 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 		}
 
 		// extract material data from vertex constants
+		s_frame_state.mtrl = {};
 		{
 			assert(s_vs_hash_map.contains(s_frame_state.vs.handle));
 			const uint64_t hash = s_vs_hash_map[s_frame_state.vs.handle];
-			if (auto offset = s_vs_material_map.find(hash); offset != s_vs_material_map.end())
+			
+			const mtrldb::MaterialMapping& mtrlmap = mtrldb::get_mtrl_constant_offsets(hash);
+			if(mtrlmap != mtrldb::MaterialMapping::invalid())
 			{
 				XMVECTOR *vectors = (XMVECTOR *)values;
 
@@ -1459,19 +1361,15 @@ static void on_push_constants(command_list *, shader_stage stages, pipeline_layo
 				};
 
 				s_frame_state.mtrl = {
-					.diffuse = get_elem(offset->second.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
+					.diffuse = get_elem(mtrlmap.diffuse_offset, {1.0f, 1.0f, 1.0f, 1.0f}),
 					//TODO most of the specular color values are bogus pre-pbr values
-					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(offset->second.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
-					//.roughness = get_roughness(get_elem(offset->second.specular_power_offset, XMVectorReplicate(default_roughness))),
-					//.roughness = get_roughness_envpower(get_elem(offset->second.env_power_offset, XMVectorReplicate(.1f))),
-					.roughness = get_roughness2(get_elem_f(offset->second.specular_power_offset, .8f),
-												get_elem_f(offset->second.min_spec_offset, .5f),
-												get_elem_f(offset->second.env_power_offset, .8f)),
+					.specular = {1.0f, 1.0f, 1.0f, 1.0f},// get_elem(mtrlmap.specular_offset, {0.0f, 0.0f, 0.0f, 0.0f}), 
+					//.roughness = get_roughness(get_elem(mtrlmap.specular_power_offset, XMVectorReplicate(default_roughness))),
+					//.roughness = get_roughness_envpower(get_elem(mtrlmap.env_power_offset, XMVectorReplicate(.1f))),
+					.roughness = get_roughness2(get_elem_f(mtrlmap.specular_power_offset, .8f),
+												get_elem_f(mtrlmap.min_spec_offset, .5f),
+												get_elem_f(mtrlmap.env_power_offset, .8f)),
 				};
-			}
-			else
-			{
-				s_frame_state.mtrl = {};
 			}
 		}
 	}
@@ -1623,9 +1521,9 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 		{
 			assert(s_ps_hash_map.contains(s_frame_state.ps.handle));
 			const uint64_t hash = s_ps_hash_map[s_frame_state.ps.handle];
-			if (s_ps_texbinding_map.contains(hash))
+			if(int slot = mtrldb::get_albedo_tex_slot(hash); slot != mtrldb::InvalidOffset)
 			{
-				texslot = 1;
+				texslot = slot;
 			}
 		}
 		if (texslot == 1 && s_frame_state.bindings.slots[1].handle)
@@ -2283,9 +2181,6 @@ static void on_init_runtime(effect_runtime *runtime)
 
 static void do_init()
 {
-	init_vs_mappings();
-	init_ps_mappings();
-
 	s_bvh_manager.init();
 
 	mtrldb::load_db("mtrldb.json");

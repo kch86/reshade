@@ -82,6 +82,7 @@ struct RtInstanceData
 {
 	float4 diffuse;
 	float4 specular;
+	float4 emissive;
 	row_major float3x4 toWorldPrevT;
 	float roughness;
 	MaterialType mtrl;

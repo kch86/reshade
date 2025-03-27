@@ -280,7 +280,7 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	Material mtrl;
 	mtrl.tint = baseColorTint;
 	mtrl.base_color = combined_base;
-	mtrl.emissive = 0.0;// emissive;
+	mtrl.emissive = data.emissive.xyz;
 	mtrl.metalness = 0.0;
 	mtrl.opacity = opacity;
 	mtrl.opaque = instance_is_opaque(data);

@@ -17,6 +17,12 @@ namespace mtrldb
 	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 	std::unordered_map<uint64_t, MaterialType> s_material_type_map;
 
+	const MaterialMapping& MaterialMapping::invalid()
+	{
+		static MaterialMapping ret{};
+		return ret;
+	}
+
 	MaterialType get_enum(const char *str)
 	{
 		if (_strcmpi(str, "coat") == 0)
@@ -78,7 +84,7 @@ namespace mtrldb
 		}
 	}
 
-	MaterialType get_material(uint64_t vshash, uint64_t pshash)
+	MaterialType get_material_type(uint64_t vshash, uint64_t pshash)
 	{
 		const uint64_t hash = get_combined_hash(vshash, pshash);
 
@@ -97,7 +103,7 @@ namespace mtrldb
 			return entry->second;
 		}
 
-		return -1;
+		return InvalidOffset;
 	}
 
 	int get_albedo_tex_slot(uint64_t pshash)
@@ -107,17 +113,17 @@ namespace mtrldb
 			return entry->second;
 		}
 
-		return -1;
+		return InvalidSlot;
 	}
 
-	MaterialMapping& get_mtrl_constant_offsets(uint64_t vshash)
+	const MaterialMapping& get_mtrl_constant_offsets(uint64_t vshash)
 	{
 		if (auto entry = s_vs_material_map.find(vshash); entry != s_vs_material_map.end())
 		{
 			return entry->second;
 		}
 
-		static MaterialMapping no_hit{};
-		return no_hit;
+		return MaterialMapping::invalid();
 	}
+
 }
