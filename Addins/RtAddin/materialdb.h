@@ -28,6 +28,7 @@ namespace mtrldb
 	void load_db(const char *file);
 
 	MaterialType get_material_type(uint64_t vshash, uint64_t pshash);
+	MaterialType get_submesh_material(MaterialType basetype, uint64_t vbhash, uint64_t ibhash, int index_count, int index_offset);
 	int get_wvp_offset(uint64_t vshash);
 	int get_albedo_tex_slot(uint64_t pshash);
 	const MaterialMapping& get_mtrl_constant_offsets(uint64_t vshash);

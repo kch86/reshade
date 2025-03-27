@@ -313,6 +313,7 @@ namespace
 	std::unordered_map<uint64_t, uint64_t> s_vs_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_ps_hash_map;
 	std::unordered_map<uint64_t, uint64_t> s_vb_hash_map;
+	std::unordered_map<uint64_t, uint64_t> s_ib_hash_map;
 
 	const uint64_t UiVsHash = 9844442386646808009;
 	const uint64_t UiPsHash = 15657049591930699901;
@@ -378,11 +379,18 @@ StreamData::stream get_stream_data(
 
 }
 
-MaterialType get_material_type(FrameState frame)
+MaterialType get_material_type(FrameState frame, int index_count, int index_offset)
 {
 	const uint64_t vshash = s_vs_hash_map[frame.vs.handle];
 	const uint64_t pshash = s_ps_hash_map[frame.ps.handle];
 	MaterialType type = mtrldb::get_material_type(vshash, pshash);
+
+	// apply the submesh override
+	{
+		const uint64_t vbhash = s_vb_hash_map[frame.stream_data.pos.res.handle];
+		const uint64_t ibhash = s_ib_hash_map[frame.stream_data.index.res.handle];
+		type = mtrldb::get_submesh_material(type, vbhash, ibhash, index_count, index_offset);
+	}	
 
 	if (type == Material_Coat)
 	{
@@ -1117,10 +1125,22 @@ map_range on_unmap_buffer_region(device *device, resource handle)
 			.access_flags = region.buffer.flags
 		};
 
-		const bool shouldHash = desc.type == resource_type::buffer && desc.usage == resource_usage::vertex_buffer && !s_vb_hash_map.contains(handle.handle);
-		if (shouldHash)
+		// hash vb
 		{
-			s_vb_hash_map[handle.handle] = hash::hash(region.buffer.data, (size_t)region.buffer.size);
+			const bool shouldHash = desc.type == resource_type::buffer && desc.usage == resource_usage::vertex_buffer && !s_vb_hash_map.contains(handle.handle);
+			if (shouldHash)
+			{
+				s_vb_hash_map[handle.handle] = hash::hash(region.buffer.data, (size_t)region.buffer.size);
+			}
+		}
+
+		// hash ib
+		{
+			const bool shouldHash = desc.type == resource_type::buffer && desc.usage == resource_usage::index_buffer && !s_ib_hash_map.contains(handle.handle);
+			if (shouldHash)
+			{
+				s_ib_hash_map[handle.handle] = hash::hash(region.buffer.data, (size_t)region.buffer.size);
+			}
 		}
 
 		s_mapped_resources.erase(handle.handle);
@@ -1570,7 +1590,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t index_count, uint32
 	};
 
 	Material mtrl = s_frame_state.mtrl;
-	mtrl.type = get_material_type(s_frame_state);
+	mtrl.type = get_material_type(s_frame_state, index_count, first_index);
 #if 0
 	// disable this for now as multiplying roughness by texture.a seems to work well
 	if (reflection_view_bound)

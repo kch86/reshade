@@ -56,6 +56,7 @@
 		"vs_guid" : 5461187419696972836,
 		"ps_guid" : 7314718503845779620,
 		"vb_guid" : 0,
+		"ib_guid" : 0,
 		"material" : "coat",
 		"transform_slot" : 10,
 		"albedo_tex_slot" : 1,
@@ -73,6 +74,7 @@
 		"vs_guid" : 6550593362979704143,
 		"ps_guid" : 7314718503845779620,
 		"vb_guid" : 0,
+		"ib_guid" : 0,
 		"material" : "coat",
 		"transform_slot" : 74,
 		"albedo_tex_slot" : 1,
@@ -84,6 +86,32 @@
 			"env_power_offset" : -1,
 			"min_spec_offset" : -1,
 		},
+	},
+	// road sign
+	{
+		"vs_guid" : 0,
+		"ps_guid" : 0,
+		// "vb_guid" : 13056804180217735911,	// Trace add-in vb hash
+		// "ib_guid" : 6921194780672005503,		// Trace add-in ib hash. why don't they match?
+		"vb_guid" : 618528990657336075, 		// full vb hash
+		"ib_guid" : 1773418600066480992,		// full ib hash
+		"material" : "emissive",
+		"transform_slot" : -1,
+		"albedo_tex_slot" : -1,
+		// these are constant data offsets into the vector of float4s pushed by the app
+		"constant_data" : {
+			"diffuse_offset" : -1,
+			"specular_offset" : -1,
+			"specular_power_offset" : -1,
+			"env_power_offset" : -1,
+			"min_spec_offset" : -1,
+		},
+		"sub_meshes" : [
+			{
+				"index_offset" : 2571,
+				"index_count" : 180,
+			},
+		],
 	}
 ]
 

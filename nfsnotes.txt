@@ -308,3 +308,27 @@ windshiled banner:
 { 0.195, 0.195, 0.195, 0 },
 { 1.3915, 0, 0, 0 },
 { 2, 0, 0, 0 },
+
+// road sign
+draw_indexed 134 (
+	indexCount: 180, 
+	instanceCount: 1, 
+	firstIndex: 2571, 
+	vertexOffet: 0, 
+	vertexCount: 6267
+)
+
+bind_vertex_buffer(
+	slot: 0, 
+	handle: 15E81380, 
+	offset: 0, 
+	stride: 24, 
+	hash: 13056804180217735911
+)
+
+bind_index_buffer( 
+	handle: 15FC4880, 
+	offset: 0, 
+	size: 2, 
+	hash: 6921194780672005503
+)

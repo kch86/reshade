@@ -277,10 +277,17 @@ Material fetchMaterial(uint instance_id, float2 uv, uint3 indices, float2 baries
 	// some textures have zero color as their color which is not physically accurate
 	//combined_base = max(0.05, combined_base);
 
+	// handling for emissive materials
+	float3 emissive = data.emissive.xyz;
+	if (data.mtrl == Material_Emissive)
+	{
+		emissive += combined_base;
+	}
+
 	Material mtrl;
 	mtrl.tint = baseColorTint;
 	mtrl.base_color = combined_base;
-	mtrl.emissive = data.emissive.xyz;
+	mtrl.emissive = emissive;
 	mtrl.metalness = 0.0;
 	mtrl.opacity = opacity;
 	mtrl.opaque = instance_is_opaque(data);

@@ -57,6 +57,7 @@ enum MaterialType : uint
 	Material_Coat,				// stubbed for paint
 	Material_Glass,				// non-headlight glass
 	Material_Headlight,			// headlight only
+	Material_Emissive,			// interprets albedo as emissive
 };
 
 struct RtInstanceAttachElem

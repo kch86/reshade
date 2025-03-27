@@ -122,6 +122,7 @@ void bvh_manager::destroy()
 void bvh_manager::update_vbs(std::span<const resource> buffers)
 {
 	PROFILE_SCOPE("vh_manager::update_vbs");
+	//TODO: do i want to hash the bound buffer handles or the contents?
 	m_current_draw_stream_hash = XXH3_64bits(buffers.data(), buffers.size_bytes());
 }
 

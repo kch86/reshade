@@ -12,10 +12,19 @@
 
 namespace mtrldb
 {
+	struct SubMeshInfo
+	{
+		uint64_t vb_hash;
+		uint64_t ib_hash;
+		int index_offset;
+		int index_count;
+	};
+
 	std::unordered_map<uint64_t, uint32_t> s_vs_transform_map;
 	std::unordered_map<uint64_t, int> s_ps_texbinding_map;
 	std::unordered_map<uint64_t, MaterialMapping> s_vs_material_map;
 	std::unordered_map<uint64_t, MaterialType> s_material_type_map;
+	std::unordered_map<uint64_t, MaterialType> s_material_submesh_type_map;
 
 	const MaterialMapping& MaterialMapping::invalid()
 	{
@@ -28,6 +37,10 @@ namespace mtrldb
 		if (_strcmpi(str, "coat") == 0)
 		{
 			return Material_Coat;
+		}
+		else if (_strcmpi(str, "emissive") == 0)
+		{
+			return Material_Emissive;
 		}
 
 		return Material_Standard;
@@ -52,7 +65,7 @@ namespace mtrldb
 
 		Document json;
 		json.Parse<kParseCommentsFlag|kParseTrailingCommasFlag>(contents.c_str());
-		//assert(!json.HasParseError());
+		assert(!json.HasParseError());
 		ParseErrorCode error = json.GetParseError();
 		size_t offset = json.GetErrorOffset();
 		std::string location = contents.substr(offset, 32);
@@ -63,11 +76,12 @@ namespace mtrldb
 			const uint64_t vsguid = mtrl["vs_guid"].GetUint64();
 			const uint64_t psguid = mtrl["ps_guid"].GetUint64();
 			const uint64_t vbguid = mtrl["vb_guid"].GetUint64();
+			const uint64_t ibguid = mtrl["ib_guid"].GetUint64();
 			const MaterialType mtrltype = get_enum(mtrl["material"].GetString());
 			const int transformslot = mtrl["transform_slot"].GetInt();
 			const int albedoslot = mtrl["albedo_tex_slot"].GetInt();
 
-			const auto &mtrl_map_obj = mtrl["constant_data"];
+			const auto& mtrl_map_obj = mtrl["constant_data"];
 			const MaterialMapping mtrlmap = {
 				mtrl_map_obj["diffuse_offset"].GetInt(),
 				mtrl_map_obj["specular_offset"].GetInt(),
@@ -80,7 +94,22 @@ namespace mtrldb
 			s_ps_texbinding_map[psguid] = albedoslot;
 			s_vs_material_map[vsguid] = mtrlmap;
 			s_material_type_map[get_combined_hash(vsguid, psguid)] = mtrltype;
-		
+
+			// add sub mesh info
+			if (mtrl.HasMember("sub_meshes"))
+			{
+				const auto &subMeshes = mtrl["sub_meshes"];
+				for (const auto &subMesh : subMeshes.GetArray())
+				{
+					SubMeshInfo info = {
+						.vb_hash = vbguid,
+						.ib_hash = ibguid,
+						.index_offset = subMesh["index_offset"].GetInt(),
+						.index_count = subMesh["index_count"].GetInt(),
+					};
+					s_material_submesh_type_map[hash::hash(info)] = mtrltype;
+				}
+			}
 		}
 	}
 
@@ -94,6 +123,24 @@ namespace mtrldb
 		}
 
 		return Material_Standard;
+	}
+
+	MaterialType get_submesh_material(MaterialType basetype, uint64_t vbhash, uint64_t ibhash, int index_count, int index_offset)
+	{
+		SubMeshInfo info = {
+			.vb_hash = vbhash,
+			.ib_hash = ibhash,
+			.index_offset = index_offset,
+			.index_count = index_count,
+		};
+		const uint64_t hash = hash::hash(info);
+
+		if (auto entry = s_material_submesh_type_map.find(hash); entry != s_material_submesh_type_map.end())
+		{
+			return entry->second;
+		}
+
+		return basetype;
 	}
 
 	int get_wvp_offset(uint64_t vshash)
