@@ -1159,8 +1159,14 @@ static void on_bind_index_buffer(command_list *, resource buffer, uint64_t offse
 	}
 #endif
 
+	XXH64_hash_t hash = 0;
+	if (s_resource_hashes.contains(buffer.handle))
+	{
+		hash = s_resource_hashes[buffer.handle];
+	}
+
 	std::stringstream s;
-	s << "bind_index_buffer(" << (void *)buffer.handle << ", " << offset << ", " << index_size << ")";
+	s << "bind_index_buffer( handle: " << (void *)buffer.handle << ", offset: " << offset << ", size: " << index_size << ", hash: " << hash << ")";
 
 	reshade::log_message(3, s.str().c_str());
 }
@@ -1185,7 +1191,7 @@ static void on_bind_vertex_buffers(command_list *, uint32_t first, uint32_t coun
 		{
 			hash = s_resource_hashes[buffers[i].handle];
 		}
-		s << "bind_vertex_buffer(" << (first + i) << ", handle: " << (void *)buffers[i].handle << ", offset: " << (offsets != nullptr ? offsets[i] : 0) << ", stride: " << (strides != nullptr ? strides[i] : 0) << ", hash: " << hash << ")" << std::endl;
+		s << "bind_vertex_buffer( slot: " << (first + i) << ", handle: " << (void *)buffers[i].handle << ", offset: " << (offsets != nullptr ? offsets[i] : 0) << ", stride: " << (strides != nullptr ? strides[i] : 0) << ", hash: " << hash << ")" << std::endl;
 	}		
 
 	reshade::log_message(3, s.str().c_str());
@@ -1228,7 +1234,8 @@ static bool on_draw_indexed(command_list *, uint32_t indices, uint32_t instances
 		return filter;
 
 	std::stringstream s;
-	s << "draw_indexed " << drawId << " (" << indices << ", " << instances << ", " << first_index << ", " << vertex_offset << ", " << first_instance << ")";
+	// first index is really vertex count
+	s << "draw_indexed " << drawId << " (indexCount: " << indices << ", instanceCount: " << instances << ", firstIndex: " << first_index << ", vertexOffet: " << vertex_offset << ", vertexCount: " << first_instance << ")";
 
 	reshade::log_message(3, s.str().c_str());
 
